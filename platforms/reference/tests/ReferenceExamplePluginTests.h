@@ -1,12 +1,12 @@
 /* -------------------------------------------------------------------------- *
- *                              OpenMMExample                                   *
+ *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014 Stanford University and the Authors.           *
+ * Portions copyright (c) 2015 Stanford University and the Authors.           *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -29,38 +29,18 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ReferenceExampleKernelFactory.h"
-#include "ReferenceExampleKernels.h"
-#include "openmm/reference/ReferencePlatform.h"
-#include "openmm/internal/ContextImpl.h"
-#include "openmm/OpenMMException.h"
+#ifdef WIN32
+  #define _USE_MATH_DEFINES // Needed to get M_PI
+#endif
+#include "openmm/Platform.h"
 
-using namespace ExamplePlugin;
-using namespace OpenMM;
+extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories();
 
-extern "C" OPENMM_EXPORT void registerPlatforms() {
+std::string platformName = "Reference";
+
+void registerCurrentPlatformKernelFactories() {
+  registerExampleReferenceKernelFactories();
 }
 
-extern "C" OPENMM_EXPORT void registerKernelFactories() {
-    for (int i = 0; i < Platform::getNumPlatforms(); i++) {
-        Platform& platform = Platform::getPlatform(i);
-        if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
-            ReferenceExampleKernelFactory* factory = new ReferenceExampleKernelFactory();
-            platform.registerKernelFactory(CalcExampleForceKernel::Name(), factory);
-            platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
-        }
-    }
-}
-
-extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories() {
-    registerKernelFactories();
-}
-
-KernelImpl* ReferenceExampleKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
-    ReferencePlatform::PlatformData& data = *static_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    if (name == CalcExampleForceKernel::Name())
-        return new ReferenceCalcExampleForceKernel(name, platform);
-    if (name == CalcNativeNonbondedForceKernel::Name())
-        return new ReferenceCalcNativeNonbondedForceKernel(name, platform);
-    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
+void initializeTests(OpenMM::Platform& platform, int argc, char* argv[]) {
 }
