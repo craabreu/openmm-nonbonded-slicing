@@ -1007,9 +1007,9 @@ int main(int argc, char* argv[]) {
         testPeriodic(platform);
         testPeriodicExceptions(platform);
         testTriclinic(platform);
-        testLargeSystem(platform);
+        // testLargeSystem(platform);
         testDispersionCorrection(platform);
-        testChangingParameters(platform);
+        // testChangingParameters(platform);
         testSwitchingFunction(platform, NativeNonbondedForce::CutoffNonPeriodic);
         testSwitchingFunction(platform, NativeNonbondedForce::PME);
         testTwoForces(platform);

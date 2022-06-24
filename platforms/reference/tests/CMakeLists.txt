@@ -1,6 +1,7 @@
 #
 # Testing
 #
+
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/tests)
 
 # Automatically create tests using files named "Test*.cpp"

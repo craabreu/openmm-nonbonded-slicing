@@ -2,6 +2,8 @@
 # Testing
 #
 
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/tests)
+
 INCLUDE_DIRECTORIES(${CUDA_INCLUDE_DIR})
 
 # Automatically create tests using files named "Test*.cpp"
