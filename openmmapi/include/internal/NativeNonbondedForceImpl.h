@@ -1,5 +1,5 @@
-#ifndef OPENMM_EXAMPLEFORCEIMPL_H_
-#define OPENMM_EXAMPLEFORCEIMPL_H_
+#ifndef OPENMM_NATIVENONBONDEDFORCEIMPL_H_
+#define OPENMM_NATIVENONBONDEDFORCEIMPL_H_
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -9,7 +9,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014 Stanford University and the Authors.           *
+ * Portions copyright (c) 2008-2018 Stanford University and the Authors.      *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -32,9 +32,10 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ExampleForce.h"
+#include "NativeNonbondedForce.h"
 #include "openmm/internal/ForceImpl.h"
 #include "openmm/Kernel.h"
+#include "openmm/System.h"
 #include <utility>
 #include <set>
 #include <string>
@@ -44,32 +45,50 @@ using namespace OpenMM;
 namespace ExamplePlugin {
 
 /**
- * This is the internal implementation of ExampleForce.
+ * This is the internal implementation of NativeNonbondedForce.
  */
 
-class OPENMM_EXPORT_EXAMPLE ExampleForceImpl : public ForceImpl {
+class OPENMM_EXPORT_EXAMPLE NativeNonbondedForceImpl : public ForceImpl {
 public:
-    ExampleForceImpl(const ExampleForce& owner);
-    ~ExampleForceImpl();
+    NativeNonbondedForceImpl(const NativeNonbondedForce& owner);
+    ~NativeNonbondedForceImpl();
     void initialize(ContextImpl& context);
-    const ExampleForce& getOwner() const {
+    const NativeNonbondedForce& getOwner() const {
         return owner;
     }
     void updateContextState(ContextImpl& context, bool& forcesInvalid) {
         // This force field doesn't update the state directly.
     }
     double calcForcesAndEnergy(ContextImpl& context, bool includeForces, bool includeEnergy, int groups);
-    std::map<std::string, double> getDefaultParameters() {
-        return std::map<std::string, double>(); // This force field doesn't define any parameters.
-    }
+    std::map<std::string, double> getDefaultParameters();
     std::vector<std::string> getKernelNames();
-    std::vector<std::pair<int, int> > getBondedParticles() const;
     void updateParametersInContext(ContextImpl& context);
+    void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    /**
+     * This is a utility routine that calculates the values to use for alpha and kmax when using
+     * Ewald summation.
+     */
+    static void calcEwaldParameters(const System& system, const NativeNonbondedForce& force, double& alpha, int& kmaxx, int& kmaxy, int& kmaxz);
+    /**
+     * This is a utility routine that calculates the values to use for alpha and grid size when using
+     * Particle Mesh Ewald.
+     */
+    static void calcPMEParameters(const System& system, const NativeNonbondedForce& force, double& alpha, int& xsize, int& ysize, int& zsize, bool lj);
+    /**
+     * Compute the coefficient which, when divided by the periodic box volume, gives the
+     * long range dispersion correction to the energy.
+     */
+    static double calcDispersionCorrection(const System& system, const NativeNonbondedForce& force);
 private:
-    const ExampleForce& owner;
+    class ErrorFunction;
+    class EwaldErrorFunction;
+    static int findZero(const ErrorFunction& f, int initialGuess);
+    static double evalIntegral(double r, double rs, double rc, double sigma);
+    const NativeNonbondedForce& owner;
     Kernel kernel;
 };
 
-} // namespace ExamplePlugin
+} // namespace OpenMM
 
-#endif /*OPENMM_EXAMPLEFORCEIMPL_H_*/
+#endif /*OPENMM_NONBONDEDFORCEIMPL_H_*/
