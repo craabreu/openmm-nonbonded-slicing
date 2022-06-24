@@ -1,0 +1,71 @@
+#---------------------------------------------------
+# OpenMM Example Plugin OpenCL Platform
+#----------------------------------------------------
+
+# Collect up information about the version of the OpenMM library we're building
+# and make it available to the code so it can be built into the binaries.
+
+SET(OPENMMEXAMPLEOPENCL_LIBRARY_NAME ExamplePluginOpenCL)
+
+SET(SHARED_TARGET ${OPENMMEXAMPLEOPENCL_LIBRARY_NAME})
+
+# These are all the places to search for header files which are
+# to be part of the API.
+SET(API_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/include/internal")
+
+# Locate header files.
+SET(API_INCLUDE_FILES)
+FOREACH(dir ${API_INCLUDE_DIRS})
+    FILE(GLOB fullpaths ${dir}/*.h)
+    SET(API_INCLUDE_FILES ${API_INCLUDE_FILES} ${fullpaths})
+ENDFOREACH(dir)
+
+# collect up source files
+SET(SOURCE_FILES) # empty
+SET(SOURCE_INCLUDE_FILES)
+
+SET(OPENMM_SOURCE_SUBDIRS . ../common)
+FOREACH(subdir ${OPENMM_SOURCE_SUBDIRS})
+    FILE(GLOB_RECURSE src_files  ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/src/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/${subdir}/src/*.c)
+    FILE(GLOB incl_files ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/src/*.h)
+    SET(SOURCE_FILES         ${SOURCE_FILES}         ${src_files})   #append
+    SET(SOURCE_INCLUDE_FILES ${SOURCE_INCLUDE_FILES} ${incl_files})
+ENDFOREACH(subdir)
+
+SET(COMMON_KERNELS_CPP ${CMAKE_CURRENT_BINARY_DIR}/../common/src/CommonExampleKernelSources.cpp)
+SET(SOURCE_FILES ${SOURCE_FILES} ${COMMON_KERNELS_CPP})
+
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/../common/src)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_SOURCE_DIR}/platforms/opencl/include)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_SOURCE_DIR}/platforms/opencl/src)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_BINARY_DIR}/platforms/opencl/src)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_SOURCE_DIR}/platforms/common/include)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_BINARY_DIR}/platforms/common/src)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/../common/src)
+
+# Create the library
+
+INCLUDE_DIRECTORIES(${OPENCL_INCLUDE_DIR})
+
+SET_SOURCE_FILES_PROPERTIES(${COMMON_KERNELS_CPP} PROPERTIES GENERATED TRUE)
+ADD_LIBRARY(${SHARED_TARGET} SHARED ${SOURCE_FILES} ${SOURCE_INCLUDE_FILES} ${API_INCLUDE_FILES})
+ADD_DEPENDENCIES(${SHARED_TARGET} CommonKernels)
+
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} ${OPENCL_LIBRARIES})
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} OpenMM)
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} OpenMMOpenCL)
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} ${SHARED_EXAMPLE_TARGET})
+SET_TARGET_PROPERTIES(${SHARED_TARGET} PROPERTIES
+    COMPILE_FLAGS "-DOPENMM_BUILDING_SHARED_LIBRARY ${EXTRA_COMPILE_FLAGS}"
+    LINK_FLAGS "${EXTRA_COMPILE_FLAGS}")
+
+INSTALL(TARGETS ${SHARED_TARGET} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/plugins)
+# Ensure that links to the main OpenCL library will be resolved.
+IF (APPLE)
+    SET(OPENCL_LIBRARY libOpenMMOpenCL.dylib)
+    INSTALL(CODE "EXECUTE_PROCESS(COMMAND install_name_tool -change ${OPENCL_LIBRARY} @loader_path/${OPENCL_LIBRARY} ${CMAKE_INSTALL_PREFIX}/lib/plugins/lib${SHARED_TARGET}.dylib)")
+ENDIF (APPLE)
+
+SUBDIRS (tests)
+
