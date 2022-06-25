@@ -36,11 +36,13 @@
 
 extern "C" OPENMM_EXPORT void registerExampleCudaKernelFactories();
 
-std::string platformName = "CUDA";
+OpenMM::CudaPlatform platform;
 
-void registerCurrentPlatformKernelFactories() {
-  registerExampleCudaKernelFactories();
-}
-
-void initializeTests(OpenMM::Platform& platform, int argc, char* argv[]) {
+void initializeTests(int argc, char* argv[]) {
+    registerExampleCudaKernelFactories();
+    platform = dynamic_cast<OpenMM::CudaPlatform&>(OpenMM::Platform::getPlatformByName("CUDA"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
 }

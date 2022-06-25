@@ -36,11 +36,13 @@
 
 extern "C" OPENMM_EXPORT void registerExampleOpenCLKernelFactories();
 
-std::string platformName = "OpenCL";
+OpenMM::OpenCLPlatform platform;
 
-void registerCurrentPlatformKernelFactories() {
-  registerExampleOpenCLKernelFactories();
-}
-
-void initializeTests(OpenMM::Platform& platform, int argc, char* argv[]) {
+void initializeTests(int argc, char* argv[]) {
+    registerExampleOpenCLKernelFactories();
+    platform = dynamic_cast<OpenMM::OpenCLPlatform&>(OpenMM::Platform::getPlatformByName("OpenCL"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
 }

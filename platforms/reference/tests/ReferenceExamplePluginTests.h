@@ -32,15 +32,17 @@
 #ifdef WIN32
   #define _USE_MATH_DEFINES // Needed to get M_PI
 #endif
-#include "openmm/Platform.h"
+#include "openmm/reference/ReferencePlatform.h"
 
 extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories();
 
-std::string platformName = "Reference";
+OpenMM::ReferencePlatform platform;
 
-void registerCurrentPlatformKernelFactories() {
-  registerExampleReferenceKernelFactories();
-}
-
-void initializeTests(OpenMM::Platform& platform, int argc, char* argv[]) {
+void initializeTests(int argc, char* argv[]) {
+    registerExampleReferenceKernelFactories();
+    platform = dynamic_cast<OpenMM::ReferencePlatform&>(OpenMM::Platform::getPlatformByName("Reference"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
 }
