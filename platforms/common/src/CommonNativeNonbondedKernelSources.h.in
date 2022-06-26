@@ -1,3 +1,6 @@
+#ifndef OPENMM_COMMONNATIVENONBONDEDKERNELSOURCES_H_
+#define OPENMM_COMMONNATIVENONBONDEDKERNELSOURCES_H_
+
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -6,7 +9,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014-2021 Stanford University and the Authors.      *
+ * Portions copyright (c) 2014 Stanford University and the Authors.           *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -29,12 +32,21 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "CommonExampleKernels.h"
-#include "CommonExampleKernelSources.h"
-#include "openmm/common/BondedUtilities.h"
-#include "openmm/common/ComputeForceInfo.h"
-#include "openmm/internal/ContextImpl.h"
+#include <string>
 
-using namespace ExamplePlugin;
-using namespace OpenMM;
-using namespace std;
+namespace NativeNonbondedPlugin {
+
+/**
+ * This class is a central holding place for the source code of common kernels.
+ * The CMake build script inserts declarations into it based on the .cc files in the
+ * kernels subfolder.
+ */
+
+class CommonNativeNonbondedKernelSources {
+public:
+@KERNEL_FILE_DECLARATIONS@
+};
+
+} // namespace NativeNonbondedPlugin
+
+#endif /*OPENMM_COMMONNATIVENONBONDEDKERNELSOURCES_H_*/

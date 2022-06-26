@@ -1,5 +1,5 @@
-#ifndef EXAMPLE_KERNELS_H_
-#define EXAMPLE_KERNELS_H_
+#ifndef NATIVENONBONDED_KERNELS_H_
+#define NATIVENONBONDED_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -40,7 +40,7 @@
 
 using namespace OpenMM;
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 /**
  * This kernel is invoked by NativeNonbondedForce to calculate the forces acting on the system and the energy of the system.
@@ -230,6 +230,6 @@ public:
     virtual void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const = 0;
 };
 
-} // namespace ExamplePlugin
+} // namespace NativeNonbondedPlugin
 
-#endif /*EXAMPLE_KERNELS_H_*/
+#endif /*NATIVENONBONDED_KERNELS_H_*/

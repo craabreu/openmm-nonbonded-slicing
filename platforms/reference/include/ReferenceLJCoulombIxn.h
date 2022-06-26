@@ -28,7 +28,7 @@
 #include "openmm/reference/ReferencePairIxn.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 class ReferenceLJCoulombIxn {
 

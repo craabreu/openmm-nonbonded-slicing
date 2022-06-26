@@ -1,15 +1,15 @@
-OpenMM Example Plugin
+OpenMM NativeNonbonded Plugin
 =====================
 
-This project is an example of how to write a plugin for [OpenMM](https://openmm.org).
+This project is an nativenonbonded of how to write a plugin for [OpenMM](https://openmm.org).
 It includes nearly everything you would want in a real plugin, including implementations for the
 Reference, OpenCL, and CUDA platforms, serialization support, test cases, and a Python API.  It
 is useful as a starting point for anyone who wants to write a plugin.
 
-This plugin defines a single Force subclass called ExampleForce, which implements an anharmonic
+This plugin defines a single Force subclass called NativeNonbondedForce, which implements an anharmonic
 bond force of the form E(r)=k*r<sup>4</sup>.  Of course, you don't actually need a plugin to
 implement a force of that form: you could do it trivially with CustomBondForce.  But since it is
-so simple, it makes a very good example.
+so simple, it makes a very good nativenonbonded.
 
 I assume you are already familiar with the OpenMM API, and that you have already read the OpenMM
 Developer Guide.  If not, go read it now.  I will not repeat anything that is covered there, and
@@ -36,21 +36,21 @@ the OpenMM header files and libraries.
 this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
 
 6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that EXAMPLE_BUILD_OPENCL_LIB is selected.
+OPENCL_LIBRARY are set correctly, and that NATIVENONBONDED_BUILD_OPENCL_LIB is selected.
 
 7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that EXAMPLE_BUILD_CUDA_LIB is selected.
+and that NATIVENONBONDED_BUILD_CUDA_LIB is selected.
 
 8. Press "Configure" again if necessary, then press "Generate".
 
-9. Use the build system you selected to build and install the plugin.  For example, if you
+9. Use the build system you selected to build and install the plugin.  For nativenonbonded, if you
 selected Unix Makefiles, type `make install`.
 
 
 Test Cases
 ==========
 
-To run all the test cases build the "test" target, for example by typing `make test`.
+To run all the test cases build the "test" target, for nativenonbonded by typing `make test`.
 
 This project contains several different directories for test cases: one for each platform, and
 another for serialization related code.  Each of these directories contains a CMakeLists.txt file
@@ -67,7 +67,7 @@ kernels are registered automatically, but that doesn't happen for code that stat
 against it.  Therefore, the very first line of each `main()` function typically invokes a method
 to do the registration that _would_ have been done if the plugin were loaded automatically:
 
-    registerExampleOpenCLKernelFactories();
+    registerNativeNonbondedOpenCLKernelFactories();
 
 The OpenCL and CUDA test directories create three tests from each source file: the program is
 invoked three times while passing the strings "single", "mixed", and "double" as a command line
@@ -85,7 +85,7 @@ OpenCL and CUDA Kernels
 =======================
 
 The OpenCL and CUDA versions of the force are implemented with the common compute framework.
-This allows us to write a single class (`CommonCalcExampleForceKernel`) that provides an
+This allows us to write a single class (`CommonCalcNativeNonbondedForceKernel`) that provides an
 implementation for both platforms at the same time.  Device code is written in a subset of
 the OpenCL and CUDA languages, with a few macro and function definitions to make them
 identical.
@@ -101,11 +101,11 @@ doesn't have a clean syntax for multi-line strings.
 This project (like OpenMM itself) uses a hybrid mechanism that provides the best of both
 approaches.  The source code for the kernels is found in the `platforms/common/src/kernels`
 directory.  At build time, a CMake script loads every .cc file contained in the directory
-and generates a class with all the file contents as strings.  For the example plugin, the
-directory contains a single file called exampleForce.cc.  You can
+and generates a class with all the file contents as strings.  For the nativenonbonded plugin, the
+directory contains a single file called nativenonbondedForce.cc.  You can
 put anything you want into this file, and then C++ code can access the content of that file
-as `CommonExampleKernelSources::exampleForce`.  If you add more .cc files to this directory,
-correspondingly named variables will automatically be added to `CommonExampleKernelSources`.
+as `CommonNativeNonbondedKernelSources::nativenonbondedForce`.  If you add more .cc files to this directory,
+correspondingly named variables will automatically be added to `CommonNativeNonbondedKernelSources`.
 
 
 Python API
@@ -121,16 +121,16 @@ the potential bugs that would come from having duplicate definitions.  It takes 
 processing to do that, though, and for a single plugin it's far simpler to just write the
 interface file by hand.  You will find it in the "python" directory.
 
-To build and install the Python API, build the "PythonInstall" target, for example by typing
+To build and install the Python API, build the "PythonInstall" target, for nativenonbonded by typing
 "make PythonInstall".  (If you are installing into the system Python, you may need to use sudo.)
 This runs SWIG to generate the C++ and Python files for the extension module
-(ExamplePluginWrapper.cpp and exampleplugin.py), then runs a setup.py script to build and
+(NativeNonbondedPluginWrapper.cpp and nativenonbondedplugin.py), then runs a setup.py script to build and
 install the module.  Once you do that, you can use the plugin from your Python scripts:
 
     from simtk.openmm import System
-    from exampleplugin import ExampleForce
+    from nativenonbondedplugin import NativeNonbondedForce
     system = System()
-    force = ExampleForce()
+    force = NativeNonbondedForce()
     system.addForce(force)
 
 

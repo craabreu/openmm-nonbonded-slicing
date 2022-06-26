@@ -33,10 +33,10 @@
 #define __ReferencePME_H__
 
 #include "openmm/Vec3.h"
-#include "internal/windowsExportExample.h"
+#include "internal/windowsExportNativeNonbonded.h"
 #include <vector>
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 typedef double rvec[3];
 
@@ -58,7 +58,7 @@ pme_t;
  * pme_order   Interpolation order, almost always 4
  * epsilon_r   Dielectric coefficient, typically 1.0.
  */
-int OPENMM_EXPORT_EXAMPLE
+int OPENMM_EXPORT_NATIVENONBONDED
 pme_init(pme_t* ppme,
          double ewaldcoeff,
          int natoms,
@@ -78,7 +78,7 @@ pme_init(pme_t* ppme,
  * box         Simulation cell dimensions (nm)
  * energy      Total energy (will be written in units of kJ/mol)
  */
-int OPENMM_EXPORT_EXAMPLE
+int OPENMM_EXPORT_NATIVENONBONDED
 pme_exec(pme_t pme,
          const std::vector<OpenMM::Vec3>& atomCoordinates,
          std::vector<OpenMM::Vec3>& forces,
@@ -99,7 +99,7 @@ pme_exec(pme_t pme,
  * box         Simulation cell dimensions (nm)
  * energy      Total energy (will be written in units of kJ/mol)
  */
-int OPENMM_EXPORT_EXAMPLE
+int OPENMM_EXPORT_NATIVENONBONDED
 pme_exec_dpme(pme_t pme,
               const std::vector<OpenMM::Vec3>& atomCoordinates,
               std::vector<OpenMM::Vec3>& forces,
@@ -111,7 +111,7 @@ pme_exec_dpme(pme_t pme,
 
 
 /* Release all memory in pme structure */
-int OPENMM_EXPORT_EXAMPLE
+int OPENMM_EXPORT_NATIVENONBONDED
 pme_destroy(pme_t    pme);
 
 } // namespace OpenMM

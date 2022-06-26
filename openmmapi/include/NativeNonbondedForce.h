@@ -38,11 +38,11 @@
 #include <set>
 #include <utility>
 #include <vector>
-#include "internal/windowsExportExample.h"
+#include "internal/windowsExportNativeNonbonded.h"
 
 using namespace OpenMM;
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 /**
  * This class implements nonbonded interactions between particles, including a Coulomb force to represent
@@ -80,7 +80,7 @@ namespace ExamplePlugin {
  * this should be used.
  * 
  * In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
- * Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
+ * Usually this is done to interpolate between two sets of parameters.  For nativenonbonded, a titratable group might have
  * two states it can exist in, each described by a different set of parameters for the atoms that make up the
  * group.  You might then want to smoothly interpolate between the two states.  This is done by first calling
  * addGlobalParameter() to define a Context parameter, then addParticleParameterOffset() to create a "parameter offset"
@@ -110,7 +110,7 @@ namespace ExamplePlugin {
  * to modify exceptions in exactly the same way by calling addExceptionParameterOffset().
  */
 
-class OPENMM_EXPORT_EXAMPLE NativeNonbondedForce : public Force {
+class OPENMM_EXPORT_NATIVENONBONDED NativeNonbondedForce : public Force {
 public:
     /**
      * This is an enumeration of the different methods that may be used for handling long range nonbonded forces.
@@ -596,7 +596,7 @@ public:
     /**
      * Get whether periodic boundary conditions should be applied to exceptions.  Usually this is not
      * appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and
-     * 1-4 pairs), but there are situations when it does make sense.  For example, you may want to simulate
+     * 1-4 pairs), but there are situations when it does make sense.  For nativenonbonded, you may want to simulate
      * an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic
      * copy.
      * 
@@ -609,7 +609,7 @@ public:
     /**
      * Set whether periodic boundary conditions should be applied to exceptions.  Usually this is not
      * appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and
-     * 1-4 pairs), but there are situations when it does make sense.  For example, you may want to simulate
+     * 1-4 pairs), but there are situations when it does make sense.  For nativenonbonded, you may want to simulate
      * an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic
      * copy.
      * 

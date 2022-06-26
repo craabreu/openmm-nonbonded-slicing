@@ -1,13 +1,13 @@
 #---------------------------------------------------
-# OpenMM Example Plugin CUDA Platform
+# OpenMM NativeNonbonded Plugin CUDA Platform
 #----------------------------------------------------
 
 # Collect up information about the version of the OpenMM library we're building
 # and make it available to the code so it can be built into the binaries.
 
-SET(EXAMPLE_CUDA_LIBRARY_NAME ExamplePluginCUDA)
+SET(NATIVENONBONDED_CUDA_LIBRARY_NAME NativeNonbondedPluginCUDA)
 
-SET(SHARED_TARGET ${EXAMPLE_CUDA_LIBRARY_NAME})
+SET(SHARED_TARGET ${NATIVENONBONDED_CUDA_LIBRARY_NAME})
 
 # These are all the places to search for header files which are
 # to be part of the API.
@@ -35,7 +35,7 @@ ENDFOREACH(subdir)
 # Set variables needed for encoding kernel sources into a C++ class
 
 SET(CUDA_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-SET(CUDA_SOURCE_CLASS CudaExampleKernelSources)
+SET(CUDA_SOURCE_CLASS CudaNativeNonbondedKernelSources)
 SET(CUDA_KERNELS_CPP ${CMAKE_CURRENT_BINARY_DIR}/src/${CUDA_SOURCE_CLASS}.cpp)
 SET(CUDA_KERNELS_H ${CMAKE_CURRENT_BINARY_DIR}/src/${CUDA_SOURCE_CLASS}.h)
 SET(SOURCE_FILES ${SOURCE_FILES} ${CUDA_KERNELS_CPP} ${CUDA_KERNELS_H})
@@ -56,7 +56,7 @@ SET_SOURCE_FILES_PROPERTIES(${CUDA_KERNELS_CPP} ${CUDA_KERNELS_H} PROPERTIES GEN
 
 # Add common kernels
 
-SET(COMMON_KERNELS_CPP ${CMAKE_CURRENT_BINARY_DIR}/../common/src/CommonExampleKernelSources.cpp)
+SET(COMMON_KERNELS_CPP ${CMAKE_CURRENT_BINARY_DIR}/../common/src/CommonNativeNonbondedKernelSources.cpp)
 SET(SOURCE_FILES ${SOURCE_FILES} ${CUDA_KERNELS_CPP} ${CUDA_KERNELS_H} ${COMMON_KERNELS_CPP})
 
 INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -79,7 +79,7 @@ ADD_DEPENDENCIES(${SHARED_TARGET} CommonKernels)
 TARGET_LINK_LIBRARIES(${SHARED_TARGET} ${CUDA_LIBRARIES})
 TARGET_LINK_LIBRARIES(${SHARED_TARGET} OpenMM)
 TARGET_LINK_LIBRARIES(${SHARED_TARGET} OpenMMCUDA)
-TARGET_LINK_LIBRARIES(${SHARED_TARGET} ${EXAMPLE_LIBRARY_NAME})
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} ${NATIVENONBONDED_LIBRARY_NAME})
 SET_TARGET_PROPERTIES(${SHARED_TARGET} PROPERTIES
     COMPILE_FLAGS "-DOPENMM_BUILDING_SHARED_LIBRARY ${EXTRA_COMPILE_FLAGS}"
     LINK_FLAGS "${EXTRA_COMPILE_FLAGS}")

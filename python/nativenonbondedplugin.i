@@ -1,4 +1,4 @@
-%module exampleplugin
+%module nativenonbondedplugin
 
 %import(module="openmm") "swig/OpenMMSwigHeaders.i"
 %include "swig/typemaps.i"
@@ -20,28 +20,28 @@ from openmm import unit
 /*
  * Add units to function outputs.
 */
-%pythonappend ExamplePlugin::NativeNonbondedForce::getParticleParameters(int index, double& charge,
+%pythonappend NativeNonbondedPlugin::NativeNonbondedForce::getParticleParameters(int index, double& charge,
                                                             double& sigma, double& epsilon) const %{
     val[1] = unit.Quantity(val[1], unit.elementary_charge)
     val[2] = unit.Quantity(val[2], unit.nanometer)
     val[3] = unit.Quantity(val[3], unit.kilojoule_per_mole)
 %}
 
-%pythonappend ExamplePlugin::NativeNonbondedForce::getExceptionParameters(int index, int& particle1,
+%pythonappend NativeNonbondedPlugin::NativeNonbondedForce::getExceptionParameters(int index, int& particle1,
                         int& particle2, double& chargeProd, double& sigma, double& epsilon) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
     val[4] = unit.Quantity(val[4], unit.nanometer)
     val[5] = unit.Quantity(val[5], unit.kilojoule_per_mole)
 %}
 
-%pythonappend ExamplePlugin::NativeNonbondedForce::getParticleParameterOffset(int index, std::string& parameter,
+%pythonappend NativeNonbondedPlugin::NativeNonbondedForce::getParticleParameterOffset(int index, std::string& parameter,
          int& particleIndex, double& chargeScale, double& sigmaScale, double& epsilonScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge)
     val[4] = unit.Quantity(val[4], unit.nanometer)
     val[5] = unit.Quantity(val[5], unit.kilojoule_per_mole)
 %}
 
-%pythonappend ExamplePlugin::NativeNonbondedForce::getExceptionParameterOffset(int index, std::string& parameter,
+%pythonappend NativeNonbondedPlugin::NativeNonbondedForce::getExceptionParameterOffset(int index, std::string& parameter,
     int& exceptionIndex, double& chargeProdScale, double& sigmaScale, double& epsilonScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
     val[4] = unit.Quantity(val[4], unit.nanometer)
@@ -61,7 +61,7 @@ from openmm import unit
 }
 
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 class NativeNonbondedForce : public OpenMM::Force {
 public:
@@ -194,12 +194,12 @@ public:
      * Add methods for casting a Force to a NativeNonbondedForce.
     */
     %extend {
-        static ExamplePlugin::NativeNonbondedForce& cast(OpenMM::Force& force) {
-            return dynamic_cast<ExamplePlugin::NativeNonbondedForce&>(force);
+        static NativeNonbondedPlugin::NativeNonbondedForce& cast(OpenMM::Force& force) {
+            return dynamic_cast<NativeNonbondedPlugin::NativeNonbondedForce&>(force);
         }
 
         static bool isinstance(OpenMM::Force& force) {
-            return (dynamic_cast<ExamplePlugin::NativeNonbondedForce*>(&force) != NULL);
+            return (dynamic_cast<NativeNonbondedPlugin::NativeNonbondedForce*>(&force) != NULL);
         }
     }
 };

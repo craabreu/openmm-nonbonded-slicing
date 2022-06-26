@@ -29,9 +29,9 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "OpenCLExampleKernels.h"
-#include "OpenCLExampleKernelSources.h"
-#include "CommonExampleKernelSources.h"
+#include "OpenCLNativeNonbondedKernels.h"
+#include "OpenCLNativeNonbondedKernelSources.h"
+#include "CommonNativeNonbondedKernelSources.h"
 #include "NativeNonbondedForce.h"
 #include "internal/NativeNonbondedForceImpl.h"
 #include "openmm/internal/ContextImpl.h"
@@ -42,7 +42,7 @@
 #include <map>
 #include <algorithm>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 
@@ -339,7 +339,7 @@ void OpenCLCalcNativeNonbondedForceKernel::initialize(const System& system, cons
             replacements["EXP_COEFFICIENT"] = cl.doubleToString(-1.0/(4.0*alpha*alpha));
             replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
             replacements["M_PI"] = cl.doubleToString(M_PI);
-            cl::Program program = cl.createProgram(CommonExampleKernelSources::ewald, replacements);
+            cl::Program program = cl.createProgram(CommonNativeNonbondedKernelSources::ewald, replacements);
             ewaldSumsKernel = cl::Kernel(program, "calculateEwaldCosSinSums");
             ewaldForcesKernel = cl::Kernel(program, "calculateEwaldForces");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double2) : sizeof(mm_float2));
@@ -404,7 +404,7 @@ void OpenCLCalcNativeNonbondedForceKernel::initialize(const System& system, cons
                 try {
                     cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), *cl.getPlatformData().context);
                     cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
-                    cl::Program program = cl.createProgram(CommonExampleKernelSources::pme, pmeDefines);
+                    cl::Program program = cl.createProgram(CommonNativeNonbondedKernelSources::pme, pmeDefines);
                     cl::Kernel addForcesKernel = cl::Kernel(program, "addForces");
                     pmeio = new PmeIO(cl, addForcesKernel);
                     cl.addPreComputation(new PmePreComputation(cl, cpuPme, *pmeio));
@@ -575,13 +575,13 @@ void OpenCLCalcNativeNonbondedForceKernel::initialize(const System& system, cons
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cl.doubleToString(dispersionAlpha);
             if (force.getIncludeDirectSpace())
-                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonExampleKernelSources::pmeExclusions, replacements), force.getForceGroup());
+                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonNativeNonbondedKernelSources::pmeExclusions, replacements), force.getForceGroup());
         }
     }
 
     // Add the interaction to the default nonbonded kernel.
     
-    string source = cl.replaceStrings(CommonExampleKernelSources::coulombLennardJones, defines);
+    string source = cl.replaceStrings(CommonNativeNonbondedKernelSources::coulombLennardJones, defines);
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleParams.initialize<mm_float4>(cl, cl.getPaddedNumAtoms(), "baseParticleParams");
     baseParticleParams.upload(baseParticleParamVec);
@@ -631,7 +631,7 @@ void OpenCLCalcNativeNonbondedForceKernel::initialize(const System& system, cons
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
         if (force.getIncludeDirectSpace())
-            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonExampleKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
+            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonNativeNonbondedKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
@@ -706,7 +706,7 @@ void OpenCLCalcNativeNonbondedForceKernel::initialize(const System& system, cons
     
     // Initialize the kernel for updating parameters.
     
-    cl::Program program = cl.createProgram(CommonExampleKernelSources::nonbondedParameters, paramsDefines);
+    cl::Program program = cl.createProgram(CommonNativeNonbondedKernelSources::nonbondedParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
     info = new ForceInfo(cl.getNonbondedUtilities().getNumForceBuffers(), force);
@@ -756,7 +756,7 @@ double OpenCLCalcNativeNonbondedForceKernel::execute(ContextImpl& context, bool 
             
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            cl::Program program = cl.createProgram(cl.replaceStrings(CommonExampleKernelSources::pme, replacements), pmeDefines);
+            cl::Program program = cl.createProgram(cl.replaceStrings(CommonNativeNonbondedKernelSources::pme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
@@ -827,7 +827,7 @@ double OpenCLCalcNativeNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDefines["RECIP_EXP_FACTOR"] = cl.doubleToString(M_PI*M_PI/(dispersionAlpha*dispersionAlpha));
                 pmeDefines["USE_LJPME"] = "1";
                 pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
-                program = cl.createProgram(CommonExampleKernelSources::pme, pmeDefines);
+                program = cl.createProgram(CommonNativeNonbondedKernelSources::pme, pmeDefines);
                 pmeDispersionGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
                 pmeDispersionSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
                 pmeDispersionConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");

@@ -30,7 +30,7 @@
 #include "openmm/reference/ReferenceForce.h"
 
 using std::vector;
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 
 /**---------------------------------------------------------------------------------------

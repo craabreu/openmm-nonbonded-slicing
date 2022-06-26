@@ -35,7 +35,7 @@
 #include <iostream>
 #include <sstream>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 

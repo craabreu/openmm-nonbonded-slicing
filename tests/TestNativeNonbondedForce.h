@@ -42,7 +42,7 @@
 #include <iomanip>
 #include <vector>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 
@@ -970,7 +970,7 @@ void testDirectAndReciprocal(Platform& platform) {
 
 void runPlatformTests();
 
-extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories();
+extern "C" OPENMM_EXPORT void registerNativeNonbondedReferenceKernelFactories();
 
 int main(int argc, char* argv[]) {
     try {

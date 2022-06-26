@@ -29,7 +29,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ReferenceExamplePluginTests.h"
+#include "ReferenceNativeNonbondedPluginTests.h"
 #include "TestNativeNonbondedForce.h"
 
 void runPlatformTests() {

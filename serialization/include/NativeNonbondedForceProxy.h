@@ -32,7 +32,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "internal/windowsExportExample.h"
+#include "internal/windowsExportNativeNonbonded.h"
 #include "openmm/serialization/SerializationProxy.h"
 
 namespace OpenMM {
@@ -41,7 +41,7 @@ namespace OpenMM {
  * This is a proxy for serializing NativeNonbondedForce objects.
  */
 
-class OPENMM_EXPORT_EXAMPLE NativeNonbondedForceProxy : public SerializationProxy {
+class OPENMM_EXPORT_NATIVENONBONDED NativeNonbondedForceProxy : public SerializationProxy {
 public:
     NativeNonbondedForceProxy();
     void serialize(const void* object, SerializationNode& node) const;

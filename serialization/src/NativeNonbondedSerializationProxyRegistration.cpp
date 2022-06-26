@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------------------- *
- *                              OpenMMExample                                   *
+ *                                OpenMMNativeNonbonded                                 *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -29,35 +29,34 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ReferenceExampleKernelFactory.h"
-#include "ReferenceExampleKernels.h"
-#include "openmm/reference/ReferencePlatform.h"
-#include "openmm/internal/ContextImpl.h"
-#include "openmm/OpenMMException.h"
+#ifdef WIN32
+#include <windows.h>
+#include <sstream>
+#else
+#include <dlfcn.h>
+#include <dirent.h>
+#include <cstdlib>
+#endif
 
-using namespace ExamplePlugin;
+#include "NativeNonbondedForce.h"
+#include "NativeNonbondedForceProxy.h"
+#include "openmm/serialization/SerializationProxy.h"
+
+#if defined(WIN32)
+    #include <windows.h>
+    extern "C" OPENMM_EXPORT_NATIVENONBONDED void registerNativeNonbondedSerializationProxies();
+    BOOL WINAPI DllMain(HANDLE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
+        if (ul_reason_for_call == DLL_PROCESS_ATTACH)
+            registerNativeNonbondedSerializationProxies();
+        return TRUE;
+    }
+#else
+    extern "C" void __attribute__((constructor)) registerNativeNonbondedSerializationProxies();
+#endif
+
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 
-extern "C" OPENMM_EXPORT void registerPlatforms() {
-}
-
-extern "C" OPENMM_EXPORT void registerKernelFactories() {
-    for (int i = 0; i < Platform::getNumPlatforms(); i++) {
-        Platform& platform = Platform::getPlatform(i);
-        if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
-            ReferenceExampleKernelFactory* factory = new ReferenceExampleKernelFactory();
-            platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
-        }
-    }
-}
-
-extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories() {
-    registerKernelFactories();
-}
-
-KernelImpl* ReferenceExampleKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
-    ReferencePlatform::PlatformData& data = *static_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    if (name == CalcNativeNonbondedForceKernel::Name())
-        return new ReferenceCalcNativeNonbondedForceKernel(name, platform);
-    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
+extern "C" OPENMM_EXPORT_NATIVENONBONDED void registerNativeNonbondedSerializationProxies() {
+    SerializationProxy::registerProxy(typeid(NativeNonbondedForce), new NativeNonbondedForceProxy());
 }

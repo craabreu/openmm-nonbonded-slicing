@@ -1,6 +1,3 @@
-#ifndef OPENMM_OPENCLEXAMPLEKERNELSOURCES_H_
-#define OPENMM_OPENCLEXAMPLEKERNELSOURCES_H_
-
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -9,7 +6,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2016 Stanford University and the Authors.           *
+ * Portions copyright (c) 2015 Stanford University and the Authors.           *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -32,21 +29,20 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include <string>
+#ifdef WIN32
+  #define _USE_MATH_DEFINES // Needed to get M_PI
+#endif
+#include "openmm/opencl/OpenCLPlatform.h"
 
-namespace ExamplePlugin {
+extern "C" OPENMM_EXPORT void registerNativeNonbondedOpenCLKernelFactories();
 
-/**
- * This class is a central holding place for the source code of OpenCL kernels.
- * The CMake build script inserts declarations into it based on the .cl files in the
- * kernels subfolder.
- */
+OpenMM::OpenCLPlatform platform;
 
-class OpenCLExampleKernelSources {
-public:
-@CL_FILE_DECLARATIONS@
-};
-
-} // namespace ExamplePlugin
-
-#endif /*OPENMM_OPENCLEXAMPLEKERNELSOURCES_H_*/
+void initializeTests(int argc, char* argv[]) {
+    registerNativeNonbondedOpenCLKernelFactories();
+    platform = dynamic_cast<OpenMM::OpenCLPlatform&>(OpenMM::Platform::getPlatformByName("OpenCL"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
+}

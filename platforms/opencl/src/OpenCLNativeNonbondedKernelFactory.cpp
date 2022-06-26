@@ -1,12 +1,12 @@
 /* -------------------------------------------------------------------------- *
- *                                   OpenMM                                   *
+ *                              OpenMMNativeNonbonded                                   *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2015 Stanford University and the Authors.           *
+ * Portions copyright (c) 2014 Stanford University and the Authors.           *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -29,20 +29,46 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#ifdef WIN32
-  #define _USE_MATH_DEFINES // Needed to get M_PI
-#endif
-#include "openmm/opencl/OpenCLPlatform.h"
+#include <exception>
 
-extern "C" OPENMM_EXPORT void registerExampleOpenCLKernelFactories();
+#include "OpenCLNativeNonbondedKernelFactory.h"
+#include "OpenCLNativeNonbondedKernels.h"
+#include "CommonNativeNonbondedKernels.h"
+#include "openmm/opencl/OpenCLContext.h"
+#include "openmm/internal/windowsExport.h"
+#include "openmm/internal/ContextImpl.h"
+#include "openmm/OpenMMException.h"
 
-OpenMM::OpenCLPlatform platform;
+using namespace NativeNonbondedPlugin;
+using namespace OpenMM;
 
-void initializeTests(int argc, char* argv[]) {
-    registerExampleOpenCLKernelFactories();
-    platform = dynamic_cast<OpenMM::OpenCLPlatform&>(OpenMM::Platform::getPlatformByName("OpenCL"));
-    if (argc > 1)
-        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
-    if (argc > 2)
-        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
+extern "C" OPENMM_EXPORT void registerPlatforms() {
+}
+
+extern "C" OPENMM_EXPORT void registerKernelFactories() {
+    try {
+        Platform& platform = Platform::getPlatformByName("OpenCL");
+        OpenCLNativeNonbondedKernelFactory* factory = new OpenCLNativeNonbondedKernelFactory();
+        platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
+    }
+    catch (std::exception ex) {
+        // Ignore
+    }
+}
+
+extern "C" OPENMM_EXPORT void registerNativeNonbondedOpenCLKernelFactories() {
+    try {
+        Platform::getPlatformByName("OpenCL");
+    }
+    catch (...) {
+        Platform::registerPlatform(new OpenCLPlatform());
+    }
+    registerKernelFactories();
+}
+
+KernelImpl* OpenCLNativeNonbondedKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
+    OpenCLContext& cl = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
+    if (name == CalcNativeNonbondedForceKernel::Name())
+        return new OpenCLCalcNativeNonbondedForceKernel(name, platform, cl, context.getSystem());
+    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

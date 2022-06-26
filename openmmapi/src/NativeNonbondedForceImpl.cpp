@@ -37,13 +37,13 @@
 #include "openmm/System.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/internal/Messages.h"
-#include "ExampleKernels.h"
+#include "NativeNonbondedKernels.h"
 #include <cmath>
 #include <map>
 #include <sstream>
 #include <algorithm>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 

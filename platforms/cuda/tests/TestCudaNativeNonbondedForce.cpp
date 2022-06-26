@@ -29,7 +29,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "CudaExamplePluginTests.h"
+#include "CudaNativeNonbondedPluginTests.h"
 #include "TestNativeNonbondedForce.h"
 
 void runPlatformTests() {

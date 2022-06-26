@@ -1,6 +1,3 @@
-#ifndef COMMON_EXAMPLE_KERNELS_H_
-#define COMMON_EXAMPLE_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -9,7 +6,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014-2021 Stanford University and the Authors.      *
+ * Portions copyright (c) 2015 Stanford University and the Authors.           *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -32,13 +29,20 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ExampleKernels.h"
-#include "openmm/common/ComputeContext.h"
-#include "openmm/common/ComputeArray.h"
+#ifdef WIN32
+  #define _USE_MATH_DEFINES // Needed to get M_PI
+#endif
+#include "openmm/cuda/CudaPlatform.h"
 
-namespace ExamplePlugin {
+extern "C" OPENMM_EXPORT void registerNativeNonbondedCudaKernelFactories();
 
+OpenMM::CudaPlatform platform;
 
-} // namespace ExamplePlugin
-
-#endif /*COMMON_EXAMPLE_KERNELS_H_*/
+void initializeTests(int argc, char* argv[]) {
+    registerNativeNonbondedCudaKernelFactories();
+    platform = dynamic_cast<OpenMM::CudaPlatform&>(OpenMM::Platform::getPlatformByName("CUDA"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
+}

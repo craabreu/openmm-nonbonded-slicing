@@ -1,6 +1,3 @@
-#ifndef OPENMM_REFERENCEEXAMPLEKERNELFACTORY_H_
-#define OPENMM_REFERENCEEXAMPLEKERNELFACTORY_H_
-
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
@@ -9,7 +6,7 @@
  * Biological Structures at Stanford, funded under the NIH Roadmap for        *
  * Medical Research, grant U54 GM072970. See https://simtk.org.               *
  *                                                                            *
- * Portions copyright (c) 2014 Stanford University and the Authors.           *
+ * Portions copyright (c) 2014-2021 Stanford University and the Authors.      *
  * Authors: Peter Eastman                                                     *
  * Contributors:                                                              *
  *                                                                            *
@@ -32,19 +29,12 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/KernelFactory.h"
+#include "CommonNativeNonbondedKernels.h"
+#include "CommonNativeNonbondedKernelSources.h"
+#include "openmm/common/BondedUtilities.h"
+#include "openmm/common/ComputeForceInfo.h"
+#include "openmm/internal/ContextImpl.h"
 
-namespace OpenMM {
-
-/**
- * This KernelFactory creates kernels for the reference implementation of the Example plugin.
- */
-
-class ReferenceExampleKernelFactory : public KernelFactory {
-public:
-    KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
-};
-
-} // namespace OpenMM
-
-#endif /*OPENMM_REFERENCEEXAMPLEKERNELFACTORY_H_*/
+using namespace NativeNonbondedPlugin;
+using namespace OpenMM;
+using namespace std;

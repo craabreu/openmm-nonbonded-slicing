@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------------------- *
- *                                OpenMMExample                                 *
+ *                              OpenMMNativeNonbonded                                   *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -29,34 +29,46 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#ifdef WIN32
-#include <windows.h>
-#include <sstream>
-#else
-#include <dlfcn.h>
-#include <dirent.h>
-#include <cstdlib>
-#endif
+#include <exception>
 
-#include "NativeNonbondedForce.h"
-#include "NativeNonbondedForceProxy.h"
-#include "openmm/serialization/SerializationProxy.h"
+#include "CudaNativeNonbondedKernelFactory.h"
+#include "CudaNativeNonbondedKernels.h"
+#include "CommonNativeNonbondedKernels.h"
+#include "openmm/cuda/CudaContext.h"
+#include "openmm/internal/windowsExport.h"
+#include "openmm/internal/ContextImpl.h"
+#include "openmm/OpenMMException.h"
 
-#if defined(WIN32)
-    #include <windows.h>
-    extern "C" OPENMM_EXPORT_EXAMPLE void registerExampleSerializationProxies();
-    BOOL WINAPI DllMain(HANDLE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
-        if (ul_reason_for_call == DLL_PROCESS_ATTACH)
-            registerExampleSerializationProxies();
-        return TRUE;
-    }
-#else
-    extern "C" void __attribute__((constructor)) registerExampleSerializationProxies();
-#endif
-
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 
-extern "C" OPENMM_EXPORT_EXAMPLE void registerExampleSerializationProxies() {
-    SerializationProxy::registerProxy(typeid(NativeNonbondedForce), new NativeNonbondedForceProxy());
+extern "C" OPENMM_EXPORT void registerPlatforms() {
+}
+
+extern "C" OPENMM_EXPORT void registerKernelFactories() {
+    try {
+        Platform& platform = Platform::getPlatformByName("CUDA");
+        CudaNativeNonbondedKernelFactory* factory = new CudaNativeNonbondedKernelFactory();
+        platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
+    }
+    catch (std::exception ex) {
+        // Ignore
+    }
+}
+
+extern "C" OPENMM_EXPORT void registerNativeNonbondedCudaKernelFactories() {
+    try {
+        Platform::getPlatformByName("CUDA");
+    }
+    catch (...) {
+        Platform::registerPlatform(new CudaPlatform());
+    }
+    registerKernelFactories();
+}
+
+KernelImpl* CudaNativeNonbondedKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
+    CudaContext& cu = *static_cast<CudaPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
+    if (name == CalcNativeNonbondedForceKernel::Name())
+        return new CudaCalcNativeNonbondedForceKernel(name, platform, cu, context.getSystem());
+    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

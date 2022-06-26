@@ -42,13 +42,13 @@
 
 using namespace OpenMM;
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 /**
  * This is the internal implementation of NativeNonbondedForce.
  */
 
-class OPENMM_EXPORT_EXAMPLE NativeNonbondedForceImpl : public ForceImpl {
+class OPENMM_EXPORT_NATIVENONBONDED NativeNonbondedForceImpl : public ForceImpl {
 public:
     NativeNonbondedForceImpl(const NativeNonbondedForce& owner);
     ~NativeNonbondedForceImpl();

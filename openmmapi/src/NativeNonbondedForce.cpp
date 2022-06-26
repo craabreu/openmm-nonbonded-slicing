@@ -39,7 +39,7 @@
 #include <sstream>
 #include <utility>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using std::map;
 using std::pair;

@@ -1,5 +1,8 @@
+#ifndef OPENMM_OPENCLNATIVENONBONDEDKERNELFACTORY_H_
+#define OPENMM_OPENCLNATIVENONBONDEDKERNELFACTORY_H_
+
 /* -------------------------------------------------------------------------- *
- *                              OpenMMExample                                   *
+ *                                   OpenMM                                   *
  * -------------------------------------------------------------------------- *
  * This is part of the OpenMM molecular simulation toolkit originating from   *
  * Simbios, the NIH National Center for Physics-Based Simulation of           *
@@ -29,46 +32,19 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include <exception>
+#include "openmm/KernelFactory.h"
 
-#include "OpenCLExampleKernelFactory.h"
-#include "OpenCLExampleKernels.h"
-#include "CommonExampleKernels.h"
-#include "openmm/opencl/OpenCLContext.h"
-#include "openmm/internal/windowsExport.h"
-#include "openmm/internal/ContextImpl.h"
-#include "openmm/OpenMMException.h"
+namespace NativeNonbondedPlugin {
 
-using namespace ExamplePlugin;
-using namespace OpenMM;
+/**
+ * This KernelFactory creates kernels for the OpenCL implementation of the NativeNonbonded plugin.
+ */
 
-extern "C" OPENMM_EXPORT void registerPlatforms() {
-}
+class OpenCLNativeNonbondedKernelFactory : public OpenMM::KernelFactory {
+public:
+    OpenMM::KernelImpl* createKernelImpl(std::string name, const OpenMM::Platform& platform, OpenMM::ContextImpl& context) const;
+};
 
-extern "C" OPENMM_EXPORT void registerKernelFactories() {
-    try {
-        Platform& platform = Platform::getPlatformByName("OpenCL");
-        OpenCLExampleKernelFactory* factory = new OpenCLExampleKernelFactory();
-        platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
-    }
-    catch (std::exception ex) {
-        // Ignore
-    }
-}
+} // namespace NativeNonbondedPlugin
 
-extern "C" OPENMM_EXPORT void registerExampleOpenCLKernelFactories() {
-    try {
-        Platform::getPlatformByName("OpenCL");
-    }
-    catch (...) {
-        Platform::registerPlatform(new OpenCLPlatform());
-    }
-    registerKernelFactories();
-}
-
-KernelImpl* OpenCLExampleKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
-    OpenCLContext& cl = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
-    if (name == CalcNativeNonbondedForceKernel::Name())
-        return new OpenCLCalcNativeNonbondedForceKernel(name, platform, cl, context.getSystem());
-    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
-}
+#endif /*OPENMM_OPENCLNATIVENONBONDEDKERNELFACTORY_H_*/

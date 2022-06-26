@@ -29,7 +29,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "OpenCLExamplePluginTests.h"
+#include "OpenCLNativeNonbondedPluginTests.h"
 #include "TestNativeNonbondedForce.h"
 
 void runPlatformTests() {

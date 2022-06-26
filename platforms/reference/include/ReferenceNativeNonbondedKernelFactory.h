@@ -1,5 +1,5 @@
-#ifndef OPENMM_OPENCLEXAMPLEKERNELFACTORY_H_
-#define OPENMM_OPENCLEXAMPLEKERNELFACTORY_H_
+#ifndef OPENMM_REFERENCENATIVENONBONDEDKERNELFACTORY_H_
+#define OPENMM_REFERENCENATIVENONBONDEDKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -34,17 +34,17 @@
 
 #include "openmm/KernelFactory.h"
 
-namespace ExamplePlugin {
+namespace OpenMM {
 
 /**
- * This KernelFactory creates kernels for the OpenCL implementation of the Example plugin.
+ * This KernelFactory creates kernels for the reference implementation of the NativeNonbonded plugin.
  */
 
-class OpenCLExampleKernelFactory : public OpenMM::KernelFactory {
+class ReferenceNativeNonbondedKernelFactory : public KernelFactory {
 public:
-    OpenMM::KernelImpl* createKernelImpl(std::string name, const OpenMM::Platform& platform, OpenMM::ContextImpl& context) const;
+    KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
 };
 
-} // namespace ExamplePlugin
+} // namespace OpenMM
 
-#endif /*OPENMM_OPENCLEXAMPLEKERNELFACTORY_H_*/
+#endif /*OPENMM_REFERENCENATIVENONBONDEDKERNELFACTORY_H_*/

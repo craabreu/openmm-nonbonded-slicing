@@ -40,7 +40,7 @@
 
 using std::set;
 using std::vector;
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 
 /**---------------------------------------------------------------------------------------

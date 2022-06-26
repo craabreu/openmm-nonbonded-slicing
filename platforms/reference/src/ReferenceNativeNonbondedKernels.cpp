@@ -29,7 +29,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ReferenceExampleKernels.h"
+#include "ReferenceNativeNonbondedKernels.h"
 #include "NativeNonbondedForce.h"
 #include "internal/NativeNonbondedForceImpl.h"
 #include "openmm/OpenMMException.h"
@@ -44,7 +44,7 @@
 #include "ReferenceLJCoulombIxn.h"
 #include "ReferenceLJCoulomb14.h"
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 

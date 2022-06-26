@@ -1,5 +1,5 @@
-#ifndef REFERENCE_EXAMPLE_KERNELS_H_
-#define REFERENCE_EXAMPLE_KERNELS_H_
+#ifndef REFERENCE_NATIVENONBONDED_KERNELS_H_
+#define REFERENCE_NATIVENONBONDED_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -32,12 +32,12 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "ExampleKernels.h"
+#include "NativeNonbondedKernels.h"
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <vector>
 
-namespace ExamplePlugin {
+namespace NativeNonbondedPlugin {
 
 /**
  * This kernel is invoked by NativeNonbondedForce to calculate the forces acting on the system.
@@ -104,6 +104,6 @@ private:
     OpenMM::NeighborList* neighborList;
 };
 
-} // namespace ExamplePlugin
+} // namespace NativeNonbondedPlugin
 
-#endif /*REFERENCE_EXAMPLE_KERNELS_H_*/
+#endif /*REFERENCE_NATIVENONBONDED_KERNELS_H_*/

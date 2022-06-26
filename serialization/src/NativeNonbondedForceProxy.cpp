@@ -35,7 +35,7 @@
 #include "openmm/Force.h"
 #include <sstream>
 
-using namespace ExamplePlugin;
+using namespace NativeNonbondedPlugin;
 using namespace OpenMM;
 using namespace std;
 
