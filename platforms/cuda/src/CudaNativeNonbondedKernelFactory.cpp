@@ -33,6 +33,7 @@
 
 #include "CudaNativeNonbondedKernelFactory.h"
 #include "CudaNativeNonbondedKernels.h"
+#include "CudaParallelNativeNonbondedKernels.h"
 #include "CommonNativeNonbondedKernels.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/internal/windowsExport.h"
@@ -67,7 +68,13 @@ extern "C" OPENMM_EXPORT void registerNativeNonbondedCudaKernelFactories() {
 }
 
 KernelImpl* CudaNativeNonbondedKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
-    CudaContext& cu = *static_cast<CudaPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
+    CudaPlatform::PlatformData& data = *static_cast<CudaPlatform::PlatformData*>(context.getPlatformData());
+    if (data.contexts.size() > 1) {
+        // We are running in parallel on multiple devices, so we may want to create a parallel kernel.
+        if (name == CalcNativeNonbondedForceKernel::Name())
+            return new CudaParallelCalcNativeNonbondedForceKernel(name, platform, data, context.getSystem());
+    }
+    CudaContext& cu = *data.contexts[0];
     if (name == CalcNativeNonbondedForceKernel::Name())
         return new CudaCalcNativeNonbondedForceKernel(name, platform, cu, context.getSystem());
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());

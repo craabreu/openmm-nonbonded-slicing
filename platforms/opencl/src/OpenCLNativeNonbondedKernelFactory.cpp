@@ -33,6 +33,7 @@
 
 #include "OpenCLNativeNonbondedKernelFactory.h"
 #include "OpenCLNativeNonbondedKernels.h"
+#include "OpenCLParallelNativeNonbondedKernels.h"
 #include "CommonNativeNonbondedKernels.h"
 #include "openmm/opencl/OpenCLContext.h"
 #include "openmm/internal/windowsExport.h"
@@ -67,7 +68,13 @@ extern "C" OPENMM_EXPORT void registerNativeNonbondedOpenCLKernelFactories() {
 }
 
 KernelImpl* OpenCLNativeNonbondedKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
-    OpenCLContext& cl = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData())->contexts[0];
+    OpenCLPlatform::PlatformData& data = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData());
+    if (data.contexts.size() > 1) {
+        if (name == CalcNativeNonbondedForceKernel::Name())
+            return new OpenCLParallelCalcNativeNonbondedForceKernel(name, platform, data, context.getSystem());
+        throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
+    }
+    OpenCLContext& cl = *data.contexts[0];
     if (name == CalcNativeNonbondedForceKernel::Name())
         return new OpenCLCalcNativeNonbondedForceKernel(name, platform, cl, context.getSystem());
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
