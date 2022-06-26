@@ -46,7 +46,6 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         Platform& platform = Platform::getPlatform(i);
         if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
             ReferenceExampleKernelFactory* factory = new ReferenceExampleKernelFactory();
-            platform.registerKernelFactory(CalcExampleForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcNativeNonbondedForceKernel::Name(), factory);
         }
     }
@@ -58,8 +57,6 @@ extern "C" OPENMM_EXPORT void registerExampleReferenceKernelFactories() {
 
 KernelImpl* ReferenceExampleKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
     ReferencePlatform::PlatformData& data = *static_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    if (name == CalcExampleForceKernel::Name())
-        return new ReferenceCalcExampleForceKernel(name, platform);
     if (name == CalcNativeNonbondedForceKernel::Name())
         return new ReferenceCalcNativeNonbondedForceKernel(name, platform);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());

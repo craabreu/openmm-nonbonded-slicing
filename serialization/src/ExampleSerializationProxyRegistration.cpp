@@ -38,8 +38,6 @@
 #include <cstdlib>
 #endif
 
-#include "ExampleForce.h"
-#include "ExampleForceProxy.h"
 #include "NativeNonbondedForce.h"
 #include "NativeNonbondedForceProxy.h"
 #include "openmm/serialization/SerializationProxy.h"
@@ -60,6 +58,5 @@ using namespace ExamplePlugin;
 using namespace OpenMM;
 
 extern "C" OPENMM_EXPORT_EXAMPLE void registerExampleSerializationProxies() {
-    SerializationProxy::registerProxy(typeid(ExampleForce), new ExampleForceProxy());
     SerializationProxy::registerProxy(typeid(NativeNonbondedForce), new NativeNonbondedForceProxy());
 }
