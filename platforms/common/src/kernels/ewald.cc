@@ -1,3 +1,7 @@
+DEVICE inline mm_long realToFixedPoint(real x) {
+    return (mm_long)(x * 0x100000000);
+}
+
 DEVICE real2 multofReal2(real2 a, real2 b) {
     return make_real2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
 }

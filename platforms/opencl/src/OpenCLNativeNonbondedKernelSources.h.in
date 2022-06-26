@@ -44,7 +44,7 @@ namespace NativeNonbondedPlugin {
 
 class OpenCLNativeNonbondedKernelSources {
 public:
-@CL_FILE_DECLARATIONS@
+@OPENCL_FILE_DECLARATIONS@
 };
 
 } // namespace NativeNonbondedPlugin

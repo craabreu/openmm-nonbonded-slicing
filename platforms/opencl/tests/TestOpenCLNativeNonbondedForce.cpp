@@ -75,9 +75,7 @@ void testParallelComputation(NativeNonbondedForce::NonbondedMethod method) {
     VerletIntegrator integrator2(0.01);
 
     map<string, string> props;
-    printf("ENTROU\n");
     string deviceIndex = platform.getPropertyValue(context1, OpenCLPlatform::OpenCLDeviceIndex());
-    printf("SAIU\n");
     props[OpenCLPlatform::OpenCLDeviceIndex()] = deviceIndex+","+deviceIndex;
     string platformIndex = platform.getPropertyValue(context1, OpenCLPlatform::OpenCLPlatformIndex());
     props[OpenCLPlatform::OpenCLPlatformIndex()] = platformIndex;
