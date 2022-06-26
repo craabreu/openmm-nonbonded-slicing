@@ -13,6 +13,5 @@ dependencies:
   - pocl
   - pytest
   - python
-  - pytorch-gpu @PYTORCH_VERSION@
   - swig
   - sysroot_linux-64 2.17

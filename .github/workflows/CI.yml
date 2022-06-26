@@ -69,7 +69,6 @@ jobs:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
           NVCC_VERSION: ${{ matrix.nvcc-version }}
-          PYTORCH_VERSION: ${{ matrix.pytorch-version }}
 
       - uses: conda-incubator/setup-miniconda@v2
         name: "Install dependencies with conda"
@@ -97,8 +96,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
             -DOPENMM_DIR=${CONDA_PREFIX} \
-            -DTorch_DIR=${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake/Torch \
-            -DNN_BUILD_OPENCL_LIB=ON \
             -DOPENCL_INCLUDE_DIR=${CONDA_PREFIX}/include \
             -DOPENCL_LIBRARY=${CONDA_PREFIX}/lib/libOpenCL${SHLIB_EXT}
 
@@ -107,12 +104,11 @@ jobs:
         run: |
           cd build
           make -j2 install
-          make -j2 PythonInstall
+          # make -j2 PythonInstall
 
       - name: "List plugins"
         shell: bash -l {0}
         run: |
-          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
           python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
 
       - name: "Run C++ test"
@@ -120,11 +116,11 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
           cd build
-          ctest --output-on-failure --exclude-regex TestCuda
+          ctest --output-on-failure
 
-      - name: "Run Python test"
-        shell: bash -l {0}
-        run: |
-          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
-          cd python/tests
-          pytest --verbose Test*
+      # - name: "Run Python test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+      #     cd python/tests
+      #     pytest --verbose Test*
