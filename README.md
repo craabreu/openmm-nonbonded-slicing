@@ -1,6 +1,8 @@
 OpenMM NativeNonbonded Plugin
 =====================
 
+[![GH Actions Status](https://github.com/craabreu/openmm-native-nonbonded-plugin/workflows/CI/badge.svg)](https://github.com/craabreu/openmm-native-nonbonded-plugin/actions?query=branch%3Amain+workflow%3ACI)
+
 This project is an nativenonbonded of how to write a plugin for [OpenMM](https://openmm.org).
 It includes nearly everything you would want in a real plugin, including implementations for the
 Reference, OpenCL, and CUDA platforms, serialization support, test cases, and a Python API.  It

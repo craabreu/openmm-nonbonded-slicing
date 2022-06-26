@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+  # schedule:
+  #   # Nightly tests run on main by default:
+  #   #   Scheduled workflows run on the latest commit on the default or base branch.
+  #   #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
+  #   - cron: "0 0 * * *"
+
+
+jobs:
+  unix:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported versions
+          - name: Linux (CUDA 10.2, Python 3.7)
+            os: ubuntu-18.04
+            cuda-version: "10.2.89"
+            gcc-version: "8.5.*"
+            nvcc-version: "10.2"
+            python-version: "3.7"
+
+          # Latest supported versions
+          - name: Linux (CUDA 11.2, Python 3.10)
+            os: ubuntu-18.04
+            cuda-version: "11.2.2"
+            gcc-version: "10.3.*"
+            nvcc-version: "11.2"
+            python-version: "3.10"
+
+          - name: MacOS (Python 3.9)
+            os: macos-11
+            cuda-version: ""
+            gcc-version: ""
+            nvcc-version: ""
+            python-version: "3.9"
+
+    steps:
+      - name: "Check out"
+        uses: actions/checkout@v2
+
+      - name: "Install CUDA Toolkit on Linux (if needed)"
+        uses: Jimver/cuda-toolkit@v0.2.5
+        with:
+          cuda: ${{ matrix.cuda-version }}
+        if: startsWith(matrix.os, 'ubuntu')
+
+      - name: "Install SDK on MacOS (if needed)"
+        run: source devtools/scripts/install_macos_sdk.sh
+        if: startsWith(matrix.os, 'macos')
+
+      - name: "Update the conda enviroment file"
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '@'
+          tokenSuffix: '@'
+          files: devtools/conda-envs/build-${{ matrix.os }}.yml
+        env:
+          CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
+          GCC_VERSION: ${{ matrix.gcc-version }}
+          NVCC_VERSION: ${{ matrix.nvcc-version }}
+          PYTORCH_VERSION: ${{ matrix.pytorch-version }}
+
+      - uses: conda-incubator/setup-miniconda@v2
+        name: "Install dependencies with conda"
+        with:
+          activate-environment: build
+          environment-file: devtools/conda-envs/build-${{ matrix.os }}.yml
+          python-version: ${{ matrix.python-version }}
+
+      - name: "List conda packages"
+        shell: bash -l {0}
+        run: conda list
+
+      - name: "Configure"
+        shell: bash -l {0}
+        run: |
+          mkdir build
+          cd build
+
+          SHLIB_EXT=".so"
+          if [[ ${{ matrix.os }} == macos-* ]]; then
+            SHLIB_EXT=".dylib"
+          fi
+
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
+            -DOPENMM_DIR=${CONDA_PREFIX} \
+            -DTorch_DIR=${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake/Torch \
+            -DNN_BUILD_OPENCL_LIB=ON \
+            -DOPENCL_INCLUDE_DIR=${CONDA_PREFIX}/include \
+            -DOPENCL_LIBRARY=${CONDA_PREFIX}/lib/libOpenCL${SHLIB_EXT}
+
+      - name: "Build"
+        shell: bash -l {0}
+        run: |
+          cd build
+          make -j2 install
+          make -j2 PythonInstall
+
+      - name: "List plugins"
+        shell: bash -l {0}
+        run: |
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+          python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
+
+      - name: "Run C++ test"
+        shell: bash -l {0}
+        run: |
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+          cd build
+          ctest --output-on-failure --exclude-regex TestCuda
+
+      - name: "Run Python test"
+        shell: bash -l {0}
+        run: |
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+          cd python/tests
+          pytest --verbose Test*
