@@ -7,11 +7,9 @@ on:
   pull_request:
     branches:
       - "main"
-  # schedule:
-  #   # Nightly tests run on main by default:
-  #   #   Scheduled workflows run on the latest commit on the default or base branch.
-  #   #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
-  #   - cron: "0 0 * * *"
+  schedule:
+    # Weely tests run on Sundays at 4 AM UTC (12 AM EST):
+    - cron: "0 4 * * 0"
 
 
 jobs:
@@ -68,9 +66,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
             -DOPENMM_DIR=${CONDA_PREFIX} \
-            -DCUDA_TOOLKIT_ROOT_DIR=${CUDA_PATH} \
-            -DNATIVENONBONDED_BUILD_CUDA_LIB=ON \
-            -DNATIVENONBONDED_BUILD_OPENCL_LIB=ON
+            -DCUDA_TOOLKIT_ROOT_DIR=${CUDA_PATH}
 
       - name: "Build"
         shell: bash -l {0}
