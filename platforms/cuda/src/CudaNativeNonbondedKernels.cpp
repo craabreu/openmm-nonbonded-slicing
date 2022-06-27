@@ -332,7 +332,9 @@ void CudaCalcNativeNonbondedForceKernel::initialize(const System& system, const 
             replacements["EXP_COEFFICIENT"] = cu.doubleToString(-1.0/(4.0*alpha*alpha));
             replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
             replacements["M_PI"] = cu.doubleToString(M_PI);
-            CUmodule module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+CommonNativeNonbondedKernelSources::ewald, replacements);
+            CUmodule module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+
+                                              CommonNativeNonbondedKernelSources::realtofixedpoint+
+                                              CommonNativeNonbondedKernelSources::ewald, replacements);
             ewaldSumsKernel = cu.getKernel(module, "calculateEwaldCosSinSums");
             ewaldForcesKernel = cu.getKernel(module, "calculateEwaldForces");
             int elementSize = (cu.getUseDoublePrecision() ? sizeof(double2) : sizeof(float2));
@@ -398,7 +400,9 @@ void CudaCalcNativeNonbondedForceKernel::initialize(const System& system, const 
                 pmeDefines["USE_PME_STREAM"] = "1";
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            CUmodule module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+cu.replaceStrings(CommonNativeNonbondedKernelSources::pme, replacements), pmeDefines);
+            CUmodule module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+
+                                              CommonNativeNonbondedKernelSources::realtofixedpoint+
+                                              cu.replaceStrings(CommonNativeNonbondedKernelSources::pme, replacements), pmeDefines);
             if (cu.getPlatformData().useCpuPme && !doLJPME && usePosqCharges) {
                 // Create the CPU PME kernel.
 
@@ -433,7 +437,9 @@ void CudaCalcNativeNonbondedForceKernel::initialize(const System& system, const 
                     pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
                     if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
                         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
-                    module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+CommonNativeNonbondedKernelSources::pme, pmeDefines);
+                    module = cu.createModule(CudaNativeNonbondedKernelSources::vectorOps+
+                                             CommonNativeNonbondedKernelSources::realtofixedpoint+
+                                             CommonNativeNonbondedKernelSources::pme, pmeDefines);
                     pmeDispersionFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
                     pmeDispersionGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");
                     pmeDispersionSpreadChargeKernel = cu.getKernel(module, "gridSpreadCharge");
