@@ -36,6 +36,8 @@
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <vector>
+#include <array>
+#include <map>
 
 namespace NativeNonbondedPlugin {
 

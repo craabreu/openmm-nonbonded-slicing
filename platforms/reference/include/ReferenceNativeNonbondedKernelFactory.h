@@ -33,6 +33,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "openmm/KernelFactory.h"
+#include <string.h>
 
 namespace OpenMM {
 
