@@ -1,0 +1,99 @@
+name: MacOS
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+  # schedule:
+  #   # Nightly tests run on main by default:
+  #   #   Scheduled workflows run on the latest commit on the default or base branch.
+  #   #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
+  #   - cron: "0 0 * * *"
+
+
+jobs:
+  unix:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: MacOS (Python 3.9)
+            os: macos-11
+            cuda-version: ""
+            gcc-version: ""
+            nvcc-version: ""
+            python-version: "3.9"
+
+    steps:
+      - name: "Check out"
+        uses: actions/checkout@v2
+
+      - name: "Install SDK on MacOS"
+        run: source devtools/scripts/install_macos_sdk.sh
+
+      - name: "Update the conda enviroment file"
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '@'
+          tokenSuffix: '@'
+          files: devtools/conda-envs/build-${{ matrix.os }}.yml
+        env:
+          CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
+          GCC_VERSION: ${{ matrix.gcc-version }}
+          NVCC_VERSION: ${{ matrix.nvcc-version }}
+
+      - uses: conda-incubator/setup-miniconda@v2
+        name: "Install dependencies with conda"
+        with:
+          activate-environment: build
+          environment-file: devtools/conda-envs/build-${{ matrix.os }}.yml
+          python-version: ${{ matrix.python-version }}
+
+      - name: "List conda packages"
+        shell: bash -l {0}
+        run: conda list
+
+      - name: "Configure"
+        shell: bash -l {0}
+        run: |
+          mkdir build
+          cd build
+
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
+            -DOPENMM_DIR=${CONDA_PREFIX} \
+            -DCUDA_TOOLKIT_ROOT_DIR=${CUDA_PATH} \
+            -DNATIVENONBONDED_BUILD_CUDA_LIB=ON \
+            -DNATIVENONBONDED_BUILD_OPENCL_LIB=ON
+
+      - name: "Build"
+        shell: bash -l {0}
+        run: |
+          cd build
+          make -j2 install
+          make -j2 PythonInstall
+
+      - name: "List plugins"
+        shell: bash -l {0}
+        run: |
+          python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
+
+      - name: "Run C++ test"
+        shell: bash -l {0}
+        run: |
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+          cd build
+          ctest --output-on-failure --exclude-regex TestCuda
+
+      # - name: "Run Python test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+      #     cd python/tests
+      #     pytest --verbose Test*

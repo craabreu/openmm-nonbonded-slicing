@@ -1,4 +1,4 @@
-name: CI
+name: Linux
 
 on:
   push:
@@ -38,26 +38,14 @@ jobs:
             nvcc-version: "11.2"
             python-version: "3.10"
 
-          # - name: MacOS (Python 3.9)
-          #   os: macos-11
-          #   cuda-version: ""
-          #   gcc-version: ""
-          #   nvcc-version: ""
-          #   python-version: "3.9"
-
     steps:
       - name: "Check out"
         uses: actions/checkout@v2
 
-      - name: "Install CUDA Toolkit on Linux (if needed)"
+      - name: "Install CUDA Toolkit on Linux"
         uses: Jimver/cuda-toolkit@v0.2.5
         with:
           cuda: ${{ matrix.cuda-version }}
-        if: startsWith(matrix.os, 'ubuntu')
-
-      - name: "Install SDK on MacOS (if needed)"
-        run: source devtools/scripts/install_macos_sdk.sh
-        if: startsWith(matrix.os, 'macos')
 
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
@@ -87,11 +75,6 @@ jobs:
           mkdir build
           cd build
 
-          SHLIB_EXT=".so"
-          if [[ ${{ matrix.os }} == macos-* ]]; then
-            SHLIB_EXT=".dylib"
-          fi
-
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
@@ -105,7 +88,7 @@ jobs:
         run: |
           cd build
           make -j2 install
-          # make -j2 PythonInstall
+          make -j2 PythonInstall
 
       - name: "List plugins"
         shell: bash -l {0}
