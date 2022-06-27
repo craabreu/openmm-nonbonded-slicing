@@ -693,7 +693,7 @@ public:
  */
 class NativeNonbondedForce::ParticleOffsetInfo {
 public:
-    int particle, parameter;
+    int parameter, particle;
     double chargeScale, sigmaScale, epsilonScale;
     ParticleOffsetInfo() {
         particle = parameter = -1;
@@ -710,7 +710,7 @@ public:
  */
 class NativeNonbondedForce::ExceptionOffsetInfo {
 public:
-    int exception, parameter;
+    int parameter, exception;
     double chargeProdScale, sigmaScale, epsilonScale;
     ExceptionOffsetInfo() {
         exception = parameter = -1;
