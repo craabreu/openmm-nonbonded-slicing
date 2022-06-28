@@ -53,6 +53,54 @@ NativeNonbondedForce::NativeNonbondedForce() : nonbondedMethod(NoCutoff), cutoff
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
 }
 
+NativeNonbondedForce::NativeNonbondedForce(const NonbondedForce& force) {
+    nonbondedMethod = static_cast<NonbondedMethod>(force.getNonbondedMethod());
+    cutoffDistance = force.getCutoffDistance();
+    switchingDistance = force.getSwitchingDistance();
+    rfDielectric = force.getReactionFieldDielectric();
+    ewaldErrorTol = force.getEwaldErrorTolerance();
+    force.getPMEParameters(alpha, nx, ny, nz);
+    force.getLJPMEParameters(dalpha, dnx, dny, dnz);
+    useSwitchingFunction = force.getUseSwitchingFunction();
+    useDispersionCorrection = force.getUseDispersionCorrection();
+    exceptionsUsePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
+    recipForceGroup = force.getReciprocalSpaceForceGroup();
+    includeDirectSpace = force.getIncludeDirectSpace();
+
+    for (int index = 0; index < force.getNumParticles(); index++) {
+        double charge, sigma, epsilon;
+        force.getParticleParameters(index, charge, sigma, epsilon);
+        addParticle(charge, sigma, epsilon);
+    }
+
+    for (int index = 0; index < force.getNumExceptions(); index++) {
+        int particle1, particle2;
+        double chargeProd, sigma, epsilon;
+        force.getExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon);
+        addException(particle1, particle2, chargeProd, sigma, epsilon);
+    }
+
+    for (int index = 0; index < force.getNumGlobalParameters(); index++)
+        addGlobalParameter(force.getGlobalParameterName(index),
+                           force.getGlobalParameterDefaultValue(index));
+
+    for (int index = 0; index < force.getNumParticleParameterOffsets(); index++) {
+        std::string parameter;
+        int particleIndex;
+        double chargeScale, sigmaScale, epsilonScale;
+        force.getParticleParameterOffset(index, parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
+        addParticleParameterOffset(parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
+    }
+
+    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
+        std::string parameter;
+        int exceptionIndex;
+        double chargeProdScale, sigmaScale, epsilonScale;
+        force.getExceptionParameterOffset(index, parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
+        addExceptionParameterOffset(parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
+    }
+}
+
 NativeNonbondedForce::NonbondedMethod NativeNonbondedForce::getNonbondedMethod() const {
     return nonbondedMethod;
 }

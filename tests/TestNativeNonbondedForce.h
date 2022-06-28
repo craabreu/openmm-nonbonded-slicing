@@ -37,6 +37,7 @@
 #include "openmm/System.h"
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
+#include "openmm/NonbondedForce.h"
 #include "sfmt/SFMT.h"
 #include <iostream>
 #include <iomanip>
@@ -968,6 +969,50 @@ void testDirectAndReciprocal(Platform& platform) {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
+void testInstantiateFromNonbondedForce(Platform& platform) {
+    OpenMM::NonbondedForce* force = new OpenMM::NonbondedForce();
+    force->addParticle(0.0, 1.0, 0.5);
+    force->addParticle(1.0, 0.5, 0.6);
+    force->addParticle(-1.0, 2.0, 0.7);
+    force->addParticle(0.5, 2.0, 0.8);
+    force->addException(0, 3, 0.0, 1.0, 0.0);
+    force->addException(2, 3, 0.5, 1.0, 1.5);
+    force->addException(0, 1, 1.0, 1.5, 1.0);
+    force->addGlobalParameter("p1", 0.0);
+    force->addGlobalParameter("p2", 1.0);
+    force->addParticleParameterOffset("p1", 0, 3.0, 0.5, 0.5);
+    force->addParticleParameterOffset("p2", 1, 1.0, 1.0, 2.0);
+    force->addExceptionParameterOffset("p1", 1, 0.5, 0.5, 1.5);
+    vector<Vec3> positions(4);
+    for (int i = 0; i < 4; i++)
+        positions[i] = Vec3(i, 0, 0);
+
+    System system1;
+    for (int i = 0; i < 4; i++)
+        system1.addParticle(1.0);
+    system1.addForce(force);
+    VerletIntegrator integrator1(0.001);
+    Context context1(system1, integrator1, platform);
+    context1.setPositions(positions);
+    State state1 = context1.getState(State::Forces | State::Energy);
+
+    NativeNonbondedForce* newForce = new NativeNonbondedForce(*force);
+    System system2;
+    system2.addForce(newForce);
+    for (int i = 0; i < 4; i++)
+        system2.addParticle(1.0);
+    VerletIntegrator integrator2(0.001);
+    Context context2(system2, integrator2, platform);
+    context2.setPositions(positions);
+    State state2 = context2.getState(State::Forces | State::Energy);
+
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
+    const vector<Vec3>& forces1 = state1.getForces();
+    const vector<Vec3>& forces2 = state2.getForces();
+    for (int i = 0; i < 4; i++)
+        ASSERT_EQUAL_VEC(forces1[i], forces2[i], 1e-5);
+}
+
 void runPlatformTests();
 
 extern "C" OPENMM_EXPORT void registerNativeNonbondedReferenceKernelFactories();
@@ -992,6 +1037,7 @@ int main(int argc, char* argv[]) {
         testParameterOffsets(platform);
         testEwaldExceptions(platform);
         testDirectAndReciprocal(platform);
+        testInstantiateFromNonbondedForce(platform);
         runPlatformTests();
     }
     catch(const exception& e) {

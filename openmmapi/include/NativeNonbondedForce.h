@@ -34,6 +34,7 @@
 
 #include "openmm/Context.h"
 #include "openmm/Force.h"
+#include "openmm/NonbondedForce.h"
 #include <map>
 #include <set>
 #include <utility>
@@ -152,6 +153,7 @@ public:
      * Create a NativeNonbondedForce.
      */
     NativeNonbondedForce();
+    NativeNonbondedForce(const NonbondedForce&);
     /**
      * Get the number of particles for which force field parameters have been defined.
      */
