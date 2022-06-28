@@ -85,13 +85,11 @@ jobs:
       - name: "Run C++ test"
         shell: bash -l {0}
         run: |
-          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
           cd build
           ctest --output-on-failure --exclude-regex TestCuda
 
-      # - name: "Run Python test"
-      #   shell: bash -l {0}
-      #   run: |
-      #     export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib/python${{ matrix.python-version }}/site-packages/torch/lib:${LD_LIBRARY_PATH}"
-      #     cd python/tests
-      #     pytest --verbose Test*
+      - name: "Run Python test"
+        shell: bash -l {0}
+        run: |
+          cd python/tests
+          pytest --verbose Test*
