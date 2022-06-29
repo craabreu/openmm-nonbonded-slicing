@@ -20,6 +20,7 @@ simple command with two arguments:
 devtools/scripts/rename.sh <native-subst> <nonbonded-subst>
 ```
 
+The first and second arguments will replace the words "native" and "nonbonded", respectively, throughout the whole project. 
 
 Building the Plugin
 ===================
