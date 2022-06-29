@@ -61,12 +61,12 @@ jobs:
         run: |
           mkdir build
           cd build
-          locate libOpenCL.dylib
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
             -DOPENMM_DIR=${CONDA_PREFIX} \
             -DNATIVENONBONDED_BUILD_OPENCL_LIB=ON \
+            -DOPENCL_DIR=${CONDA_PREFIX} \
             -DNATIVENONBONDED_BUILD_CUDA_LIB=OFF
 
       - name: "Build"
