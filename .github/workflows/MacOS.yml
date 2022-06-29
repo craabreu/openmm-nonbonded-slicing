@@ -85,10 +85,10 @@ jobs:
         shell: bash -l {0}
         run: |
           cd build
-          ctest --output-on-failure --exclude-regex TestCuda
+          ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
 
       - name: "Run Python test"
         shell: bash -l {0}
         run: |
           cd python/tests
-          pytest --verbose -k 'not Cuda' Test*
+          pytest --verbose -k 'not (Cuda or OpenCL)' Test*
