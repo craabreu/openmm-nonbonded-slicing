@@ -61,14 +61,13 @@ jobs:
         run: |
           mkdir build
           cd build
-
+          locate libOpenCL.dylib
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
             -DOPENMM_DIR=${CONDA_PREFIX} \
-            -DCUDA_TOOLKIT_ROOT_DIR=${CUDA_PATH} \
-            -DOPENCL_INCLUDE_DIR=${CONDA_PREFIX}/include \
-            -DOPENCL_LIBRARY=${CONDA_PREFIX}/lib/libOpenCL.dylib
+            -DNATIVENONBONDED_BUILD_OPENCL_LIB=ON \
+            -DNATIVENONBONDED_BUILD_CUDA_LIB=OFF
 
       - name: "Build"
         shell: bash -l {0}
@@ -92,4 +91,4 @@ jobs:
         shell: bash -l {0}
         run: |
           cd python/tests
-          pytest --verbose Test*
+          pytest --verbose -k 'not Cuda' Test*
