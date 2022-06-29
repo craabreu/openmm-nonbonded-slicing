@@ -1,28 +1,47 @@
-import openmm as mm
 import nativenonbondedplugin as plugin
 import numpy as np
-
+import openmm as mm
+import pytest
 from openmm import unit
 
 ONE_4PI_EPS0 = 138.935456
-TOL = 1E-5
+
+TOL = 1.0E-5
+
+cases = [
+    ('Reference', ''),
+    ('CUDA', 'single'),
+    ('CUDA', 'mixed'),
+    ('CUDA', 'double'),
+    ('OpenCL', 'single'),
+    ('OpenCL', 'mixed'),
+    ('OpenCL', 'double'),
+]
+
+ids = [''.join(case) for case in cases]
+
 
 def value(x):
     return x/x.unit if unit.is_quantity(x) else x
 
+
 def ASSERT(cond):
     assert cond
+
 
 def ASSERT_EQUAL_TOL(expected, found, tol):
     exp = value(expected)
     assert abs(exp - value(found))/max(abs(exp), 1.0) <= tol
 
-def ASSERT_EQUAL_VEC(a, b, tol):
-    ASSERT_EQUAL_TOL(a.x, b.x, tol)
-    ASSERT_EQUAL_TOL(a.y, b.y, tol)
-    ASSERT_EQUAL_TOL(a.z, b.z, tol)
 
-def executeCoulombTest(platformName, properties={}):
+def ASSERT_EQUAL_VEC(expected, found, tol):
+    ASSERT_EQUAL_TOL(expected.x, found.x, tol)
+    ASSERT_EQUAL_TOL(expected.y, found.y, tol)
+    ASSERT_EQUAL_TOL(expected.z, found.z, tol)
+
+
+@pytest.mark.parametrize('platformName, precision', cases, ids=ids)
+def testCoulomb(platformName, precision):
     system = mm.System()
     system.addParticle(1.0)
     system.addParticle(1.0)
@@ -34,6 +53,7 @@ def executeCoulombTest(platformName, properties={}):
     ASSERT(not forceField.usesPeriodicBoundaryConditions())
     ASSERT(not system.usesPeriodicBoundaryConditions())
     platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator, platform, properties)
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
@@ -44,7 +64,9 @@ def executeCoulombTest(platformName, properties={}):
     ASSERT_EQUAL_VEC(mm.Vec3(force, 0, 0), forces[1], TOL)
     ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(-0.75)/2.0, state.getPotentialEnergy(), TOL)
 
-def executeLJTest(platformName, properties={}):
+
+@pytest.mark.parametrize('platformName, precision', cases, ids=ids)
+def testLJ(platformName, precision):
     system = mm.System()
     system.addParticle(1.0)
     system.addParticle(1.0)
@@ -56,6 +78,7 @@ def executeLJTest(platformName, properties={}):
     ASSERT(not forceField.usesPeriodicBoundaryConditions())
     ASSERT(not system.usesPeriodicBoundaryConditions())
     platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator, platform, properties)
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
@@ -69,7 +92,8 @@ def executeLJTest(platformName, properties={}):
     ASSERT_EQUAL_TOL(4.0*eps*(x**12-x**6), state.getPotentialEnergy(), TOL)
 
 
-def executeLargeSystemTest(platformName, properties={}):
+@pytest.mark.parametrize('platformName, precision', cases, ids=ids)
+def testLargeSystem(platformName, precision):
     numMolecules = 600
     numParticles = numMolecules*2
     cutoff = 2.0
@@ -92,6 +116,9 @@ def executeLargeSystemTest(platformName, properties={}):
     velocities = np.empty(numParticles, mm.Vec3)
     rng = np.random.default_rng(19283)
 
+    def random_vec():
+        return mm.Vec3(rng.random(), rng.random(), rng.random())
+
     for i in range(numMolecules):
         if (i < numMolecules/2):
             nonbonded.addParticle(-1.0, 0.2, 0.1)
@@ -100,10 +127,10 @@ def executeLargeSystemTest(platformName, properties={}):
             nonbonded.addParticle(-1.0, 0.2, 0.2)
             nonbonded.addParticle(1.0, 0.1, 0.2)
 
-        positions[2*i] = mm.Vec3(boxSize*rng.random(), boxSize*rng.random(), boxSize*rng.random())
-        positions[2*i+1] = mm.Vec3(positions[2*i][0]+1.0, positions[2*i][1], positions[2*i][2])
-        velocities[2*i] = mm.Vec3(rng.random(), rng.random(), rng.random())
-        velocities[2*i+1] = mm.Vec3(rng.random(), rng.random(), rng.random())
+        positions[2*i] = boxSize*random_vec()
+        positions[2*i+1] = positions[2*i] + mm.Vec3(1.0, 0.0, 0.0)
+        velocities[2*i] = random_vec()
+        velocities[2*i+1] = random_vec()
         bonds.addBond(2*i, 2*i+1, 1.0, 0.1)
         nonbonded.addException(2*i, 2*i+1, 0.0, 0.15, 0.0)
 
@@ -114,14 +141,21 @@ def executeLargeSystemTest(platformName, properties={}):
     system.addForce(bonds)
     integrator1 = mm.VerletIntegrator(0.01)
     integrator2 = mm.VerletIntegrator(0.01)
+    properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator1, platform, properties)
     referenceContext = mm.Context(system, integrator2, reference)
     context.setPositions(positions)
     context.setVelocities(velocities)
     referenceContext.setPositions(positions)
     referenceContext.setVelocities(velocities)
-    state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
-    referenceState = referenceContext.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
+    kwargs = dict(
+        getPositions=True,
+        getVelocities=True,
+        getForces=True,
+        getEnergy=True,
+    )
+    state = context.getState(**kwargs)
+    referenceState = referenceContext.getState(**kwargs)
     for i in range(numParticles):
         ASSERT_EQUAL_VEC(state.getPositions()[i], referenceState.getPositions()[i], tol)
         ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
@@ -134,8 +168,8 @@ def executeLargeSystemTest(platformName, properties={}):
     nonbonded.setCutoffDistance(cutoff)
     context.reinitialize(True)
     referenceContext.reinitialize(True)
-    state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
-    referenceState = referenceContext.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
+    state = context.getState(**kwargs)
+    referenceState = referenceContext.getState(**kwargs)
     for i in range(numParticles):
         ASSERT_EQUAL_VEC(state.getPositions()[i], referenceState.getPositions()[i], tol)
         ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
@@ -147,8 +181,8 @@ def executeLargeSystemTest(platformName, properties={}):
     nonbonded.setNonbondedMethod(plugin.NativeNonbondedForce.CutoffPeriodic)
     context.reinitialize(True)
     referenceContext.reinitialize(True)
-    state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
-    referenceState = referenceContext.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True)
+    state = context.getState(**kwargs)
+    referenceState = referenceContext.getState(**kwargs)
     for i in range(numParticles):
         dx = state.getPositions()[i][0]-referenceState.getPositions()[i][0]
         dy = state.getPositions()[i][1]-referenceState.getPositions()[i][1]
@@ -162,67 +196,3 @@ def executeLargeSystemTest(platformName, properties={}):
         ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
         ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
     ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
-
-
-def testCoulombReference():
-    executeCoulombTest("Reference")
-
-def testCoulombCudaSingle():
-    executeCoulombTest("CUDA", {'Precision': 'single'})
-
-def testCoulombCudaMixed():
-    executeCoulombTest("CUDA", {'Precision': 'mixed'})
-
-def testCoulombCudaDouble():
-    executeCoulombTest("CUDA", {'Precision': 'double'})
-
-def testCoulombOpenCLSingle():
-    executeCoulombTest("OpenCL", {'Precision': 'single'})
-
-def testCoulombOpenCLMixed():
-    executeCoulombTest("OpenCL", {'Precision': 'mixed'})
-
-def testCoulombOpenCLDouble():
-    executeCoulombTest("OpenCL", {'Precision': 'double'})
-
-def testLJReference():
-    executeCoulombTest("Reference")
-
-def testLJCudaSingle():
-    executeCoulombTest("CUDA", {'Precision': 'single'})
-
-def testLJCudaMixed():
-    executeCoulombTest("CUDA", {'Precision': 'mixed'})
-
-def testLJCudaDouble():
-    executeCoulombTest("CUDA", {'Precision': 'double'})
-
-def testLJOpenCLSingle():
-    executeCoulombTest("OpenCL", {'Precision': 'single'})
-
-def testLJOpenCLMixed():
-    executeCoulombTest("OpenCL", {'Precision': 'mixed'})
-
-def testLJOpenCLDouble():
-    executeCoulombTest("OpenCL", {'Precision': 'double'})
-
-def testLargeSystemReference():
-    executeLargeSystemTest("Reference")
-
-def testLargeSystemCudaSingle():
-    executeLargeSystemTest("CUDA", {'Precision': 'single'})
-
-def testLargeSystemCudaMixed():
-    executeLargeSystemTest("CUDA", {'Precision': 'mixed'})
-
-def testLargeSystemCudaDouble():
-    executeLargeSystemTest("CUDA", {'Precision': 'double'})
-
-def testLargeSystemOpenCLSingle():
-    executeLargeSystemTest("OpenCL", {'Precision': 'single'})
-
-def testLargeSystemOpenCLMixed():
-    executeLargeSystemTest("OpenCL", {'Precision': 'mixed'})
-
-def testLargeSystemOpenCLDouble():
-    executeLargeSystemTest("OpenCL", {'Precision': 'double'})

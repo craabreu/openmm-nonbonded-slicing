@@ -90,5 +90,5 @@ jobs:
       - name: "Run Python test"
         shell: bash -l {0}
         run: |
-          cd python/tests
+          cd build/python/tests
           pytest --verbose -k 'not (Cuda or OpenCL)' Test*
