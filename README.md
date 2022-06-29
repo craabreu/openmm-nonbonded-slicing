@@ -7,7 +7,18 @@ OpenMM NativeNonbonded Plugin
 
 This project is an [OpenMM] plugin that simply reproduces the original [NonbondedForce] class.
 The purpose is to allow developers to experiment with modifications to the class without having to
-work directly with OpenMM's complete codebase.
+work directly with OpenMM's codebase.
+
+
+Renaming the Plugin and Main Class
+==================================
+
+Developers can easily rename the nativenonbonded plugin and NativeNonbondedForce class through a
+simple command with two arguments:
+
+```bash
+devtools/scripts/rename.sh <native-subst> <nonbonded-subst>
+```
 
 
 Building the Plugin
