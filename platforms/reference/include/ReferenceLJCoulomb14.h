@@ -26,11 +26,11 @@
 #define __ReferenceLJCoulomb14_H__
 
 #include "openmm/reference/ReferenceBondIxn.h"
-#include "internal/windowsExportNativeNonbonded.h"
+#include "internal/windowsExportNonbondedSlicing.h"
 
-namespace NativeNonbondedPlugin {
+namespace NonbondedSlicing {
 
-class OPENMM_EXPORT_NATIVENONBONDED ReferenceLJCoulomb14 : public OpenMM::ReferenceBondIxn {
+class OPENMM_EXPORT_NONBONDEDSLICING ReferenceLJCoulomb14 : public OpenMM::ReferenceBondIxn {
 
 public:
 
@@ -81,6 +81,6 @@ private:
     OpenMM::Vec3 periodicBoxVectors[3];
 };
 
-} // namespace NativeNonbondedPlugin
+} // namespace NonbondedSlicing
 
 #endif // __ReferenceLJCoulomb14_H__

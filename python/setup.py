@@ -5,8 +5,8 @@ import sys
 import platform
 
 openmm_dir = '@OPENMM_DIR@'
-nativenonbondedplugin_header_dir = '@NATIVENONBONDEDPLUGIN_HEADER_DIR@'
-nativenonbondedplugin_library_dir = '@NATIVENONBONDEDPLUGIN_LIBRARY_DIR@'
+nonbondedslicing_header_dir = '@NONBONDEDSLICING_HEADER_DIR@'
+nonbondedslicing_library_dir = '@NONBONDEDSLICING_LIBRARY_DIR@'
 
 # setup extra compile and link arguments on Mac
 extra_compile_args = ['-std=c++11']
@@ -16,17 +16,17 @@ if platform.system() == 'Darwin':
     extra_compile_args += ['-stdlib=libc++', '-mmacosx-version-min=10.7']
     extra_link_args += ['-stdlib=libc++', '-mmacosx-version-min=10.7', '-Wl', '-rpath', openmm_dir+'/lib']
 
-extension = Extension(name='_nativenonbondedplugin',
-                      sources=['NativeNonbondedPluginWrapper.cpp'],
-                      libraries=['OpenMM', 'NativeNonbondedPlugin'],
-                      include_dirs=[os.path.join(openmm_dir, 'include'), nativenonbondedplugin_header_dir],
-                      library_dirs=[os.path.join(openmm_dir, 'lib'), nativenonbondedplugin_library_dir],
+extension = Extension(name='_nonbondedslicing',
+                      sources=['NonbondedSlicingWrapper.cpp'],
+                      libraries=['OpenMM', 'NonbondedSlicing'],
+                      include_dirs=[os.path.join(openmm_dir, 'include'), nonbondedslicing_header_dir],
+                      library_dirs=[os.path.join(openmm_dir, 'lib'), nonbondedslicing_library_dir],
                       extra_compile_args=extra_compile_args,
                       extra_link_args=extra_link_args
                      )
 
-setup(name='nativenonbondedplugin',
+setup(name='nonbondedslicing',
       version='1.0',
-      py_modules=['nativenonbondedplugin'],
+      py_modules=['nonbondedslicing'],
       ext_modules=[extension],
      )

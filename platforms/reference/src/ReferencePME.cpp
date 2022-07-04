@@ -43,7 +43,7 @@ using namespace OpenMM;
 
 typedef int    ivec[3];
 
-namespace NativeNonbondedPlugin {
+namespace NonbondedSlicing {
 
 struct pme
 {
@@ -231,7 +231,7 @@ pme_update_grid_index_and_fraction(pme_t    pme,
          *    to first manipulate the coordinates to be positive.
          * 2. Convert to integer grid index
          *    Since we have added a whole box unit in step 1, this index might actually be larger than
-         *    the grid dimension. NativeNonbondeds, assuming 10*10*10nm box and grid dimension 100*100*100 (spacing 0.1 nm):
+         *    the grid dimension. NonbondedSlicings, assuming 10*10*10nm box and grid dimension 100*100*100 (spacing 0.1 nm):
          *
          *    coordinate is { 0.543 , 6.235 , -0.73 }
          *

@@ -40,7 +40,7 @@
 
 using std::set;
 using std::vector;
-using namespace NativeNonbondedPlugin;
+using namespace NonbondedSlicing;
 using namespace OpenMM;
 
 /**---------------------------------------------------------------------------------------

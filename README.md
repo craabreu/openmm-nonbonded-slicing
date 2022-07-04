@@ -1,26 +1,14 @@
-OpenMM NativeNonbonded Plugin
-=============================
+OpenMM Nonbonded Slicing Plugin
+===============================
 
-[![GH Actions Status](https://github.com/craabreu/openmm-native-nonbonded-plugin/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-native-nonbonded-plugin/actions?query=branch%3Amain+workflow%3ALinux)
-[![GH Actions Status](https://github.com/craabreu/openmm-native-nonbonded-plugin/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-native-nonbonded-plugin/actions?query=branch%3Amain+workflow%3AMacOS)
+[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3ALinux)
+[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project is an [OpenMM] plugin that simply reproduces the original [NonbondedForce] class.
-The purpose is to allow developers to experiment with modifications to the class without having to
-work directly with OpenMM's codebase.
-
-
-Renaming the Plugin and Main Class
-==================================
-
-Developers can easily rename the nativenonbonded plugin and NativeNonbondedForce class through a
-simple command with two arguments:
-
-```bash
-devtools/scripts/rename.sh <native-subst> <nonbonded-subst>
-```
-
-The first and second arguments will replace the words "native" and "nonbonded", respectively, throughout the whole project. 
+This project is an [OpenMM] plugin that allows a [NonbondedForce], including its electrostatic
+component, to be divided into pieces depending on which pairs of particles are involved. All
+particles in the system are split into disjoint subsets, and the interactions between all particles
+in a subset I and all those in a subset J can be assigned to a specific force group.
 
 Building the Plugin
 ===================
@@ -41,10 +29,10 @@ the OpenMM header files and libraries.
 this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
 
 6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that NATIVENONBONDED_BUILD_OPENCL_LIB is selected.
+OPENCL_LIBRARY are set correctly, and that NONBONDEDSLICING_BUILD_OPENCL_LIB is selected.
 
 7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that NATIVENONBONDED_BUILD_CUDA_LIB is selected.
+and that NONBONDEDSLICING_BUILD_CUDA_LIB is selected.
 
 8. Press "Configure" again if necessary, then press "Generate".
 
@@ -64,12 +52,11 @@ Once you do that, you can use the plugin from your Python scripts:
 
 ```py
     import openmm as mm
-    import nativenonbondedplugin as plugin
+    import nonbondedslicing as plugin
     system = mm.System()
-    force = plugin.NativeNonbondedForce()
+    force = plugin.SlicedNonbondedForce()
     system.addForce(force)
 ```
-
 
 Test Cases
 ==========

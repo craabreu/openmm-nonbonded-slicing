@@ -65,9 +65,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
             -DOPENMM_DIR=${CONDA_PREFIX} \
-            -DNATIVENONBONDED_BUILD_OPENCL_LIB=ON \
+            -DNONBONDEDSLICING_BUILD_OPENCL_LIB=ON \
             -DOPENCL_DIR=${CONDA_PREFIX} \
-            -DNATIVENONBONDED_BUILD_CUDA_LIB=OFF
+            -DNONBONDEDSLICING_BUILD_CUDA_LIB=OFF
 
       - name: "Build"
         shell: bash -l {0}
