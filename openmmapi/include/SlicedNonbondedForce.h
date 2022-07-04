@@ -152,8 +152,14 @@ public:
     /**
      * Create a SlicedNonbondedForce.
      */
-    SlicedNonbondedForce();
-    SlicedNonbondedForce(const NonbondedForce&);
+    SlicedNonbondedForce(int numSubsets=1);
+    SlicedNonbondedForce(const NonbondedForce&, int numSubsets=1);
+    /**
+     * Get the specified number of particle subsets.
+     */
+    int getNumSubsets() const {
+        return numSubsets;
+    }
     /**
      * Get the number of particles for which force field parameters have been defined.
      */
@@ -321,18 +327,32 @@ public:
      */
     void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Add the nonbonded force parameters for a particle.  This should be called once for each particle
-     * in the System.  When it is called for the i'th time, it specifies the parameters for the i'th particle.
-     * For calculating the Lennard-Jones interaction between two particles, the arithmetic mean of the sigmas
-     * and the geometric mean of the epsilons for the two interacting particles is used (the Lorentz-Berthelot
-     * combining rule).
+     * Add the nonbonded force parameters and (optionally) the subset for a particle.  This should be called once
+     * for each particle in the System.  When it is called for the i'th time, it specifies the parameters for the
+     * i'th particle. For calculating the Lennard-Jones interaction between two particles, the arithmetic mean of
+     * the sigmas and the geometric mean of the epsilons for the two interacting particles is used (the
+     * Lorentz-Berthelot combining rule).
      *
      * @param charge    the charge of the particle, measured in units of the proton charge
      * @param sigma     the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
      * @param epsilon   the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
+     * @param subset    the subset to which this particle belongs (default=0)
      * @return the index of the particle that was added
      */
-    int addParticle(double charge, double sigma, double epsilon);
+    int addParticle(double charge, double sigma, double epsilon, int subset=0);
+    /**
+     * Get the subset to which a particle belongs.
+     *
+     * @param index          the index of the particle for which to get the subset
+     */
+    int getParticleSubset(int index);
+    /**
+     * Set the subset for a particle.
+     *
+     * @param index     the index of the particle for which to set the subset
+     * @param subset    the subset to which this particle belongs
+     */
+    void setParticleSubset(int index, int subset);
     /**
      * Get the nonbonded force parameters for a particle.
      *
@@ -629,6 +649,7 @@ private:
     class GlobalParameterInfo;
     class ParticleOffsetInfo;
     class ExceptionOffsetInfo;
+    int numSubsets;
     NonbondedMethod nonbondedMethod;
     double cutoffDistance, switchingDistance, rfDielectric, ewaldErrorTol, alpha, dalpha;
     bool useSwitchingFunction, useDispersionCorrection, exceptionsUsePeriodic, includeDirectSpace;
@@ -649,12 +670,14 @@ private:
  */
 class SlicedNonbondedForce::ParticleInfo {
 public:
+    int subset;
     double charge, sigma, epsilon;
     ParticleInfo() {
         charge = sigma = epsilon = 0.0;
+        subset = 0;
     }
-    ParticleInfo(double charge, double sigma, double epsilon) :
-        charge(charge), sigma(sigma), epsilon(epsilon) {
+    ParticleInfo(double charge, double sigma, double epsilon, int subset) :
+        charge(charge), sigma(sigma), epsilon(epsilon), subset(subset) {
     }
 };
 
@@ -725,4 +748,4 @@ public:
 
 } // namespace OpenMM
 
-#endif /*OPENMM_NONBONDEDFORCE_H_*/
+#endif /*OPENMM_SLICEDNONBONDEDFORCE_H_*/

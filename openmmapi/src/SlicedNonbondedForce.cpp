@@ -48,12 +48,12 @@ using std::string;
 using std::stringstream;
 using std::vector;
 
-SlicedNonbondedForce::SlicedNonbondedForce() : nonbondedMethod(NoCutoff), cutoffDistance(1.0), switchingDistance(-1.0), rfDielectric(78.3),
+SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : numSubsets(numSubsets), nonbondedMethod(NoCutoff), cutoffDistance(1.0), switchingDistance(-1.0), rfDielectric(78.3),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), useSwitchingFunction(false), useDispersionCorrection(true), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
 }
 
-SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force) {
+SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets) {
     nonbondedMethod = static_cast<NonbondedMethod>(force.getNonbondedMethod());
     cutoffDistance = force.getCutoffDistance();
     switchingDistance = force.getSwitchingDistance();
@@ -187,9 +187,21 @@ void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, d
     dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getLJPMEParameters(alpha, nx, ny, nz);
 }
 
-int SlicedNonbondedForce::addParticle(double charge, double sigma, double epsilon) {
-    particles.push_back(ParticleInfo(charge, sigma, epsilon));
+int SlicedNonbondedForce::addParticle(double charge, double sigma, double epsilon, int subset) {
+    particles.push_back(ParticleInfo(charge, sigma, epsilon, subset));
     return particles.size()-1;
+}
+
+int SlicedNonbondedForce::getParticleSubset(int index) {
+    ASSERT_VALID_INDEX(index, particles);
+    return particles[index].subset;
+}
+
+void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
+    ASSERT_VALID_INDEX(index, particles);
+    if (subset < 0 || subset >= numSubsets)
+        throwException(__FILE__, __LINE__, "Subset out of range");
+    particles[index].subset = subset;
 }
 
 void SlicedNonbondedForce::getParticleParameters(int index, double& charge, double& sigma, double& epsilon) const {

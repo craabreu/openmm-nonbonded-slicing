@@ -110,7 +110,7 @@ def testLargeSystem(platformName, precision):
         mm.Vec3(0, 0, boxSize),
     )
 
-    nonbonded = plugin.SlicedNonbondedForce()
+    nonbonded = plugin.SlicedNonbondedForce(2)
     bonds = mm.HarmonicBondForce()
     positions = np.empty(numParticles, mm.Vec3)
     velocities = np.empty(numParticles, mm.Vec3)
@@ -121,11 +121,11 @@ def testLargeSystem(platformName, precision):
 
     for i in range(numMolecules):
         if (i < numMolecules/2):
-            nonbonded.addParticle(-1.0, 0.2, 0.1)
-            nonbonded.addParticle(1.0, 0.1, 0.1)
+            nonbonded.addParticle(-1.0, 0.2, 0.1, 1)
+            nonbonded.addParticle(1.0, 0.1, 0.1, 1)
         else:
-            nonbonded.addParticle(-1.0, 0.2, 0.2)
-            nonbonded.addParticle(1.0, 0.1, 0.2)
+            nonbonded.addParticle(-1.0, 0.2, 0.2, 1)
+            nonbonded.addParticle(1.0, 0.1, 0.2, 1)
 
         positions[2*i] = boxSize*random_vec()
         positions[2*i+1] = positions[2*i] + mm.Vec3(1.0, 0.0, 0.0)
@@ -133,6 +133,12 @@ def testLargeSystem(platformName, precision):
         velocities[2*i+1] = random_vec()
         bonds.addBond(2*i, 2*i+1, 1.0, 0.1)
         nonbonded.addException(2*i, 2*i+1, 0.0, 0.15, 0.0)
+
+    nonbonded.setParticleSubset(0, 0)
+    nonbonded.setParticleSubset(1, 0)
+
+    assert nonbonded.getParticleSubset(0) == 0
+    assert nonbonded.getParticleSubset(2) == 1
 
     # Try with no cutoffs and make sure it agrees with the Reference platform.
 

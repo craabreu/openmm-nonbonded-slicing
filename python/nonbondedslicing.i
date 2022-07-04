@@ -73,7 +73,9 @@ public:
         PME = 4,
         LJPME = 5
     };
-    SlicedNonbondedForce();
+    SlicedNonbondedForce(int numSubsets=1);
+    SlicedNonbondedForce(const OpenMM::NonbondedForce&, int numSubsets=1);
+    int getNumSubsets() const;
     int getNumParticles() const;
     int getNumExceptions() const;
     int getNumGlobalParameters() const;
@@ -117,7 +119,9 @@ public:
     %clear int& ny;
     %clear int& nz;
 
-    int addParticle(double charge, double sigma, double epsilon);
+    int addParticle(double charge, double sigma, double epsilon, int subset=0);
+    int getParticleSubset(int index);
+    void setParticleSubset(int index, int subset);
 
     %apply double& OUTPUT {double& charge};
     %apply double& OUTPUT {double& sigma};
