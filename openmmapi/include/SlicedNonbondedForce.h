@@ -345,7 +345,7 @@ public:
      *
      * @param index          the index of the particle for which to get the subset
      */
-    int getParticleSubset(int index);
+    int getParticleSubset(int index) const;
     /**
      * Set the subset for a particle.
      *

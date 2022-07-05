@@ -34,6 +34,7 @@
 #include "openmm/serialization/SerializationNode.h"
 #include "openmm/Force.h"
 #include <sstream>
+#include <string>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -43,9 +44,18 @@ SlicedNonbondedForceProxy::SlicedNonbondedForceProxy() : SerializationProxy("Sli
 }
 
 void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 4);
+    node.setIntProperty("version", 1);
     const SlicedNonbondedForce& force = *reinterpret_cast<const SlicedNonbondedForce*>(object);
+    int numSubsets = force.getNumSubsets();
+    node.setIntProperty("numSubsets", numSubsets);
     node.setIntProperty("forceGroup", force.getForceGroup());
+    SerializationNode& sliceForceGroup = node.createChildNode("sliceForceGroups");
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++) {
+            int group = force.getSliceForceGroup(i, j);
+            if (group >= 0)
+                sliceForceGroup.createChildNode("sliceForceGroup").setIntProperty("subset1", i).setIntProperty("subset2", j).setIntProperty("group", group);
+        }
     node.setStringProperty("name", force.getName());
     node.setIntProperty("method", (int) force.getNonbondedMethod());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
@@ -92,7 +102,8 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     for (int i = 0; i < force.getNumParticles(); i++) {
         double charge, sigma, epsilon;
         force.getParticleParameters(i, charge, sigma, epsilon);
-        particles.createChildNode("Particle").setDoubleProperty("q", charge).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon);
+        int subset = force.getParticleSubset(i);
+        particles.createChildNode("Particle").setDoubleProperty("q", charge).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon).setIntProperty("subset", subset);
     }
     SerializationNode& exceptions = node.createChildNode("Exceptions");
     for (int i = 0; i < force.getNumExceptions(); i++) {
@@ -105,11 +116,15 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
 
 void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) const {
     int version = node.getIntProperty("version");
-    if (version < 1 || version > 4)
+    if (version != 1)
         throw OpenMMException("Unsupported version number");
-    SlicedNonbondedForce* force = new SlicedNonbondedForce();
+    int numSubsets = node.getIntProperty("numSubsets", 1);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(numSubsets);
     try {
         force->setForceGroup(node.getIntProperty("forceGroup", 0));
+        const SerializationNode& sliceForceGroups = node.getChildNode("sliceForceGroups");
+        for (auto& sliceForceGroup : sliceForceGroups.getChildren())
+            force->setSliceForceGroup(sliceForceGroup.getIntProperty("subset1"), sliceForceGroup.getIntProperty("subset2"), sliceForceGroup.getIntProperty("group"));
         force->setName(node.getStringProperty("name", force->getName()));
         force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) node.getIntProperty("method"));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
@@ -118,37 +133,31 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldTolerance"));
         force->setReactionFieldDielectric(node.getDoubleProperty("rfDielectric"));
         force->setUseDispersionCorrection(node.getIntProperty("dispersionCorrection"));
-        if (node.hasProperty("includeDirectSpace"))
-            force->setIncludeDirectSpace(node.getBoolProperty("includeDirectSpace"));
+        force->setIncludeDirectSpace(node.getBoolProperty("includeDirectSpace"));
         double alpha = node.getDoubleProperty("alpha", 0.0);
         int nx = node.getIntProperty("nx", 0);
         int ny = node.getIntProperty("ny", 0);
         int nz = node.getIntProperty("nz", 0);
         force->setPMEParameters(alpha, nx, ny, nz);
-        if (version >= 2) {
-            alpha = node.getDoubleProperty("ljAlpha", 0.0);
-            nx = node.getIntProperty("ljnx", 0);
-            ny = node.getIntProperty("ljny", 0);
-            nz = node.getIntProperty("ljnz", 0);
-            force->setLJPMEParameters(alpha, nx, ny, nz);
-        }
+        alpha = node.getDoubleProperty("ljAlpha", 0.0);
+        nx = node.getIntProperty("ljnx", 0);
+        ny = node.getIntProperty("ljny", 0);
+        nz = node.getIntProperty("ljnz", 0);
+        force->setLJPMEParameters(alpha, nx, ny, nz);
         force->setReciprocalSpaceForceGroup(node.getIntProperty("recipForceGroup", -1));
-        if (version >= 3) {
-            const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
-            for (auto& parameter : globalParams.getChildren())
-                force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));
-            const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
-            for (auto& offset : particleOffsets.getChildren())
-                force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
-            const SerializationNode& exceptionOffsets = node.getChildNode("ExceptionOffsets");
-            for (auto& offset : exceptionOffsets.getChildren())
-                force->addExceptionParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
-        }
-        if (version >= 4)
-            force->setExceptionsUsePeriodicBoundaryConditions(node.getIntProperty("exceptionsUsePeriodic"));
+        const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
+        for (auto& parameter : globalParams.getChildren())
+            force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));
+        const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
+        for (auto& offset : particleOffsets.getChildren())
+            force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
+        const SerializationNode& exceptionOffsets = node.getChildNode("ExceptionOffsets");
+        for (auto& offset : exceptionOffsets.getChildren())
+            force->addExceptionParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
+        force->setExceptionsUsePeriodicBoundaryConditions(node.getIntProperty("exceptionsUsePeriodic"));
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())
-            force->addParticle(particle.getDoubleProperty("q"), particle.getDoubleProperty("sig"), particle.getDoubleProperty("eps"));
+            force->addParticle(particle.getDoubleProperty("q"), particle.getDoubleProperty("sig"), particle.getDoubleProperty("eps"), particle.getIntProperty("subset"));
         const SerializationNode& exceptions = node.getChildNode("Exceptions");
         for (auto& exception : exceptions.getChildren())
             force->addException(exception.getIntProperty("p1"), exception.getIntProperty("p2"), exception.getDoubleProperty("q"), exception.getDoubleProperty("sig"), exception.getDoubleProperty("eps"));

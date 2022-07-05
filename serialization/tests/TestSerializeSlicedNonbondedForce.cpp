@@ -42,8 +42,9 @@ using namespace std;
 void testSerialization() {
     // Create a Force.
 
-    SlicedNonbondedForce force;
+    SlicedNonbondedForce force(2);
     force.setForceGroup(3);
+    force.setSliceForceGroup(0, 1, 1);
     force.setName("custom name");
     force.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
     force.setSwitchingDistance(1.5);
@@ -60,9 +61,9 @@ void testSerialization() {
     double dalpha = 0.8;
     int dnx = 4, dny = 6, dnz = 7;
     force.setLJPMEParameters(dalpha, dnx, dny, dnz);
-    force.addParticle(1, 0.1, 0.01);
-    force.addParticle(0.5, 0.2, 0.02);
-    force.addParticle(-0.5, 0.3, 0.03);
+    force.addParticle(1, 0.1, 0.01, 0);
+    force.addParticle(0.5, 0.2, 0.02, 0);
+    force.addParticle(-0.5, 0.3, 0.03, 1);
     force.addException(0, 1, 2, 0.5, 0.1);
     force.addException(1, 2, 0.2, 0.4, 0.2);
     force.addGlobalParameter("scale1", 1.0);
@@ -79,7 +80,11 @@ void testSerialization() {
     // Compare the two forces to see if they are identical.
 
     SlicedNonbondedForce& force2 = *copy;
+    ASSERT_EQUAL(force.getNumSubsets(), force2.getNumSubsets());
     ASSERT_EQUAL(force.getForceGroup(), force2.getForceGroup());
+    for (int i = 0; i < force.getNumSubsets(); i++)
+        for (int j = 0; j < force.getNumSubsets(); j++)
+            ASSERT_EQUAL(force.getSliceForceGroup(i,j), force2.getSliceForceGroup(i, j));
     ASSERT_EQUAL(force.getName(), force2.getName());
     ASSERT_EQUAL(force.getNonbondedMethod(), force2.getNonbondedMethod());
     ASSERT_EQUAL(force.getSwitchingDistance(), force2.getSwitchingDistance());
@@ -147,6 +152,9 @@ void testSerialization() {
         ASSERT_EQUAL(charge1, charge2);
         ASSERT_EQUAL(sigma1, sigma2);
         ASSERT_EQUAL(epsilon1, epsilon2);
+        int subset1 = force.getParticleSubset(i);
+        int subset2 = force2.getParticleSubset(i);
+        ASSERT_EQUAL(subset1, subset2);
     }
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     for (int i = 0; i < force.getNumExceptions(); i++) {

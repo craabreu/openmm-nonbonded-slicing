@@ -197,7 +197,7 @@ int SlicedNonbondedForce::addParticle(double charge, double sigma, double epsilo
     return particles.size()-1;
 }
 
-int SlicedNonbondedForce::getParticleSubset(int index) {
+int SlicedNonbondedForce::getParticleSubset(int index) const {
     ASSERT_VALID_INDEX(index, particles);
     return particles[index].subset;
 }
