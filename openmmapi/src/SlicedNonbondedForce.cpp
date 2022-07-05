@@ -48,9 +48,14 @@ using std::string;
 using std::stringstream;
 using std::vector;
 
+#define ASSERT_VALID_SUBSET(subset) {if (subset < 0 || subset >= numSubsets) throwException(__FILE__, __LINE__, "Subset out of range");};
+
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : numSubsets(numSubsets), nonbondedMethod(NoCutoff), cutoffDistance(1.0), switchingDistance(-1.0), rfDielectric(78.3),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), useSwitchingFunction(false), useDispersionCorrection(true), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
+    vector<int> row(numSubsets, -1);
+    for (int i = 0; i < numSubsets; i++)
+        sliceForceGroup.push_back(row);
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets) {
@@ -199,8 +204,7 @@ int SlicedNonbondedForce::getParticleSubset(int index) {
 
 void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
     ASSERT_VALID_INDEX(index, particles);
-    if (subset < 0 || subset >= numSubsets)
-        throwException(__FILE__, __LINE__, "Subset out of range");
+    ASSERT_VALID_SUBSET(subset);
     particles[index].subset = subset;
 }
 
@@ -423,4 +427,20 @@ bool SlicedNonbondedForce::getExceptionsUsePeriodicBoundaryConditions() const {
 
 void SlicedNonbondedForce::setExceptionsUsePeriodicBoundaryConditions(bool periodic) {
     exceptionsUsePeriodic = periodic;
+}
+
+int SlicedNonbondedForce::getSliceForceGroup(int subset1, int subset2) const {
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    return sliceForceGroup[subset1][subset2];
+}
+
+void SlicedNonbondedForce::setSliceForceGroup(int subset1, int subset2, int group) {
+    if (group < -1 || group > 31)
+        throw OpenMMException("Argument group must be between -1 and 31");
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    int i = std::min(subset1, subset2);
+    int j = std::max(subset1, subset2);
+    sliceForceGroup[i][j] = sliceForceGroup[j][i] = group;
 }

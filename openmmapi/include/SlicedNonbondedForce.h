@@ -641,6 +641,24 @@ public:
      * normally used to represent bonded interactions.
      */
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
+ 	/**
+     * Get the force group of a particular nonbonded slice. If this is -1 (the default value), the actual
+     * force group is the one obtained via getForceGroup.
+     * 
+     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     */
+    int getSliceForceGroup(int subset1, int subset2) const;
+ 	/**
+     * Set the force group of a particular nonbonded slice, concerning the interactions between particles
+     * of a subset with those of another (or the same) subset.
+     * 
+     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param group    the group index.  Legal values are between 0 and 31 (inclusive), or -1 to use
+     *                 the same force group that is specified via setForceGroup.
+     */
+    void setSliceForceGroup(int subset1, int subset2, int group);
 protected:
     ForceImpl* createImpl() const;
 private:
@@ -662,6 +680,7 @@ private:
     std::vector<ParticleOffsetInfo> particleOffsets;
     std::vector<ExceptionOffsetInfo> exceptionOffsets;
     std::map<std::pair<int, int>, int> exceptionMap;
+    std::vector<std::vector<int>> sliceForceGroup;
 };
 
 /**

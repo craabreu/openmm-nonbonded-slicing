@@ -193,6 +193,8 @@ public:
     bool usesPeriodicBoundaryConditions() const;
     bool getExceptionsUsePeriodicBoundaryConditions() const;
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
+    int getSliceForceGroup(int subset1, int subset2) const;
+    void setSliceForceGroup(int subset1, int subset2, int group);
 
     /*
      * Add methods for casting a Force to a SlicedNonbondedForce.

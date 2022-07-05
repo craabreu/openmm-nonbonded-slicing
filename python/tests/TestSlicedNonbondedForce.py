@@ -140,6 +140,11 @@ def testLargeSystem(platformName, precision):
     assert nonbonded.getParticleSubset(0) == 0
     assert nonbonded.getParticleSubset(2) == 1
 
+    nonbonded.setSliceForceGroup(1, 0, 1);
+    assert nonbonded.getSliceForceGroup(0, 1) ==  1;
+    assert nonbonded.getSliceForceGroup(0, 0) == -1;
+    assert nonbonded.getSliceForceGroup(1, 1) ==  -1;
+
     # Try with no cutoffs and make sure it agrees with the Reference platform.
 
     nonbonded.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
