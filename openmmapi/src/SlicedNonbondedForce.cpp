@@ -193,7 +193,7 @@ void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, d
 }
 
 int SlicedNonbondedForce::addParticle(double charge, int subset) {
-    particles.push_back(ParticleInfo(charge, 1.0, 0.0, subset));
+    particles.push_back(ParticleInfo(charge, subset));
     return particles.size()-1;
 }
 
@@ -232,12 +232,12 @@ int SlicedNonbondedForce::addException(int particle1, int particle2, double char
             msg << particle2;
             throw OpenMMException(msg.str());
         }
-        exceptions[iter->second] = ExceptionInfo(particle1, particle2, chargeProd, 1, 0);
+        exceptions[iter->second] = ExceptionInfo(particle1, particle2, chargeProd);
         newIndex = iter->second;
         exceptionMap.erase(iter->first);
     }
     else {
-        exceptions.push_back(ExceptionInfo(particle1, particle2, chargeProd, 1, 0));
+        exceptions.push_back(ExceptionInfo(particle1, particle2, chargeProd));
         newIndex = exceptions.size()-1;
     }
     exceptionMap[pair<int, int>(particle1, particle2)] = newIndex;
@@ -256,8 +256,6 @@ void SlicedNonbondedForce::setExceptionParameters(int index, int particle1, int 
     exceptions[index].particle1 = particle1;
     exceptions[index].particle2 = particle2;
     exceptions[index].chargeProd = chargeProd;
-    exceptions[index].sigma = 1;
-    exceptions[index].epsilon = 0;
 }
 
 ForceImpl* SlicedNonbondedForce::createImpl() const {
@@ -347,7 +345,7 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const std::string& parameter) 
 }
 
 int SlicedNonbondedForce::addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale) {
-    particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale, 0, 0));
+    particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale));
     return particleOffsets.size()-1;
 }
 
@@ -366,7 +364,7 @@ void SlicedNonbondedForce::setParticleParameterOffset(int index, const std::stri
 }
 
 int SlicedNonbondedForce::addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale) {
-    exceptionOffsets.push_back(ExceptionOffsetInfo(getGlobalParameterIndex(parameter), exceptionIndex, chargeProdScale, 0, 0));
+    exceptionOffsets.push_back(ExceptionOffsetInfo(getGlobalParameterIndex(parameter), exceptionIndex, chargeProdScale));
     return exceptionOffsets.size()-1;
 }
 

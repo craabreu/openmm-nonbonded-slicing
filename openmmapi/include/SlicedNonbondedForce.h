@@ -662,13 +662,13 @@ private:
 class SlicedNonbondedForce::ParticleInfo {
 public:
     int subset;
-    double charge, sigma, epsilon;
+    double charge;
     ParticleInfo() {
-        charge = sigma = epsilon = 0.0;
+        charge = 0.0;
         subset = 0;
     }
-    ParticleInfo(double charge, double sigma, double epsilon, int subset) :
-        charge(charge), sigma(sigma), epsilon(epsilon), subset(subset) {
+    ParticleInfo(double charge, int subset) :
+        charge(charge), subset(subset) {
     }
 };
 
@@ -679,13 +679,13 @@ public:
 class SlicedNonbondedForce::ExceptionInfo {
 public:
     int particle1, particle2;
-    double chargeProd, sigma, epsilon;
+    double chargeProd;
     ExceptionInfo() {
         particle1 = particle2 = -1;
-        chargeProd = sigma = epsilon = 0.0;
+        chargeProd = 0.0;
     }
-    ExceptionInfo(int particle1, int particle2, double chargeProd, double sigma, double epsilon) :
-        particle1(particle1), particle2(particle2), chargeProd(chargeProd), sigma(sigma), epsilon(epsilon) {
+    ExceptionInfo(int particle1, int particle2, double chargeProd) :
+        particle1(particle1), particle2(particle2), chargeProd(chargeProd) {
     }
 };
 
@@ -710,13 +710,13 @@ public:
 class SlicedNonbondedForce::ParticleOffsetInfo {
 public:
     int parameter, particle;
-    double chargeScale, sigmaScale, epsilonScale;
+    double chargeScale;
     ParticleOffsetInfo() {
         particle = parameter = -1;
-        chargeScale = sigmaScale = epsilonScale = 0.0;
+        chargeScale = 0.0;
     }
-    ParticleOffsetInfo(int parameter, int particle, double chargeScale, double sigmaScale, double epsilonScale) :
-        parameter(parameter), particle(particle), chargeScale(chargeScale), sigmaScale(sigmaScale), epsilonScale(epsilonScale) {
+    ParticleOffsetInfo(int parameter, int particle, double chargeScale) :
+        parameter(parameter), particle(particle), chargeScale(chargeScale) {
     }
 };
 
@@ -727,13 +727,13 @@ public:
 class SlicedNonbondedForce::ExceptionOffsetInfo {
 public:
     int parameter, exception;
-    double chargeProdScale, sigmaScale, epsilonScale;
+    double chargeProdScale;
     ExceptionOffsetInfo() {
         exception = parameter = -1;
-        chargeProdScale = sigmaScale = epsilonScale = 0.0;
+        chargeProdScale = 0.0;
     }
-    ExceptionOffsetInfo(int parameter, int exception, double chargeProdScale, double sigmaScale, double epsilonScale) :
-        parameter(parameter), exception(exception), chargeProdScale(chargeProdScale), sigmaScale(sigmaScale), epsilonScale(epsilonScale) {
+    ExceptionOffsetInfo(int parameter, int exception, double chargeProdScale) :
+        parameter(parameter), exception(exception), chargeProdScale(chargeProdScale) {
     }
 };
 

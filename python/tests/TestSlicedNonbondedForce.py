@@ -116,7 +116,7 @@ def testLargeSystem(platformName, precision):
     nonbonded.setSliceForceGroup(1, 0, 1);
     assert nonbonded.getSliceForceGroup(0, 1) ==  1;
     assert nonbonded.getSliceForceGroup(0, 0) == -1;
-    assert nonbonded.getSliceForceGroup(1, 1) ==  -1;
+    assert nonbonded.getSliceForceGroup(1, 1) == -1;
 
     # Try with no cutoffs and make sure it agrees with the Reference platform.
 
