@@ -85,32 +85,31 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     SerializationNode& particleOffsets = node.createChildNode("ParticleOffsets");
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         int particle;
-        double chargeScale, sigmaScale, epsilonScale;
+        double chargeScale;
         string parameter;
-        force.getParticleParameterOffset(i, parameter, particle, chargeScale, sigmaScale, epsilonScale);
-        particleOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("particle", particle).setDoubleProperty("q", chargeScale).setDoubleProperty("sig", sigmaScale).setDoubleProperty("eps", epsilonScale);
+        force.getParticleParameterOffset(i, parameter, particle, chargeScale);
+        particleOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("particle", particle).setDoubleProperty("q", chargeScale);
     }
     SerializationNode& exceptionOffsets = node.createChildNode("ExceptionOffsets");
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         int exception;
-        double chargeProdScale, sigmaScale, epsilonScale;
+        double chargeProdScale;
         string parameter;
-        force.getExceptionParameterOffset(i, parameter, exception, chargeProdScale, sigmaScale, epsilonScale);
-        exceptionOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("exception", exception).setDoubleProperty("q", chargeProdScale).setDoubleProperty("sig", sigmaScale).setDoubleProperty("eps", epsilonScale);
+        force.getExceptionParameterOffset(i, parameter, exception, chargeProdScale);
+        exceptionOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("exception", exception).setDoubleProperty("q", chargeProdScale);
     }
     SerializationNode& particles = node.createChildNode("Particles");
     for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge, sigma, epsilon;
-        force.getParticleParameters(i, charge, sigma, epsilon);
+        double charge = force.getParticleCharge(i);
         int subset = force.getParticleSubset(i);
-        particles.createChildNode("Particle").setDoubleProperty("q", charge).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon).setIntProperty("subset", subset);
+        particles.createChildNode("Particle").setDoubleProperty("q", charge).setIntProperty("subset", subset);
     }
     SerializationNode& exceptions = node.createChildNode("Exceptions");
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
-        exceptions.createChildNode("Exception").setIntProperty("p1", particle1).setIntProperty("p2", particle2).setDoubleProperty("q", chargeProd).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon);
+        double chargeProd;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd);
+        exceptions.createChildNode("Exception").setIntProperty("p1", particle1).setIntProperty("p2", particle2).setDoubleProperty("q", chargeProd);
     }
 }
 
@@ -150,17 +149,17 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
             force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));
         const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
         for (auto& offset : particleOffsets.getChildren())
-            force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
+            force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"));
         const SerializationNode& exceptionOffsets = node.getChildNode("ExceptionOffsets");
         for (auto& offset : exceptionOffsets.getChildren())
-            force->addExceptionParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"), offset.getDoubleProperty("sig"), offset.getDoubleProperty("eps"));
+            force->addExceptionParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"));
         force->setExceptionsUsePeriodicBoundaryConditions(node.getIntProperty("exceptionsUsePeriodic"));
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())
-            force->addParticle(particle.getDoubleProperty("q"), particle.getDoubleProperty("sig"), particle.getDoubleProperty("eps"), particle.getIntProperty("subset"));
+            force->addParticle(particle.getDoubleProperty("q"), particle.getIntProperty("subset"));
         const SerializationNode& exceptions = node.getChildNode("Exceptions");
         for (auto& exception : exceptions.getChildren())
-            force->addException(exception.getIntProperty("p1"), exception.getIntProperty("p2"), exception.getDoubleProperty("q"), exception.getDoubleProperty("sig"), exception.getDoubleProperty("eps"));
+            force->addException(exception.getIntProperty("p1"), exception.getIntProperty("p2"), exception.getDoubleProperty("q"));
     }
     catch (...) {
         delete force;

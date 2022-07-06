@@ -20,32 +20,19 @@ from openmm import unit
 /*
  * Add units to function outputs.
 */
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getParticleParameters(int index, double& charge,
-                                                            double& sigma, double& epsilon) const %{
-    val[1] = unit.Quantity(val[1], unit.elementary_charge)
-    val[2] = unit.Quantity(val[2], unit.nanometer)
-    val[3] = unit.Quantity(val[3], unit.kilojoule_per_mole)
-%}
-
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getExceptionParameters(int index, int& particle1,
-                        int& particle2, double& chargeProd, double& sigma, double& epsilon) const %{
+%pythonappend NonbondedSlicing::SlicedNonbondedForce::getExceptionParameters(
+        int index, int& particle1, int& particle2, double& chargeProd) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
-    val[4] = unit.Quantity(val[4], unit.nanometer)
-    val[5] = unit.Quantity(val[5], unit.kilojoule_per_mole)
 %}
 
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getParticleParameterOffset(int index, std::string& parameter,
-         int& particleIndex, double& chargeScale, double& sigmaScale, double& epsilonScale) const %{
+%pythonappend NonbondedSlicing::SlicedNonbondedForce::getParticleParameterOffset(
+    int index, std::string& parameter, int& particleIndex, double& chargeScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge)
-    val[4] = unit.Quantity(val[4], unit.nanometer)
-    val[5] = unit.Quantity(val[5], unit.kilojoule_per_mole)
 %}
 
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getExceptionParameterOffset(int index, std::string& parameter,
-    int& exceptionIndex, double& chargeProdScale, double& sigmaScale, double& epsilonScale) const %{
+%pythonappend NonbondedSlicing::SlicedNonbondedForce::getExceptionParameterOffset(
+    int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
-    val[4] = unit.Quantity(val[4], unit.nanometer)
-    val[5] = unit.Quantity(val[5], unit.kilojoule_per_mole)
 %}
 
 /*
@@ -119,70 +106,50 @@ public:
     %clear int& ny;
     %clear int& nz;
 
-    int addParticle(double charge, double sigma, double epsilon, int subset=0);
+    int addParticle(double charge, int subset=0);
     int getParticleSubset(int index);
     void setParticleSubset(int index, int subset);
-
-    %apply double& OUTPUT {double& charge};
-    %apply double& OUTPUT {double& sigma};
-    %apply double& OUTPUT {double& epsilon};
-    void getParticleParameters(int index, double& charge, double& sigma, double& epsilon) const;
-    %clear double& charge;
-    %clear double& sigma;
-    %clear double& epsilon;
-
-    void setParticleParameters(int index, double charge, double sigma, double epsilon);
-    int addException(int particle1, int particle2, double chargeProd, double sigma, double epsilon, bool replace = false);
+    double getParticleCharge(int index) const;
+    void setParticleCharge(int index, double charge);
+    int addException(int particle1, int particle2, double chargeProd, bool replace = false);
 
     %apply int& OUTPUT {int& particle1};
     %apply int& OUTPUT {int& particle2};
     %apply double& OUTPUT {double& chargeProd};
-    %apply double& OUTPUT {double& sigma};
-    %apply double& OUTPUT {double& epsilon};
-    void getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd, double& sigma, double& epsilon) const;
+    void getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd) const;
     %clear int& particle1;
     %clear int& particle2;
     %clear double& chargeProd;
-    %clear double& sigma;
-    %clear double& epsilon;
 
-    void setExceptionParameters(int index, int particle1, int particle2, double chargeProd, double sigma, double epsilon);
+    void setExceptionParameters(int index, int particle1, int particle2, double chargeProd);
     void createExceptionsFromBonds(const std::vector<std::pair<int, int> >& bonds, double coulomb14Scale, double lj14Scale);
     int addGlobalParameter(const std::string& name, double defaultValue);
     const std::string& getGlobalParameterName(int index) const;
     void setGlobalParameterName(int index, const std::string& name);
     double getGlobalParameterDefaultValue(int index) const;
     void setGlobalParameterDefaultValue(int index, double defaultValue);
-    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale);
+    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale);
 
     %apply std::string& OUTPUT {std::string& parameter};
     %apply int& OUTPUT {int& particleIndex};
     %apply double& OUTPUT {double& chargeScale};
-    %apply double& OUTPUT {double& sigmaScale};
-    %apply double& OUTPUT {double& epsilonScale};
-    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale, double& sigmaScale, double& epsilonScale) const;
+    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
     %clear std::string& parameter;
     %clear int& particleIndex;
     %clear double& chargeScale;
-    %clear double& sigmaScale;
-    %clear double& epsilonScale;
 
-    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale);
-    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale);
+    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
+    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
 
     %apply std::string& OUTPUT {std::string& parameter};
     %apply int& OUTPUT {int& exceptionIndex};
     %apply double& OUTPUT {double& chargeProdScale};
-    %apply double& OUTPUT {double& sigmaScale};
-    %apply double& OUTPUT {double& epsilonScale};
-    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale, double& sigmaScale, double& epsilonScale) const;
+    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
     %clear std::string& parameter;
     %clear int& exceptionIndex;
     %clear double& chargeProdScale;
-    %clear double& sigmaScale;
-    %clear double& epsilonScale;
 
-    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale);
+    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     bool getUseDispersionCorrection() const;
     void setUseDispersionCorrection(bool useCorrection);
     int getReciprocalSpaceForceGroup() const;

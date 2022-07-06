@@ -76,8 +76,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     numParticles = force.getNumParticles();
@@ -86,11 +86,11 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     map<int, int> nb14Index;
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
+        double chargeProd;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd);
         exclusions[particle1].insert(particle2);
         exclusions[particle2].insert(particle1);
-        if (chargeProd != 0.0 || epsilon != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end()) {
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end()) {
             nb14Index[i] = nb14s.size();
             nb14s.push_back(i);
         }
@@ -104,27 +104,32 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     particleParamArray.resize(numParticles, vector<double>(3));
     baseParticleParams.resize(numParticles);
     baseExceptionParams.resize(num14);
-    for (int i = 0; i < numParticles; ++i)
-       force.getParticleParameters(i, baseParticleParams[i][0], baseParticleParams[i][1], baseParticleParams[i][2]);
+    for (int i = 0; i < numParticles; ++i) {
+       baseParticleParams[i][0] = force.getParticleCharge(i);
+       baseParticleParams[i][1] = 1.0;
+       baseParticleParams[i][2] = 0.0;
+    }
     for (int i = 0; i < num14; ++i) {
         int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0], baseExceptionParams[i][1], baseExceptionParams[i][2]);
+        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0]);
+        baseExceptionParams[i][1] = 1.0;
+        baseExceptionParams[i][2] = 0.0;
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
     }
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
         int particle;
-        double charge, sigma, epsilon;
-        force.getParticleParameterOffset(i, param, particle, charge, sigma, epsilon);
-        particleParamOffsets[make_pair(param, particle)] = {charge, sigma, epsilon};
+        double charge;
+        force.getParticleParameterOffset(i, param, particle, charge);
+        particleParamOffsets[make_pair(param, particle)] = {charge, 0, 0};
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
-        exceptionParamOffsets[make_pair(param, nb14Index[exception])] = {charge, sigma, epsilon};
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
+        exceptionParamOffsets[make_pair(param, nb14Index[exception])] = {charge, 0, 0};
     }
     nonbondedMethod = CalcSlicedNonbondedForceKernel::NonbondedMethod(force.getNonbondedMethod());
     nonbondedCutoff = force.getCutoffDistance();
@@ -225,16 +230,16 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     vector<int> nb14s;
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
-        if (chargeProd != 0.0 || epsilon != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end())
+        double chargeProd;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd);
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end())
             nb14s.push_back(i);
     }
     if (nb14s.size() != num14)
@@ -242,11 +247,16 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     // Record the values.
 
-    for (int i = 0; i < numParticles; ++i)
-        force.getParticleParameters(i, baseParticleParams[i][0], baseParticleParams[i][1], baseParticleParams[i][2]);
+    for (int i = 0; i < numParticles; ++i) {
+        baseParticleParams[i][0] = force.getParticleCharge(i);
+        baseParticleParams[i][1] = 1.0;
+        baseParticleParams[i][2] = 0.0;
+    }
     for (int i = 0; i < num14; ++i) {
         int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0], baseExceptionParams[i][1], baseExceptionParams[i][2]);
+        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0]);
+        baseExceptionParams[i][1] = 1.0;
+        baseExceptionParams[i][2] = 0.0;
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
     }

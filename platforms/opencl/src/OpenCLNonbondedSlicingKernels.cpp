@@ -75,28 +75,27 @@ public:
     ForceInfo(int requiredBuffers, const SlicedNonbondedForce& force) : OpenCLForceInfo(requiredBuffers), force(force) {
     }
     bool areParticlesIdentical(int particle1, int particle2) {
-        double charge1, charge2, sigma1, sigma2, epsilon1, epsilon2;
-        force.getParticleParameters(particle1, charge1, sigma1, epsilon1);
-        force.getParticleParameters(particle2, charge2, sigma2, epsilon2);
-        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        double charge1 = force.getParticleCharge(particle1);
+        double charge2 = force.getParticleCharge(particle2);
+        return (charge1 == charge2);
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
     }
     void getParticlesInGroup(int index, vector<int>& particles) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon);
+        double chargeProd;
+        force.getExceptionParameters(index, particle1, particle2, chargeProd);
         particles.resize(2);
         particles[0] = particle1;
         particles[1] = particle2;
     }
     bool areGroupsIdentical(int group1, int group2) {
         int particle1, particle2;
-        double chargeProd1, chargeProd2, sigma1, sigma2, epsilon1, epsilon2;
-        force.getExceptionParameters(group1, particle1, particle2, chargeProd1, sigma1, epsilon1);
-        force.getExceptionParameters(group2, particle1, particle2, chargeProd2, sigma2, epsilon2);
-        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        double chargeProd1, chargeProd2;
+        force.getExceptionParameters(group1, particle1, particle2, chargeProd1);
+        force.getExceptionParameters(group2, particle1, particle2, chargeProd2);
+        return (chargeProd1 == chargeProd2);
     }
 private:
     const SlicedNonbondedForce& force;
@@ -220,8 +219,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     vector<pair<int, int> > exclusions;
@@ -229,10 +228,10 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     map<int, int> exceptionIndex;
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
+        double chargeProd;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd);
         exclusions.push_back(pair<int, int>(particle1, particle2));
-        if (chargeProd != 0.0 || epsilon != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end()) {
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end()) {
             exceptionIndex[i] = exceptions.size();
             exceptions.push_back(i);
         }
@@ -246,24 +245,19 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     hasCoulomb = false;
     hasLJ = false;
     for (int i = 0; i < numParticles; i++) {
-        double charge, sigma, epsilon;
-        force.getParticleParameters(i, charge, sigma, epsilon);
-        baseParticleParamVec[i] = mm_float4(charge, sigma, epsilon, 0);
+        double charge = force.getParticleCharge(i);
+        baseParticleParamVec[i] = mm_float4(charge, 1, 0, 0);
         exclusionList[i].push_back(i);
         if (charge != 0.0)
             hasCoulomb = true;
-        if (epsilon != 0.0)
-            hasLJ = true;
     }
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
         int particle;
-        double charge, sigma, epsilon;
-        force.getParticleParameterOffset(i, param, particle, charge, sigma, epsilon);
+        double charge;
+        force.getParticleParameterOffset(i, param, particle, charge);
         if (charge != 0.0)
             hasCoulomb = true;
-        if (epsilon != 0.0)
-            hasLJ = true;
     }
     for (auto exclusion : exclusions) {
         exclusionList[exclusion.first].push_back(exclusion.second);
@@ -623,9 +617,9 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         baseExceptionParams.initialize<mm_float4>(cl, numExceptions, "baseExceptionParams");
         vector<mm_float4> baseExceptionParamsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
-            double chargeProd, sigma, epsilon;
-            force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd, sigma, epsilon);
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, 0);
+            double chargeProd;
+            force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd);
+            baseExceptionParamsVec[i] = mm_float4(chargeProd, 1, 0, 0);
             exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
@@ -643,8 +637,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
         int particle;
-        double charge, sigma, epsilon;
-        force.getParticleParameterOffset(i, param, particle, charge, sigma, epsilon);
+        double charge;
+        force.getParticleParameterOffset(i, param, particle, charge);
         auto paramPos = find(paramNames.begin(), paramNames.end(), param);
         int paramIndex;
         if (paramPos == paramNames.end()) {
@@ -653,13 +647,13 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        particleOffsetVec[particle].push_back(mm_float4(charge, sigma, epsilon, paramIndex));
+        particleOffsetVec[particle].push_back(mm_float4(charge, 0, 0, paramIndex));
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
         int index = exceptionIndex[exception];
         if (index < startIndex || index >= endIndex)
             continue;
@@ -671,7 +665,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        exceptionOffsetVec[index-startIndex].push_back(mm_float4(charge, sigma, epsilon, paramIndex));
+        exceptionOffsetVec[index-startIndex].push_back(mm_float4(charge, 0, 0, paramIndex));
     }
     paramValues.resize(paramNames.size(), 0.0);
     particleParamOffsets.initialize<mm_float4>(cl, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
@@ -1169,28 +1163,25 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
     if (!hasCoulomb || !hasLJ) {
         for (int i = 0; i < force.getNumParticles(); i++) {
-            double charge, sigma, epsilon;
-            force.getParticleParameters(i, charge, sigma, epsilon);
+            double charge = force.getParticleCharge(i);
             if (!hasCoulomb && charge != 0.0)
                 throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Coulomb interactions, because all charges were originally 0");
-            if (!hasLJ && epsilon != 0.0)
-                throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Lennard-Jones interactions, because all epsilons were originally 0");
         }
     }
     set<int> exceptionsWithOffsets;
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
-        double charge, sigma, epsilon;
-        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        double charge;
+        force.getExceptionParameterOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     vector<int> exceptions;
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
-        double chargeProd, sigma, epsilon;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
-        if (chargeProd != 0.0 || epsilon != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end())
+        double chargeProd;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd);
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end())
             exceptions.push_back(i);
     }
     int numContexts = cl.getPlatformData().contexts.size();
@@ -1204,9 +1195,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
 
     vector<mm_float4> baseParticleParamVec(cl.getPaddedNumAtoms(), mm_float4(0, 0, 0, 0));
     for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge, sigma, epsilon;
-        force.getParticleParameters(i, charge, sigma, epsilon);
-        baseParticleParamVec[i] = mm_float4(charge, sigma, epsilon, 0);
+        double charge = force.getParticleCharge(i);
+        baseParticleParamVec[i] = mm_float4(charge, 1, 0, 0);
     }
     baseParticleParams.upload(baseParticleParamVec);
     
@@ -1216,11 +1206,11 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
         vector<mm_float4> baseExceptionParamsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             int particle1, particle2;
-            double chargeProd, sigma, epsilon;
-            force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd, sigma, epsilon);
+            double chargeProd;
+            force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd);
             if (make_pair(particle1, particle2) != exceptionAtoms[i])
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, 0);
+            baseExceptionParamsVec[i] = mm_float4(chargeProd, 1, 0, 0);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
     }

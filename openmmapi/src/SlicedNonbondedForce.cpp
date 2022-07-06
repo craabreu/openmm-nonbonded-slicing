@@ -75,14 +75,14 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     for (int index = 0; index < force.getNumParticles(); index++) {
         double charge, sigma, epsilon;
         force.getParticleParameters(index, charge, sigma, epsilon);
-        addParticle(charge, sigma, epsilon);
+        addParticle(charge);
     }
 
     for (int index = 0; index < force.getNumExceptions(); index++) {
         int particle1, particle2;
         double chargeProd, sigma, epsilon;
         force.getExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon);
-        addException(particle1, particle2, chargeProd, sigma, epsilon);
+        addException(particle1, particle2, chargeProd);
     }
 
     for (int index = 0; index < force.getNumGlobalParameters(); index++)
@@ -94,7 +94,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
         int particleIndex;
         double chargeScale, sigmaScale, epsilonScale;
         force.getParticleParameterOffset(index, parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
-        addParticleParameterOffset(parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
+        addParticleParameterOffset(parameter, particleIndex, chargeScale);
     }
 
     for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
@@ -102,7 +102,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
         int exceptionIndex;
         double chargeProdScale, sigmaScale, epsilonScale;
         force.getExceptionParameterOffset(index, parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
-        addExceptionParameterOffset(parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
+        addExceptionParameterOffset(parameter, exceptionIndex, chargeProdScale);
     }
 }
 
@@ -192,8 +192,8 @@ void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, d
     dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getLJPMEParameters(alpha, nx, ny, nz);
 }
 
-int SlicedNonbondedForce::addParticle(double charge, double sigma, double epsilon, int subset) {
-    particles.push_back(ParticleInfo(charge, sigma, epsilon, subset));
+int SlicedNonbondedForce::addParticle(double charge, int subset) {
+    particles.push_back(ParticleInfo(charge, 1.0, 0.0, subset));
     return particles.size()-1;
 }
 
@@ -208,21 +208,17 @@ void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
     particles[index].subset = subset;
 }
 
-void SlicedNonbondedForce::getParticleParameters(int index, double& charge, double& sigma, double& epsilon) const {
+double SlicedNonbondedForce::getParticleCharge(int index) const {
     ASSERT_VALID_INDEX(index, particles);
-    charge = particles[index].charge;
-    sigma = particles[index].sigma;
-    epsilon = particles[index].epsilon;
+    return particles[index].charge;
 }
 
-void SlicedNonbondedForce::setParticleParameters(int index, double charge, double sigma, double epsilon) {
+void SlicedNonbondedForce::setParticleCharge(int index, double charge) {
     ASSERT_VALID_INDEX(index, particles);
     particles[index].charge = charge;
-    particles[index].sigma = sigma;
-    particles[index].epsilon = epsilon;
 }
 
-int SlicedNonbondedForce::addException(int particle1, int particle2, double chargeProd, double sigma, double epsilon, bool replace) {
+int SlicedNonbondedForce::addException(int particle1, int particle2, double chargeProd, bool replace) {
     map<pair<int, int>, int>::iterator iter = exceptionMap.find(pair<int, int>(particle1, particle2));
     int newIndex;
     if (iter == exceptionMap.end())
@@ -236,33 +232,32 @@ int SlicedNonbondedForce::addException(int particle1, int particle2, double char
             msg << particle2;
             throw OpenMMException(msg.str());
         }
-        exceptions[iter->second] = ExceptionInfo(particle1, particle2, chargeProd, sigma, epsilon);
+        exceptions[iter->second] = ExceptionInfo(particle1, particle2, chargeProd, 1, 0);
         newIndex = iter->second;
         exceptionMap.erase(iter->first);
     }
     else {
-        exceptions.push_back(ExceptionInfo(particle1, particle2, chargeProd, sigma, epsilon));
+        exceptions.push_back(ExceptionInfo(particle1, particle2, chargeProd, 1, 0));
         newIndex = exceptions.size()-1;
     }
     exceptionMap[pair<int, int>(particle1, particle2)] = newIndex;
     return newIndex;
 }
-void SlicedNonbondedForce::getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd, double& sigma, double& epsilon) const {
+
+void SlicedNonbondedForce::getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd) const {
     ASSERT_VALID_INDEX(index, exceptions);
     particle1 = exceptions[index].particle1;
     particle2 = exceptions[index].particle2;
     chargeProd = exceptions[index].chargeProd;
-    sigma = exceptions[index].sigma;
-    epsilon = exceptions[index].epsilon;
 }
 
-void SlicedNonbondedForce::setExceptionParameters(int index, int particle1, int particle2, double chargeProd, double sigma, double epsilon) {
+void SlicedNonbondedForce::setExceptionParameters(int index, int particle1, int particle2, double chargeProd) {
     ASSERT_VALID_INDEX(index, exceptions);
     exceptions[index].particle1 = particle1;
     exceptions[index].particle2 = particle2;
     exceptions[index].chargeProd = chargeProd;
-    exceptions[index].sigma = sigma;
-    exceptions[index].epsilon = epsilon;
+    exceptions[index].sigma = 1;
+    exceptions[index].epsilon = 0;
 }
 
 ForceImpl* SlicedNonbondedForce::createImpl() const {
@@ -298,14 +293,12 @@ void SlicedNonbondedForce::createExceptionsFromBonds(const vector<pair<int, int>
                     const ParticleInfo& particle1 = particles[j];
                     const ParticleInfo& particle2 = particles[i];
                     const double chargeProd = coulomb14Scale*particle1.charge*particle2.charge;
-                    const double sigma = 0.5*(particle1.sigma+particle2.sigma);
-                    const double epsilon = lj14Scale*std::sqrt(particle1.epsilon*particle2.epsilon);
-                    addException(j, i, chargeProd, sigma, epsilon);
+                    addException(j, i, chargeProd);
                 }
                 else {
                     // This interaction should be completely excluded.
 
-                    addException(j, i, 0.0, 1.0, 0.0);
+                    addException(j, i, 0.0);
                 }
             }
         }
@@ -353,50 +346,42 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const std::string& parameter) 
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
-int SlicedNonbondedForce::addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale) {
-    particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale, sigmaScale, epsilonScale));
+int SlicedNonbondedForce::addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale) {
+    particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale, 0, 0));
     return particleOffsets.size()-1;
 }
 
-void SlicedNonbondedForce::getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale, double& sigmaScale, double& epsilonScale) const {
+void SlicedNonbondedForce::getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const {
     ASSERT_VALID_INDEX(index, particleOffsets);
     parameter = globalParameters[particleOffsets[index].parameter].name;
     particleIndex = particleOffsets[index].particle;
     chargeScale = particleOffsets[index].chargeScale;
-    sigmaScale = particleOffsets[index].sigmaScale;
-    epsilonScale = particleOffsets[index].epsilonScale;
 }
 
-void SlicedNonbondedForce::setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale) {
+void SlicedNonbondedForce::setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale) {
     ASSERT_VALID_INDEX(index, particleOffsets);
     particleOffsets[index].parameter = getGlobalParameterIndex(parameter);
     particleOffsets[index].particle = particleIndex;
     particleOffsets[index].chargeScale = chargeScale;
-    particleOffsets[index].sigmaScale = sigmaScale;
-    particleOffsets[index].epsilonScale = epsilonScale;
 }
 
-int SlicedNonbondedForce::addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale) {
-    exceptionOffsets.push_back(ExceptionOffsetInfo(getGlobalParameterIndex(parameter), exceptionIndex, chargeProdScale, sigmaScale, epsilonScale));
+int SlicedNonbondedForce::addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale) {
+    exceptionOffsets.push_back(ExceptionOffsetInfo(getGlobalParameterIndex(parameter), exceptionIndex, chargeProdScale, 0, 0));
     return exceptionOffsets.size()-1;
 }
 
-void SlicedNonbondedForce::getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale, double& sigmaScale, double& epsilonScale) const {
+void SlicedNonbondedForce::getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const {
     ASSERT_VALID_INDEX(index, exceptionOffsets);
     parameter = globalParameters[exceptionOffsets[index].parameter].name;
     exceptionIndex = exceptionOffsets[index].exception;
     chargeProdScale = exceptionOffsets[index].chargeProdScale;
-    sigmaScale = exceptionOffsets[index].sigmaScale;
-    epsilonScale = exceptionOffsets[index].epsilonScale;
 }
 
-void SlicedNonbondedForce::setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale) {
+void SlicedNonbondedForce::setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale) {
     ASSERT_VALID_INDEX(index, exceptionOffsets);
     exceptionOffsets[index].parameter = getGlobalParameterIndex(parameter);
     exceptionOffsets[index].exception = exceptionIndex;
     exceptionOffsets[index].chargeProdScale = chargeProdScale;
-    exceptionOffsets[index].sigmaScale = sigmaScale;
-    exceptionOffsets[index].epsilonScale = epsilonScale;
 }
 
 int SlicedNonbondedForce::getReciprocalSpaceForceGroup() const {

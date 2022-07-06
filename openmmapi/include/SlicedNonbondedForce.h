@@ -56,7 +56,7 @@ namespace NonbondedSlicing {
  * System to define its parameters.  The number of particles for which you define nonbonded parameters must
  * be exactly equal to the number of particles in the System, or else an exception will be thrown when you
  * try to create a Context.  After a particle has been added, you can modify its force field parameters
- * by calling setParticleParameters().  This will have no effect on Contexts that already exist unless you
+ * by calling setParticleCharge().  This will have no effect on Contexts that already exist unless you
  * call updateParametersInContext().
  *
  * SlicedNonbondedForce also lets you specify "exceptions", particular pairs of particles whose interactions should be
@@ -327,19 +327,15 @@ public:
      */
     void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Add the nonbonded force parameters and (optionally) the subset for a particle.  This should be called once
-     * for each particle in the System.  When it is called for the i'th time, it specifies the parameters for the
-     * i'th particle. For calculating the Lennard-Jones interaction between two particles, the arithmetic mean of
-     * the sigmas and the geometric mean of the epsilons for the two interacting particles is used (the
-     * Lorentz-Berthelot combining rule).
+     * Add the charges and (optionally) the subset for a particle.  This should be called once
+     * for each particle in the System.  When it is called for the i'th time, it specifies the charge for the
+     * i'th particle.
      *
      * @param charge    the charge of the particle, measured in units of the proton charge
-     * @param sigma     the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param epsilon   the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      * @param subset    the subset to which this particle belongs (default=0)
      * @return the index of the particle that was added
      */
-    int addParticle(double charge, double sigma, double epsilon, int subset=0);
+    int addParticle(double charge, int subset=0);
     /**
      * Get the subset to which a particle belongs.
      *
@@ -354,28 +350,22 @@ public:
      */
     void setParticleSubset(int index, int subset);
     /**
-     * Get the nonbonded force parameters for a particle.
+     * Get the charge of a particle.
      *
      * @param index          the index of the particle for which to get parameters
      * @param[out] charge    the charge of the particle, measured in units of the proton charge
-     * @param[out] sigma     the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param[out] epsilon   the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      */
-    void getParticleParameters(int index, double& charge, double& sigma, double& epsilon) const;
+    double getParticleCharge(int index) const;
     /**
-     * Set the nonbonded force parameters for a particle.  When calculating the Lennard-Jones interaction between two particles,
-     * it uses the arithmetic mean of the sigmas and the geometric mean of the epsilons for the two interacting particles
-     * (the Lorentz-Berthelot combining rule).
+     * Set the charge for a particle.
      *
      * @param index     the index of the particle for which to set parameters
      * @param charge    the charge of the particle, measured in units of the proton charge
-     * @param sigma     the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param epsilon   the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      */
-    void setParticleParameters(int index, double charge, double sigma, double epsilon);
+    void setParticleCharge(int index, double charge);
     /**
      * Add an interaction to the list of exceptions that should be calculated differently from other interactions.
-     * If chargeProd and epsilon are both equal to 0, this will cause the interaction to be completely omitted from
+     * If chargeProd is equal to 0, this will cause the interaction to be completely omitted from
      * force and energy calculations.
      * 
      * Regardless of the NonbondedMethod used by this Force, cutoffs are never applied to exceptions.  That is because
@@ -387,27 +377,23 @@ public:
      * @param particle1  the index of the first particle involved in the interaction
      * @param particle2  the index of the second particle involved in the interaction
      * @param chargeProd the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared
-     * @param sigma      the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param epsilon    the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      * @param replace    determines the behavior if there is already an exception for the same two particles.  If true, the existing one is replaced.  If false,
      *                   an exception is thrown.
      * @return the index of the exception that was added
      */
-    int addException(int particle1, int particle2, double chargeProd, double sigma, double epsilon, bool replace = false);
+    int addException(int particle1, int particle2, double chargeProd, bool replace = false);
     /**
-     * Get the force field parameters for an interaction that should be calculated differently from others.
+     * Get the particle indices and charge product for an interaction that should be calculated differently from others.
      *
      * @param index           the index of the interaction for which to get parameters
      * @param[out] particle1  the index of the first particle involved in the interaction
      * @param[out] particle2  the index of the second particle involved in the interaction
      * @param[out] chargeProd the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared
-     * @param[out] sigma      the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param[out] epsilon    the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      */
-    void getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd, double& sigma, double& epsilon) const;
+    void getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd) const;
     /**
-     * Set the force field parameters for an interaction that should be calculated differently from others.
-     * If chargeProd and epsilon are both equal to 0, this will cause the interaction to be completely omitted from
+     * Set the particle indices and charge product for an interaction that should be calculated differently from others.
+     * If chargeProd is equal to 0, this will cause the interaction to be completely omitted from
      * force and energy calculations.
      * 
      * Regardless of the NonbondedMethod used by this Force, cutoffs are never applied to exceptions.  That is because
@@ -418,10 +404,8 @@ public:
      * @param particle1  the index of the first particle involved in the interaction
      * @param particle2  the index of the second particle involved in the interaction
      * @param chargeProd the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared
-     * @param sigma      the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm
-     * @param epsilon    the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol
      */
-    void setExceptionParameters(int index, int particle1, int particle2, double chargeProd, double sigma, double epsilon);
+    void setExceptionParameters(int index, int particle1, int particle2, double chargeProd);
     /**
      * Identify exceptions based on the molecular topology.  Particles which are separated by one or two bonds are set
      * to not interact at all, while pairs of particles separated by three bonds (known as "1-4 interactions") have
@@ -474,17 +458,15 @@ public:
      */
     void setGlobalParameterDefaultValue(int index, double defaultValue);
     /**
-     * Add an offset to the per-particle parameters of a particular particle, based on a global parameter.
+     * Add an offset to the charge of a particular particle, based on a global parameter.
      * 
      * @param parameter       the name of the global parameter.  It must have already been added with addGlobalParameter().
      *                        Its value can be modified at any time by calling Context::setParameter().
      * @param particleIndex   the index of the particle whose parameters are affected
      * @param chargeScale     this value multiplied by the parameter value is added to the particle's charge
-     * @param sigmaScale      this value multiplied by the parameter value is added to the particle's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the particle's epsilon
      * @return the index of the offset that was added
      */
-    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale);
+    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Get the offset added to the per-particle parameters of a particular particle, based on a global parameter.
      * 
@@ -492,10 +474,8 @@ public:
      * @param parameter       the name of the global parameter
      * @param particleIndex   the index of the particle whose parameters are affected
      * @param chargeScale     this value multiplied by the parameter value is added to the particle's charge
-     * @param sigmaScale      this value multiplied by the parameter value is added to the particle's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the particle's epsilon
      */
-    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale, double& sigmaScale, double& epsilonScale) const;
+    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
     /**
      * Set the offset added to the per-particle parameters of a particular particle, based on a global parameter.
      * 
@@ -504,10 +484,8 @@ public:
      *                        Its value can be modified at any time by calling Context::setParameter().
      * @param particleIndex   the index of the particle whose parameters are affected
      * @param chargeScale     this value multiplied by the parameter value is added to the particle's charge
-     * @param sigmaScale      this value multiplied by the parameter value is added to the particle's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the particle's epsilon
      */
-    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale, double sigmaScale, double epsilonScale);
+    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Add an offset to the parameters of a particular exception, based on a global parameter.
      * 
@@ -515,11 +493,9 @@ public:
      *                        Its value can be modified at any time by calling Context::setParameter().
      * @param exceptionIndex  the index of the exception whose parameters are affected
      * @param chargeProdScale this value multiplied by the parameter value is added to the exception's charge product
-     * @param sigmaScale      this value multiplied by the parameter value is added to the exception's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the exception's epsilon
      * @return the index of the offset that was added
      */
-    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale);
+    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get the offset added to the parameters of a particular exception, based on a global parameter.
      * 
@@ -527,10 +503,8 @@ public:
      * @param parameter       the name of the global parameter
      * @param exceptionIndex  the index of the exception whose parameters are affected
      * @param chargeProdScale this value multiplied by the parameter value is added to the exception's charge product
-     * @param sigmaScale      this value multiplied by the parameter value is added to the exception's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the exception's epsilon
      */
-    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale, double& sigmaScale, double& epsilonScale) const;
+    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
     /**
      * Set the offset added to the parameters of a particular exception, based on a global parameter.
      * 
@@ -539,10 +513,8 @@ public:
      *                        Its value can be modified at any time by calling Context::setParameter().
      * @param exceptionIndex  the index of the exception whose parameters are affected
      * @param chargeProdScale this value multiplied by the parameter value is added to the exception's charge product
-     * @param sigmaScale      this value multiplied by the parameter value is added to the exception's sigma
-     * @param epsilonScale    this value multiplied by the parameter value is added to the exception's epsilon
      */
-    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale, double sigmaScale, double epsilonScale);
+    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones
      * interactions beyond the cutoff distance.  The energy depends on the volume of the periodic box, and is only
@@ -593,7 +565,7 @@ public:
     /**
      * Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
      * provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
-     * Simply call setParticleParameters() and setExceptionParameters() to modify this object's parameters, then call
+     * Simply call setParticleCharge() and setExceptionParameters() to modify this object's parameters, then call
      * updateParametersInContext() to copy them over to the Context.
      *
      * This method has several limitations.  The only information it updates is the parameters of particles and exceptions.

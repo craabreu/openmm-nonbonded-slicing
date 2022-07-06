@@ -44,7 +44,7 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
         system.addParticle(1.0);
     SlicedNonbondedForce* force = new SlicedNonbondedForce();
     for (int i = 0; i < numParticles; i++)
-        force->addParticle(i%2-0.5, 0.5, 1.0);
+        force->addParticle(i%2-0.5);
     force->setNonbondedMethod(method);
     system.addForce(force);
     system.setDefaultPeriodicBoxVectors(Vec3(5,0,0), Vec3(0,5,0), Vec3(0,0,5));
@@ -58,11 +58,11 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
         for (int j = 0; j < i; ++j) {
             Vec3 delta = positions[i]-positions[j];
             if (delta.dot(delta) < 0.1) {
-                force->addException(i, j, 0, 1, 0);
+                force->addException(i, j, 0);
             }
             else if (delta.dot(delta) < 0.2) {
-                int index = force->addException(i, j, 0.5, 1, 1.0);
-                force->addExceptionParameterOffset("scale", index, 0.5, 0.4, 0.3);
+                int index = force->addException(i, j, 0.5);
+                force->addExceptionParameterOffset("scale", index, 0.5);
             }
         }
     
@@ -93,9 +93,8 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
     // Modify some particle parameters and see if they still agree.
 
     for (int i = 0; i < numParticles; i += 5) {
-        double charge, sigma, epsilon;
-        force->getParticleParameters(i, charge, sigma, epsilon);
-        force->setParticleParameters(i, 0.9*charge, sigma, epsilon);
+        double charge = force->getParticleCharge(i);
+        force->setParticleCharge(i, 0.9*charge);
     }
     force->updateParametersInContext(context1);
     force->updateParametersInContext(context2);
@@ -120,7 +119,7 @@ void testReordering() {
     init_gen_rand(0, sfmt);
     for (int i = 0; i < numParticles; i++) {
         system.addParticle(1.0);
-        nonbonded->addParticle(0.0, 0.0, 0.0);
+        nonbonded->addParticle(0.0);
         positions.push_back(Vec3(genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5)*20);
     }
     VerletIntegrator integrator(0.001);

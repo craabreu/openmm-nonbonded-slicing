@@ -61,15 +61,15 @@ void testSerialization() {
     double dalpha = 0.8;
     int dnx = 4, dny = 6, dnz = 7;
     force.setLJPMEParameters(dalpha, dnx, dny, dnz);
-    force.addParticle(1, 0.1, 0.01, 0);
-    force.addParticle(0.5, 0.2, 0.02, 0);
-    force.addParticle(-0.5, 0.3, 0.03, 1);
-    force.addException(0, 1, 2, 0.5, 0.1);
-    force.addException(1, 2, 0.2, 0.4, 0.2);
+    force.addParticle(1, 0);
+    force.addParticle(0.5, 0);
+    force.addParticle(-0.5, 1);
+    force.addException(0, 1, 2);
+    force.addException(1, 2, 0.2);
     force.addGlobalParameter("scale1", 1.0);
     force.addGlobalParameter("scale2", 2.0);
-    force.addParticleParameterOffset("scale1", 2, 1.5, 2.0, 2.5);
-    force.addExceptionParameterOffset("scale2", 1, -0.1, -0.2, -0.3);
+    force.addParticleParameterOffset("scale1", 2, 1.5);
+    force.addExceptionParameterOffset("scale2", 1, -0.1);
 
     // Serialize and then deserialize it.
 
@@ -121,37 +121,28 @@ void testSerialization() {
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         int index1, index2;
         string param1, param2;
-        double charge1, sigma1, epsilon1;
-        double charge2, sigma2, epsilon2;
-        force.getParticleParameterOffset(i, param1, index1, charge1, sigma1, epsilon1);
-        force2.getParticleParameterOffset(i, param2, index2, charge2, sigma2, epsilon2);
+        double charge1;
+        double charge2;
+        force.getParticleParameterOffset(i, param1, index1, charge1);
+        force2.getParticleParameterOffset(i, param2, index2, charge2);
         ASSERT_EQUAL(index1, index1);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);
-        ASSERT_EQUAL(sigma1, sigma2);
-        ASSERT_EQUAL(epsilon1, epsilon2);
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         int index1, index2;
         string param1, param2;
-        double charge1, sigma1, epsilon1;
-        double charge2, sigma2, epsilon2;
-        force.getExceptionParameterOffset(i, param1, index1, charge1, sigma1, epsilon1);
-        force2.getExceptionParameterOffset(i, param2, index2, charge2, sigma2, epsilon2);
+        double charge1, charge2;
+        force.getExceptionParameterOffset(i, param1, index1, charge1);
+        force2.getExceptionParameterOffset(i, param2, index2, charge2);
         ASSERT_EQUAL(index1, index1);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);
-        ASSERT_EQUAL(sigma1, sigma2);
-        ASSERT_EQUAL(epsilon1, epsilon2);
     }
     for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge1, sigma1, epsilon1;
-        double charge2, sigma2, epsilon2;
-        force.getParticleParameters(i, charge1, sigma1, epsilon1);
-        force2.getParticleParameters(i, charge2, sigma2, epsilon2);
+        double charge1 = force.getParticleCharge(i);
+        double charge2 = force2.getParticleCharge(i);
         ASSERT_EQUAL(charge1, charge2);
-        ASSERT_EQUAL(sigma1, sigma2);
-        ASSERT_EQUAL(epsilon1, epsilon2);
         int subset1 = force.getParticleSubset(i);
         int subset2 = force2.getParticleSubset(i);
         ASSERT_EQUAL(subset1, subset2);
@@ -159,15 +150,12 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int a1, a2, b1, b2;
-        double charge1, sigma1, epsilon1;
-        double charge2, sigma2, epsilon2;
-        force.getExceptionParameters(i, a1, b1, charge1, sigma1, epsilon1);
-        force2.getExceptionParameters(i, a2, b2, charge2, sigma2, epsilon2);
+        double charge1, charge2;
+        force.getExceptionParameters(i, a1, b1, charge1);
+        force2.getExceptionParameters(i, a2, b2, charge2);
         ASSERT_EQUAL(a1, a2);
         ASSERT_EQUAL(b1, b2);
         ASSERT_EQUAL(charge1, charge2);
-        ASSERT_EQUAL(sigma1, sigma2);
-        ASSERT_EQUAL(epsilon1, epsilon2);
     }
 }
 

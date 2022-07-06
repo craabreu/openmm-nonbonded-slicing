@@ -64,19 +64,11 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         if (owner.getSwitchingDistance() < 0 || owner.getSwitchingDistance() >= owner.getCutoffDistance())
             throw OpenMMException("SlicedNonbondedForce: Switching distance must satisfy 0 <= r_switch < r_cutoff");
     }
-    for (int i = 0; i < owner.getNumParticles(); i++) {
-        double charge, sigma, epsilon;
-        owner.getParticleParameters(i, charge, sigma, epsilon);
-        if (sigma < 0)
-            throw OpenMMException("SlicedNonbondedForce: sigma for a particle cannot be negative");
-        if (epsilon < 0)
-            throw OpenMMException("SlicedNonbondedForce: epsilon for a particle cannot be negative");
-    }
     vector<set<int> > exceptions(owner.getNumParticles());
     for (int i = 0; i < owner.getNumExceptions(); i++) {
         int particle[2];
-        double chargeProd, sigma, epsilon;
-        owner.getExceptionParameters(i, particle[0], particle[1], chargeProd, sigma, epsilon);
+        double chargeProd;
+        owner.getExceptionParameters(i, particle[0], particle[1], chargeProd);
         for (int j = 0; j < 2; j++) {
             if (particle[j] < 0 || particle[j] >= owner.getNumParticles()) {
                 stringstream msg;
@@ -95,16 +87,12 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         }
         exceptions[particle[0]].insert(particle[1]);
         exceptions[particle[1]].insert(particle[0]);
-        if (sigma < 0)
-            throw OpenMMException("SlicedNonbondedForce: sigma for an exception cannot be negative");
-        if (epsilon < 0)
-            throw OpenMMException("SlicedNonbondedForce: epsilon for an exception cannot be negative");
     }
     for (int i = 0; i < owner.getNumParticleParameterOffsets(); i++) {
         string parameter;
         int particleIndex;
-        double chargeScale, sigmaScale, epsilonScale;
-        owner.getParticleParameterOffset(i, parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
+        double chargeScale;
+        owner.getParticleParameterOffset(i, parameter, particleIndex, chargeScale);
         if (particleIndex < 0 || particleIndex >= owner.getNumParticles()) {
             stringstream msg;
             msg << "SlicedNonbondedForce: Illegal particle index for a particle parameter offset: ";
@@ -115,8 +103,8 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
     for (int i = 0; i < owner.getNumExceptionParameterOffsets(); i++) {
         string parameter;
         int exceptionIndex;
-        double chargeScale, sigmaScale, epsilonScale;
-        owner.getExceptionParameterOffset(i, parameter, exceptionIndex, chargeScale, sigmaScale, epsilonScale);
+        double chargeScale;
+        owner.getExceptionParameterOffset(i, parameter, exceptionIndex, chargeScale);
         if (exceptionIndex < 0 || exceptionIndex >= owner.getNumExceptions()) {
             stringstream msg;
             msg << "SlicedNonbondedForce: Illegal exception index for an exception parameter offset: ";
@@ -276,8 +264,7 @@ double SlicedNonbondedForceImpl::calcDispersionCorrection(const System& system, 
 
     vector<double> sigma(force.getNumParticles()), epsilon(force.getNumParticles());
     for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge;
-        force.getParticleParameters(i, charge, sigma[i], epsilon[i]);
+        double charge = force.getParticleCharge(i);
     }
     map<string, double> param;
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
@@ -285,10 +272,8 @@ double SlicedNonbondedForceImpl::calcDispersionCorrection(const System& system, 
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string parameter;
         int index;
-        double chargeScale, sigmaScale, epsilonScale;
-        force.getParticleParameterOffset(i, parameter, index, chargeScale, sigmaScale, epsilonScale);
-        sigma[index] += param[parameter]*sigmaScale;
-        epsilon[index] += param[parameter]*epsilonScale;
+        double chargeScale;
+        force.getParticleParameterOffset(i, parameter, index, chargeScale);
     }
 
     // Identify all particle classes (defined by sigma and epsilon), and count the number of
