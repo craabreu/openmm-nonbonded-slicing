@@ -58,8 +58,6 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
         }
     node.setStringProperty("name", force.getName());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
-    node.setBoolProperty("useSwitchingFunction", force.getUseSwitchingFunction());
-    node.setDoubleProperty("switchingDistance", force.getSwitchingDistance());
     node.setDoubleProperty("ewaldTolerance", force.getEwaldErrorTolerance());
     node.setDoubleProperty("rfDielectric", force.getReactionFieldDielectric());
     node.setIntProperty("dispersionCorrection", force.getUseDispersionCorrection());
@@ -125,8 +123,6 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
             force->setSliceForceGroup(sliceForceGroup.getIntProperty("subset1"), sliceForceGroup.getIntProperty("subset2"), sliceForceGroup.getIntProperty("group"));
         force->setName(node.getStringProperty("name", force->getName()));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
-        force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction", false));
-        force->setSwitchingDistance(node.getDoubleProperty("switchingDistance", -1.0));
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldTolerance"));
         force->setReactionFieldDielectric(node.getDoubleProperty("rfDielectric"));
         force->setUseDispersionCorrection(node.getIntProperty("dispersionCorrection"));

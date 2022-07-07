@@ -133,8 +133,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     }
     nonbondedCutoff = force.getCutoffDistance();
     neighborList = new NeighborList();
-    useSwitchingFunction = force.getUseSwitchingFunction();
-    switchingDistance = force.getSwitchingDistance();
     double alpha;
     SlicedNonbondedForceImpl::calcPMEParameters(system, force, alpha, gridSize[0], gridSize[1], gridSize[2], false);
     ewaldAlpha = alpha;
@@ -156,8 +154,6 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     clj.setPeriodic(boxVectors);
     clj.setPeriodicExceptions(exceptionsArePeriodic);
     clj.setUsePME(ewaldAlpha, gridSize);
-    if (useSwitchingFunction)
-        clj.setUseSwitchingFunction(switchingDistance);
     clj.calculatePairIxn(numParticles, posData, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
     if (includeDirect) {
         ReferenceBondForce refBondForce;

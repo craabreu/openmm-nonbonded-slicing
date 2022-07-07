@@ -35,13 +35,12 @@ class ReferenceLJCoulombIxn {
    private:
        
       bool cutoff;
-      bool useSwitch;
       bool periodic, periodicExceptions;
       bool ewald;
       bool pme, ljpme;
       const OpenMM::NeighborList* neighborList;
       OpenMM::Vec3 periodicBoxVectors[3];
-      double cutoffDistance, switchingDistance;
+      double cutoffDistance;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
@@ -100,16 +99,6 @@ class ReferenceLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
       
       void setUseCutoff(double distance, const OpenMM::NeighborList& neighbors, double solventDielectric);
-
-      /**---------------------------------------------------------------------------------------
-      
-         Set the force to use a switching function on the Lennard-Jones interaction.
-      
-         @param distance            the switching distance
-      
-         --------------------------------------------------------------------------------------- */
-      
-      void setUseSwitchingFunction(double distance);
       
       /**---------------------------------------------------------------------------------------
       

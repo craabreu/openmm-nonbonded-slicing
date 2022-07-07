@@ -49,7 +49,7 @@ using namespace OpenMM;
 
    --------------------------------------------------------------------------------------- */
 
-ReferenceLJCoulombIxn::ReferenceLJCoulombIxn() : cutoff(false), useSwitch(false), periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
+ReferenceLJCoulombIxn::ReferenceLJCoulombIxn() : cutoff(false), periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -78,19 +78,6 @@ void ReferenceLJCoulombIxn::setUseCutoff(double distance, const OpenMM::Neighbor
     neighborList = &neighbors;
     krf = pow(cutoffDistance, -3.0)*(solventDielectric-1.0)/(2.0*solventDielectric+1.0);
     crf = (1.0/cutoffDistance)*(3.0*solventDielectric)/(2.0*solventDielectric+1.0);
-}
-
-/**---------------------------------------------------------------------------------------
-
-   Set the force to use a switching function on the Lennard-Jones interaction.
-
-   @param distance            the switching distance
-
-   --------------------------------------------------------------------------------------- */
-
-void ReferenceLJCoulombIxn::setUseSwitchingFunction(double distance) {
-    useSwitch = true;
-    switchingDistance = distance;
 }
 
 /**---------------------------------------------------------------------------------------
@@ -209,9 +196,7 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
     double vdwEnergy                = 0.0;
 
     // A couple of sanity checks for
-    if(ljpme && useSwitch)
-        throw OpenMMException("Switching cannot be used with LJPME");
-    if(ljpme && !pme)
+    if (ljpme && !pme)
         throw OpenMMException("LJPME has been set, without PME being set");
 
     // **************************************************************************************
@@ -385,12 +370,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
         ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
         double r         = deltaR[0][ReferenceForce::RIndex];
         double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-        double switchValue = 1, switchDeriv = 0;
-        if (useSwitch && r > switchingDistance) {
-            double t = (r-switchingDistance)/(cutoffDistance-switchingDistance);
-            switchValue = 1+t*t*t*(-10+t*(15-t*6));
-            switchDeriv = t*t*(-30+t*(60-t*30))/(cutoffDistance-switchingDistance);
-        }
         double alphaR = alphaEwald * r;
 
 
@@ -402,7 +381,7 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
         sig2 *= sig2;
         double sig6 = sig2*sig2*sig2;
         double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-        dEdR += switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+        dEdR += eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
         vdwEnergy = eps*(sig6-1.0)*sig6;
 
         if (ljpme) {
@@ -433,11 +412,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
             // The multiplicative part of the potential shift
             potentialshift -= c6i*c6j*inverseCut6*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
             vdwEnergy += emult + potentialshift;
-        }
-
-        if (useSwitch) {
-            dEdR -= vdwEnergy*switchDeriv*inverseR;
-            vdwEnergy *= switchValue;
         }
 
         // accumulate forces
@@ -594,32 +568,19 @@ void ReferenceLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCo
 
     double r2        = deltaR[0][ReferenceForce::R2Index];
     double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-    double switchValue = 1, switchDeriv = 0;
-    if (useSwitch) {
-        double r = deltaR[0][ReferenceForce::RIndex];
-        if (r > switchingDistance) {
-            double t = (r-switchingDistance)/(cutoffDistance-switchingDistance);
-            switchValue = 1+t*t*t*(-10+t*(15-t*6));
-            switchDeriv = t*t*(-30+t*(60-t*30))/(cutoffDistance-switchingDistance);
-        }
-    }
     double sig = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
     double sig2 = inverseR*sig;
     sig2 *= sig2;
     double sig6 = sig2*sig2*sig2;
 
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-    double dEdR = switchValue*eps*(12.0*sig6 - 6.0)*sig6;
+    double dEdR = eps*(12.0*sig6 - 6.0)*sig6;
     if (cutoff)
         dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
     else
         dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
     dEdR     *= inverseR*inverseR;
     double energy = eps*(sig6-1.0)*sig6;
-    if (useSwitch) {
-        dEdR -= energy*switchDeriv*inverseR;
-        energy *= switchValue;
-    }
     if (cutoff)
         energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
     else

@@ -62,10 +62,6 @@ public:
     int getNumExceptionParameterOffsets() const;
     double getCutoffDistance() const;
     void setCutoffDistance(double distance);
-    bool getUseSwitchingFunction() const;
-    void setUseSwitchingFunction(bool use);
-    double getSwitchingDistance() const;
-    void setSwitchingDistance(double distance);
     double getReactionFieldDielectric() const;
     void setReactionFieldDielectric(double dielectric);
     double getEwaldErrorTolerance() const;

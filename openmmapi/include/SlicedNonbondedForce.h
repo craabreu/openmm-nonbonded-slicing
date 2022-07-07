@@ -170,24 +170,6 @@ public:
      */
     void setCutoffDistance(double distance);
     /**
-     * Get whether a switching function is applied to the Lennard-Jones interaction.
-     */
-    bool getUseSwitchingFunction() const;
-    /**
-     * Set whether a switching function is applied to the Lennard-Jones interaction.
-     */
-    void setUseSwitchingFunction(bool use);
-    /**
-     * Get the distance at which the switching function begins to reduce the Lennard-Jones
-     * interaction.  This must be less than the cutoff distance.
-     */
-    double getSwitchingDistance() const;
-    /**
-     * Set the distance at which the switching function begins to reduce the Lennard-Jones
-     * interaction.  This must be less than the cutoff distance.
-     */
-    void setSwitchingDistance(double distance);
-    /**
      * Get the dielectric constant to use for the solvent in the reaction field approximation.
      */
     double getReactionFieldDielectric() const;
@@ -623,8 +605,8 @@ private:
     class ParticleOffsetInfo;
     class ExceptionOffsetInfo;
     int numSubsets;
-    double cutoffDistance, switchingDistance, rfDielectric, ewaldErrorTol, alpha, dalpha;
-    bool useSwitchingFunction, useDispersionCorrection, exceptionsUsePeriodic, includeDirectSpace;
+    double cutoffDistance, rfDielectric, ewaldErrorTol, alpha, dalpha;
+    bool useDispersionCorrection, exceptionsUsePeriodic, includeDirectSpace;
     int recipForceGroup, nx, ny, nz, dnx, dny, dnz;
     void addExclusionsToSet(const std::vector<std::set<int> >& bonded12, std::set<int>& exclusions, int baseParticle, int fromParticle, int currentLevel) const;
     int getGlobalParameterIndex(const std::string& parameter) const;

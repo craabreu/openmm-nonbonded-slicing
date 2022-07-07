@@ -29,15 +29,6 @@
     real epssig6 = sig6*eps;
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = epssig6*(sig6 - 1.0f);
-    #if USE_LJ_SWITCH
-    if (r > LJ_SWITCH_CUTOFF) {
-        real x = r-LJ_SWITCH_CUTOFF;
-        real switchValue = 1+x*x*x*(LJ_SWITCH_C3+x*(LJ_SWITCH_C4+x*LJ_SWITCH_C5));
-        real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
-        tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
-        ljEnergy *= switchValue;
-    }
-    #endif
 #if DO_LJPME
     // The multiplicative term to correct for the multiplicative terms that are always
     // present in reciprocal space.
@@ -89,15 +80,6 @@
     real epssig6 = sig6*(SIGMA_EPSILON1.y*SIGMA_EPSILON2.y);
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
-    #if USE_LJ_SWITCH
-    if (r > LJ_SWITCH_CUTOFF) {
-        real x = r-LJ_SWITCH_CUTOFF;
-        real switchValue = 1+x*x*x*(LJ_SWITCH_C3+x*(LJ_SWITCH_C4+x*LJ_SWITCH_C5));
-        real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
-        tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
-        ljEnergy *= switchValue;
-    }
-    #endif
     tempEnergy += ljEnergy;
 #endif
 #if HAS_COULOMB
