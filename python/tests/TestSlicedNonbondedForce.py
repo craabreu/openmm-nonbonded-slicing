@@ -1,3 +1,5 @@
+import math
+
 import nonbondedslicing as plugin
 import numpy as np
 import openmm as mm
@@ -40,29 +42,39 @@ def ASSERT_EQUAL_VEC(expected, found, tol):
     ASSERT_EQUAL_TOL(expected.z, found.z, tol)
 
 
+def assert_forces_and_energy(context):
+    state0 = context.getState(getForces=True, getEnergy=True, groups={0})
+    state1 = context.getState(getForces=True, getEnergy=True, groups={1})
+    for force0, force1 in zip(state0.getForces(), state1.getForces()):
+        ASSERT_EQUAL_VEC(force0, force1, TOL)
+    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL)
+
+
 @pytest.mark.parametrize('platformName, precision', cases, ids=ids)
 def testCoulomb(platformName, precision):
     system = mm.System()
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
     system.addParticle(1.0)
     system.addParticle(1.0)
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.addParticle(1.5, 1.0, 0.0)
+    nonbonded.addParticle(-1.5, 1.0, 0.0)
+    system.addForce(nonbonded)
+    ASSERT(nonbonded.usesPeriodicBoundaryConditions())
+    ASSERT(system.usesPeriodicBoundaryConditions())
+
+    slicedNonbonded = plugin.SlicedNonbondedForce(nonbonded)
+    slicedNonbonded.setForceGroup(1)
+    system.addForce(slicedNonbonded)
+
     integrator = mm.VerletIntegrator(0.01)
-    forceField = plugin.SlicedNonbondedForce()
-    forceField.addParticle(0.5)
-    forceField.addParticle(-1.5)
-    system.addForce(forceField)
-    ASSERT(not forceField.usesPeriodicBoundaryConditions())
-    ASSERT(not system.usesPeriodicBoundaryConditions())
     platform = mm.Platform.getPlatformByName(platformName)
     properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator, platform, properties)
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
-    state = context.getState(getForces=True, getEnergy=True)
-    forces = state.getForces()
-    force = ONE_4PI_EPS0*(-0.75)/4.0
-    ASSERT_EQUAL_VEC(mm.Vec3(-force, 0, 0), forces[0], TOL)
-    ASSERT_EQUAL_VEC(mm.Vec3(force, 0, 0), forces[1], TOL)
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(-0.75)/2.0, state.getPotentialEnergy(), TOL)
+    assert_forces_and_energy(context)
 
 
 @pytest.mark.parametrize('platformName, precision', cases, ids=ids)
@@ -84,28 +96,29 @@ def testLargeSystem(platformName, precision):
     )
 
     nonbonded = plugin.SlicedNonbondedForce(2)
-    bonds = mm.HarmonicBondForce()
+    nonbonded.setCutoffDistance(cutoff)
     positions = np.empty(numParticles, mm.Vec3)
-    velocities = np.empty(numParticles, mm.Vec3)
-    rng = np.random.default_rng(19283)
 
-    def random_vec():
-        return mm.Vec3(rng.random(), rng.random(), rng.random())
-
-    for i in range(numMolecules):
-        if (i < numMolecules/2):
-            nonbonded.addParticle(-1.0, 1)
-            nonbonded.addParticle(1.0, 1)
-        else:
-            nonbonded.addParticle(-2.0, 1)
-            nonbonded.addParticle(2.0, 1)
-
-        positions[2*i] = boxSize*random_vec()
-        positions[2*i+1] = positions[2*i] + mm.Vec3(1.0, 0.0, 0.0)
-        velocities[2*i] = random_vec()
-        velocities[2*i+1] = random_vec()
-        bonds.addBond(2*i, 2*i+1, 1.0, 0.1)
-        nonbonded.addException(2*i, 2*i+1, 0.0)
+    M = int(numMolecules**(1.0/3.0))
+    if (M*M*M < numMolecules):
+        M += 1
+    sqrt3 = math.sqrt(3)
+    for k in range(numMolecules):
+        iz = k//(M*M)
+        iy = (k - iz*M*M)//M
+        ix = k - M*(iy + iz*M)
+        # print(ix, iy, iz)
+        x = (ix + 0.5)*boxSize/M
+        y = (iy + 0.5)*boxSize/M
+        z = (iz + 0.5)*boxSize/M
+        dx = (0.5 - ix%2)/2
+        dy = (0.5 - iy%2)/2
+        dz = (0.5 - iz%2)/2
+        nonbonded.addParticle(1.0, 1)
+        nonbonded.addParticle(-1.0, 1)
+        nonbonded.addException(2*k, 2*k+1, 0.0)
+        positions[2*k] = mm.Vec3(x+dx, y+dy, z+dz)
+        positions[2*k+1] = mm.Vec3(x-dx, y-dy, z-dz)
 
     nonbonded.setParticleSubset(0, 0)
     nonbonded.setParticleSubset(1, 0)
@@ -113,25 +126,19 @@ def testLargeSystem(platformName, precision):
     assert nonbonded.getParticleSubset(0) == 0
     assert nonbonded.getParticleSubset(2) == 1
 
-    nonbonded.setSliceForceGroup(1, 0, 1);
-    assert nonbonded.getSliceForceGroup(0, 1) ==  1;
-    assert nonbonded.getSliceForceGroup(0, 0) == -1;
-    assert nonbonded.getSliceForceGroup(1, 1) == -1;
+    nonbonded.setSliceForceGroup(1, 0, 1)
+    assert nonbonded.getSliceForceGroup(0, 1) ==  1
+    assert nonbonded.getSliceForceGroup(0, 0) == -1
+    assert nonbonded.getSliceForceGroup(1, 1) == -1
 
-    # Try with no cutoffs and make sure it agrees with the Reference platform.
-
-    nonbonded.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
     system.addForce(nonbonded)
-    system.addForce(bonds)
     integrator1 = mm.VerletIntegrator(0.01)
     integrator2 = mm.VerletIntegrator(0.01)
     properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator1, platform, properties)
     referenceContext = mm.Context(system, integrator2, reference)
     context.setPositions(positions)
-    context.setVelocities(velocities)
     referenceContext.setPositions(positions)
-    referenceContext.setVelocities(velocities)
     kwargs = dict(
         getPositions=True,
         getVelocities=True,
@@ -142,41 +149,6 @@ def testLargeSystem(platformName, precision):
     referenceState = referenceContext.getState(**kwargs)
     for i in range(numParticles):
         ASSERT_EQUAL_VEC(state.getPositions()[i], referenceState.getPositions()[i], tol)
-        ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
-
-    # Now try cutoffs but not periodic boundary conditions.
-
-    nonbonded.setNonbondedMethod(plugin.SlicedNonbondedForce.CutoffNonPeriodic)
-    nonbonded.setCutoffDistance(cutoff)
-    context.reinitialize(True)
-    referenceContext.reinitialize(True)
-    state = context.getState(**kwargs)
-    referenceState = referenceContext.getState(**kwargs)
-    for i in range(numParticles):
-        ASSERT_EQUAL_VEC(state.getPositions()[i], referenceState.getPositions()[i], tol)
-        ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
-
-    # Now do the same thing with periodic boundary conditions.
-
-    nonbonded.setNonbondedMethod(plugin.SlicedNonbondedForce.CutoffPeriodic)
-    context.reinitialize(True)
-    referenceContext.reinitialize(True)
-    state = context.getState(**kwargs)
-    referenceState = referenceContext.getState(**kwargs)
-    for i in range(numParticles):
-        dx = state.getPositions()[i][0]-referenceState.getPositions()[i][0]
-        dy = state.getPositions()[i][1]-referenceState.getPositions()[i][1]
-        dz = state.getPositions()[i][2]-referenceState.getPositions()[i][2]
-        dx /= dx.unit
-        dy /= dy.unit
-        dz /= dz.unit
-        ASSERT_EQUAL_TOL(dx-np.floor(dx/boxSize+0.5)*boxSize, 0, tol)
-        ASSERT_EQUAL_TOL(dy-np.floor(dy/boxSize+0.5)*boxSize, 0, tol)
-        ASSERT_EQUAL_TOL(dz-np.floor(dz/boxSize+0.5)*boxSize, 0, tol)
         ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
         ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
     ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
