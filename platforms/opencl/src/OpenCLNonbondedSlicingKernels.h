@@ -126,7 +126,6 @@ private:
     OpenCLArray particleOffsetIndices;
     OpenCLArray exceptionOffsetIndices;
     OpenCLArray globalParams;
-    OpenCLArray cosSinSums;
     OpenCLArray pmeGrid1;
     OpenCLArray pmeGrid2;
     OpenCLArray pmeBsplineModuliX;

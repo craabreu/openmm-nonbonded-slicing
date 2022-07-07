@@ -760,12 +760,6 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     
     // Do reciprocal space calculations.
     
-    if (cosSinSums.isInitialized() && includeReciprocal) {
-        void* sumsArgs[] = {&cu.getEnergyBuffer().getDevicePointer(), &cu.getPosq().getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
-        cu.executeKernel(ewaldSumsKernel, sumsArgs, cosSinSums.getSize());
-        void* forcesArgs[] = {&cu.getForce().getDevicePointer(), &cu.getPosq().getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
-        cu.executeKernel(ewaldForcesKernel, forcesArgs, cu.getNumAtoms());
-    }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (usePmeStream)
             cu.setCurrentStream(pmeStream);

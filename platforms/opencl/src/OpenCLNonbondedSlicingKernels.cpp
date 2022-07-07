@@ -683,14 +683,6 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionAtoms.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionParams.getDeviceBuffer());
         }
-        if (cosSinSums.isInitialized()) {
-            ewaldSumsKernel.setArg<cl::Buffer>(0, cl.getEnergyBuffer().getDeviceBuffer());
-            ewaldSumsKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
-            ewaldSumsKernel.setArg<cl::Buffer>(2, cosSinSums.getDeviceBuffer());
-            ewaldForcesKernel.setArg<cl::Buffer>(0, cl.getLongForceBuffer().getDeviceBuffer());
-            ewaldForcesKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
-            ewaldForcesKernel.setArg<cl::Buffer>(2, cosSinSums.getDeviceBuffer());
-        }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
             
@@ -862,19 +854,6 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     
     // Do reciprocal space calculations.
     
-    if (cosSinSums.isInitialized() && includeReciprocal) {
-        mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
-        if (cl.getUseDoublePrecision()) {
-            ewaldSumsKernel.setArg<mm_double4>(3, boxSize);
-            ewaldForcesKernel.setArg<mm_double4>(3, boxSize);
-        }
-        else {
-            ewaldSumsKernel.setArg<mm_float4>(3, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
-            ewaldForcesKernel.setArg<mm_float4>(3, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
-        }
-        cl.executeKernel(ewaldSumsKernel, cosSinSums.getSize());
-        cl.executeKernel(ewaldForcesKernel, cl.getNumAtoms());
-    }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (usePmeQueue && !includeEnergy)
             cl.setQueue(pmeQueue);

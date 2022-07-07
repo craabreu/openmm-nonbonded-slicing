@@ -130,7 +130,6 @@ private:
     CudaArray particleOffsetIndices;
     CudaArray exceptionOffsetIndices;
     CudaArray globalParams;
-    CudaArray cosSinSums;
     CudaArray pmeGrid1;
     CudaArray pmeGrid2;
     CudaArray pmeBsplineModuliX;

@@ -49,7 +49,8 @@ using namespace OpenMM;
 
    --------------------------------------------------------------------------------------- */
 
-ReferenceLJCoulombIxn::ReferenceLJCoulombIxn() : cutoff(false), periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
+ReferenceLJCoulombIxn::ReferenceLJCoulombIxn() : cutoff(false), periodic(false),
+    periodicExceptions(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -97,25 +98,6 @@ void ReferenceLJCoulombIxn::setPeriodic(OpenMM::Vec3* vectors) {
     periodicBoxVectors[0] = vectors[0];
     periodicBoxVectors[1] = vectors[1];
     periodicBoxVectors[2] = vectors[2];
-}
-
-/**---------------------------------------------------------------------------------------
-
-     Set the force to use Ewald summation.
-
-     @param alpha  the Ewald separation parameter
-     @param kmaxx  the largest wave vector in the x direction
-     @param kmaxy  the largest wave vector in the y direction
-     @param kmaxz  the largest wave vector in the z direction
-
-     --------------------------------------------------------------------------------------- */
-
-void ReferenceLJCoulombIxn::setUseEwald(double alpha, int kmaxx, int kmaxy, int kmaxz) {
-    alphaEwald = alpha;
-    numRx = kmaxx;
-    numRy = kmaxy;
-    numRz = kmaxz;
-    ewald = true;
 }
 
 /**---------------------------------------------------------------------------------------
@@ -179,7 +161,7 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
 
     static const double epsilon     =  1.0;
 
-    int kmax                            = (ewald ? std::max(numRx, std::max(numRy,numRz)) : 0);
+    int kmax                        = 0;
     double factorEwald              = -1 / (4*alphaEwald*alphaEwald);
     double SQRT_PI                  = sqrt(PI_M);
     double TWO_PI                   = 2.0 * PI_M;
@@ -248,104 +230,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
             if (totalEnergy)
                 *totalEnergy += recipDispersionEnergy;
             pme_destroy(pmedata);
-        }
-    }
-    // Ewald method
-
-    else if (ewald && includeReciprocal) {
-
-        // setup reciprocal box
-
-        double recipBoxSize[3] = { TWO_PI / periodicBoxVectors[0][0], TWO_PI / periodicBoxVectors[1][1], TWO_PI / periodicBoxVectors[2][2]};
-
-
-        // setup K-vectors
-
-#define EIR(x, y, z) eir[(x)*numberOfAtoms*3+(y)*3+z]
-        vector<d_complex> eir(kmax*numberOfAtoms*3);
-        vector<d_complex> tab_xy(numberOfAtoms);
-        vector<d_complex> tab_qxyz(numberOfAtoms);
-
-        if (kmax < 1)
-            throw OpenMMException("kmax for Ewald summation < 1");
-
-        for (int i = 0; (i < numberOfAtoms); i++) {
-            for (int m = 0; (m < 3); m++)
-                EIR(0, i, m) = d_complex(1,0);
-
-            for (int m=0; (m<3); m++)
-                EIR(1, i, m) = d_complex(cos(atomCoordinates[i][m]*recipBoxSize[m]),
-                                         sin(atomCoordinates[i][m]*recipBoxSize[m]));
-
-            for (int j=2; (j<kmax); j++)
-                for (int m=0; (m<3); m++)
-                    EIR(j, i, m) = EIR(j-1, i, m) * EIR(1, i, m);
-        }
-
-        // calculate reciprocal space energy and forces
-
-        int lowry = 0;
-        int lowrz = 1;
-
-        for (int rx = 0; rx < numRx; rx++) {
-
-            double kx = rx * recipBoxSize[0];
-
-            for (int ry = lowry; ry < numRy; ry++) {
-
-                double ky = ry * recipBoxSize[1];
-
-                if (ry >= 0) {
-                    for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n] = EIR(rx, n, 0) * EIR(ry, n, 1);
-                }
-
-                else {
-                    for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n]= EIR(rx, n, 0) * conj (EIR(-ry, n, 1));
-                }
-
-                for (int rz = lowrz; rz < numRz; rz++) {
-
-                    if (rz >= 0) {
-                        for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex] * (tab_xy[n] * EIR(rz, n, 2));
-                    }
-
-                    else {
-                        for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex] * (tab_xy[n] * conj(EIR(-rz, n, 2)));
-                    }
-
-                    double cs = 0.0f;
-                    double ss = 0.0f;
-
-                    for (int n = 0; n < numberOfAtoms; n++) {
-                        cs += tab_qxyz[n].real();
-                        ss += tab_qxyz[n].imag();
-                    }
-
-                    double kz = rz * recipBoxSize[2];
-                    double k2 = kx * kx + ky * ky + kz * kz;
-                    double ak = exp(k2*factorEwald) / k2;
-
-                    for (int n = 0; n < numberOfAtoms; n++) {
-                        double force = ak * (cs * tab_qxyz[n].imag() - ss * tab_qxyz[n].real());
-                        forces[n][0] += 2 * recipCoeff * force * kx ;
-                        forces[n][1] += 2 * recipCoeff * force * ky ;
-                        forces[n][2] += 2 * recipCoeff * force * kz ;
-                    }
-
-                    recipEnergy       = recipCoeff * ak * (cs * cs + ss * ss);
-                    totalRecipEnergy += recipEnergy;
-
-                    if (totalEnergy)
-                        *totalEnergy += recipEnergy;
-
-                    lowrz = 1 - numRz;
-                }
-                lowry = 1 - numRy;
-            }
         }
     }
 
@@ -516,7 +400,7 @@ void ReferenceLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& at
                                              vector<vector<double> >& atomParameters, vector<set<int> >& exclusions,
                                              vector<Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const {
 
-    if (ewald || pme || ljpme) {
+    if (pme || ljpme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomParameters, exclusions, forces,
                           totalEnergy, includeDirect, includeReciprocal);
         return;

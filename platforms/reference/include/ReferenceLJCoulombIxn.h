@@ -36,7 +36,6 @@ class ReferenceLJCoulombIxn {
        
       bool cutoff;
       bool periodic, periodicExceptions;
-      bool ewald;
       bool pme, ljpme;
       const OpenMM::NeighborList* neighborList;
       OpenMM::Vec3 periodicBoxVectors[3];
@@ -109,19 +108,6 @@ class ReferenceLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
       
       void setPeriodic(OpenMM::Vec3* vectors);
-       
-      /**---------------------------------------------------------------------------------------
-      
-         Set the force to use Ewald summation.
-      
-         @param alpha  the Ewald separation parameter
-         @param kmaxx  the largest wave vector in the x direction
-         @param kmaxy  the largest wave vector in the y direction
-         @param kmaxz  the largest wave vector in the z direction
-      
-         --------------------------------------------------------------------------------------- */
-      
-      void setUseEwald(double alpha, int kmaxx, int kmaxy, int kmaxz);
 
      
       /**---------------------------------------------------------------------------------------
