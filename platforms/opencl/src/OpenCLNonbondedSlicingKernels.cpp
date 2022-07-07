@@ -278,10 +278,6 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         defines["REACTION_FIELD_K"] = cl.doubleToString(reactionFieldK);
         defines["REACTION_FIELD_C"] = cl.doubleToString(reactionFieldC);
     }
-    if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0 && !doLJPME)
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(system, force);
-    else
-        dispersionCoefficient = 0.0;
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
@@ -1105,10 +1101,6 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             cl.restoreDefaultQueue();
         }
     }
-    if (dispersionCoefficient != 0.0 && includeDirect) {
-        mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
-        energy += dispersionCoefficient/(boxSize.x*boxSize.y*boxSize.z);
-    }
     return energy;
 }
 
@@ -1181,8 +1173,6 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
                 ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
         }
     }
-    if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0)
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
     cl.invalidateMolecules(info);
     recomputeParams = true;
 }

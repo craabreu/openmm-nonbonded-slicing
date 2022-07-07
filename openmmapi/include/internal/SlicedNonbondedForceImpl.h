@@ -75,11 +75,6 @@ public:
      * Particle Mesh Ewald.
      */
     static void calcPMEParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& xsize, int& ysize, int& zsize, bool lj);
-    /**
-     * Compute the coefficient which, when divided by the periodic box volume, gives the
-     * long range dispersion correction to the energy.
-     */
-    static double calcDispersionCorrection(const System& system, const SlicedNonbondedForce& force);
 private:
     class ErrorFunction;
     class EwaldErrorFunction;

@@ -136,8 +136,6 @@ public:
     %clear double& chargeProdScale;
 
     void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
-    bool getUseDispersionCorrection() const;
-    void setUseDispersionCorrection(bool useCorrection);
     int getReciprocalSpaceForceGroup() const;
     void setReciprocalSpaceForceGroup(int group);
     bool getIncludeDirectSpace() const;

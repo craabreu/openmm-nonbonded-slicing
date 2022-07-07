@@ -170,7 +170,7 @@ private:
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;

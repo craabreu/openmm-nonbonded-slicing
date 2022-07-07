@@ -52,7 +52,7 @@ using std::vector;
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : numSubsets(numSubsets),
         cutoffDistance(1.0), rfDielectric(78.3),
-        ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), useDispersionCorrection(true), exceptionsUsePeriodic(false), recipForceGroup(-1),
+        ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
     vector<int> row(numSubsets, -1);
     for (int i = 0; i < numSubsets; i++)
@@ -68,7 +68,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     ewaldErrorTol = force.getEwaldErrorTolerance();
     force.getPMEParameters(alpha, nx, ny, nz);
     force.getLJPMEParameters(dalpha, dnx, dny, dnz);
-    useDispersionCorrection = force.getUseDispersionCorrection();
     exceptionsUsePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
     recipForceGroup = force.getReciprocalSpaceForceGroup();
     includeDirectSpace = force.getIncludeDirectSpace();

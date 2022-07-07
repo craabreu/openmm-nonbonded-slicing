@@ -271,10 +271,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         defines["REACTION_FIELD_K"] = cu.doubleToString(reactionFieldK);
         defines["REACTION_FIELD_C"] = cu.doubleToString(reactionFieldC);
     }
-    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && !doLJPME)
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(system, force);
-    else
-        dispersionCoefficient = 0.0;
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
@@ -953,10 +949,6 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         }
     }
 
-    if (dispersionCoefficient != 0.0 && includeDirect) {
-        double4 boxSize = cu.getPeriodicBoxSize();
-        energy += dispersionCoefficient/(boxSize.x*boxSize.y*boxSize.z);
-    }
     return energy;
 }
 
@@ -1031,8 +1023,6 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
                 ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
         }
     }
-    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0)
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
     cu.invalidateMolecules();
     recomputeParams = true;
 }

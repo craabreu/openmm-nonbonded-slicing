@@ -163,8 +163,6 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
             nonbonded14.setPeriodic(boxVectors);
         }
         refBondForce.calculateForce(num14, bonded14IndexArray, posData, bonded14ParamArray, forceData, includeEnergy ? &energy : NULL, nonbonded14);
-        Vec3* boxVectors = extractBoxVectors(context);
-        energy += dispersionCoefficient/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
     }
     return energy;
 }
@@ -209,10 +207,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
     }
-    
-    // Recompute the coefficient for the dispersion correction.
-    if (force.getUseDispersionCorrection())
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

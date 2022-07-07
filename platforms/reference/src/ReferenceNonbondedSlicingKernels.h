@@ -98,7 +98,7 @@ private:
     std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
     std::vector<std::array<double, 3> > baseParticleParams, baseExceptionParams;
     std::map<std::pair<std::string, int>, std::array<double, 3> > particleParamOffsets, exceptionParamOffsets;
-    double nonbondedCutoff, rfDielectric, ewaldAlpha, ewaldDispersionAlpha, dispersionCoefficient;
+    double nonbondedCutoff, rfDielectric, ewaldAlpha, ewaldDispersionAlpha;
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool exceptionsArePeriodic;
     std::vector<std::set<int> > exclusions;

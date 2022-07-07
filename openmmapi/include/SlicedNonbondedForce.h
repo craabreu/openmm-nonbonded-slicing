@@ -484,24 +484,6 @@ public:
      */
     void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
-     * Get whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones
-     * interactions beyond the cutoff distance.  The energy depends on the volume of the periodic box, and is only
-     * applicable when periodic boundary conditions are used.  When running simulations at constant pressure, adding
-     * this contribution can improve the quality of results.
-     */
-    bool getUseDispersionCorrection() const {
-        return useDispersionCorrection;
-    }
-    /**
-     * Set whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones
-     * interactions beyond the cutoff distance.  The energy depends on the volume of the periodic box, and is only
-     * applicable when periodic boundary conditions are used.  When running simulations at constant pressure, adding
-     * this contribution can improve the quality of results.
-     */
-    void setUseDispersionCorrection(bool useCorrection) {
-        useDispersionCorrection = useCorrection;
-    }
-    /**
      * Get the force group that reciprocal space interactions for Ewald or PME are included in.  This allows multiple
      * time step integrators to evaluate direct and reciprocal space interactions at different intervals: getForceGroup()
      * specifies the group for direct space, and getReciprocalSpaceForceGroup() specifies the group for reciprocal space.
@@ -606,7 +588,7 @@ private:
     class ExceptionOffsetInfo;
     int numSubsets;
     double cutoffDistance, rfDielectric, ewaldErrorTol, alpha, dalpha;
-    bool useDispersionCorrection, exceptionsUsePeriodic, includeDirectSpace;
+    bool exceptionsUsePeriodic, includeDirectSpace;
     int recipForceGroup, nx, ny, nz, dnx, dny, dnz;
     void addExclusionsToSet(const std::vector<std::set<int> >& bonded12, std::set<int>& exclusions, int baseParticle, int fromParticle, int currentLevel) const;
     int getGlobalParameterIndex(const std::string& parameter) const;
