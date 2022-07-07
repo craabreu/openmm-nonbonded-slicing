@@ -51,7 +51,7 @@ using std::vector;
 #define ASSERT_VALID_SUBSET(subset) {if (subset < 0 || subset >= numSubsets) throwException(__FILE__, __LINE__, "Subset out of range");};
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : numSubsets(numSubsets),
-        nonbondedMethod(PME), cutoffDistance(1.0), switchingDistance(-1.0), rfDielectric(78.3),
+        cutoffDistance(1.0), switchingDistance(-1.0), rfDielectric(78.3),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), useSwitchingFunction(false), useDispersionCorrection(true), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
     vector<int> row(numSubsets, -1);
@@ -63,7 +63,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     NonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (method == NonbondedForce::NoCutoff || method == NonbondedForce::CutoffNonPeriodic)
         throw OpenMMException("SlicedNonbondedForce: cannot instantiate from a non-periodic NonbondedForce");
-    nonbondedMethod = PME;
     cutoffDistance = force.getCutoffDistance();
     switchingDistance = force.getSwitchingDistance();
     rfDielectric = force.getReactionFieldDielectric();
@@ -108,16 +107,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
         force.getExceptionParameterOffset(index, parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
         addExceptionParameterOffset(parameter, exceptionIndex, chargeProdScale);
     }
-}
-
-SlicedNonbondedForce::NonbondedMethod SlicedNonbondedForce::getNonbondedMethod() const {
-    return nonbondedMethod;
-}
-
-void SlicedNonbondedForce::setNonbondedMethod(NonbondedMethod method) {
-    if (method < 0 || method > 5)
-        throw OpenMMException("SlicedNonbondedForce: Illegal value for nonbonded method");
-    nonbondedMethod = method;
 }
 
 double SlicedNonbondedForce::getCutoffDistance() const {

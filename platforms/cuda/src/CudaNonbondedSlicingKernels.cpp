@@ -255,10 +255,9 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         exclusionList[exclusion.first].push_back(exclusion.second);
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
-    nonbondedMethod = CalcSlicedNonbondedForceKernel::NonbondedMethod(force.getNonbondedMethod());
-    bool useCutoff = (nonbondedMethod != NoCutoff);
-    bool usePeriodic = (nonbondedMethod != NoCutoff && nonbondedMethod != CutoffNonPeriodic);
-    doLJPME = (nonbondedMethod == LJPME && hasLJ);
+    bool useCutoff = true;
+    bool usePeriodic = true;
+    doLJPME = false;
     usePosqCharges = hasCoulomb ? cu.requestPosqCharges() : false;
 
     map<string, string> defines;
@@ -301,41 +300,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         paramsDefines["USE_POSQ_CHARGES"] = "1";
     if (doLJPME)
         paramsDefines["INCLUDE_LJPME_EXCEPTIONS"] = "1";
-    if (nonbondedMethod == Ewald) {
-        // Compute the Ewald parameters.
-
-        int kmaxx, kmaxy, kmaxz;
-        SlicedNonbondedForceImpl::calcEwaldParameters(system, force, alpha, kmaxx, kmaxy, kmaxz);
-        defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
-        defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-        defines["USE_EWALD"] = "1";
-        if (cu.getContextIndex() == 0) {
-            paramsDefines["INCLUDE_EWALD"] = "1";
-            paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cu.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            for (int i = 0; i < numParticles; i++)
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-
-            // Create the reciprocal space kernels.
-
-            map<string, string> replacements;
-            replacements["NUM_ATOMS"] = cu.intToString(numParticles);
-            replacements["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
-            replacements["KMAX_X"] = cu.intToString(kmaxx);
-            replacements["KMAX_Y"] = cu.intToString(kmaxy);
-            replacements["KMAX_Z"] = cu.intToString(kmaxz);
-            replacements["EXP_COEFFICIENT"] = cu.doubleToString(-1.0/(4.0*alpha*alpha));
-            replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
-            replacements["M_PI"] = cu.doubleToString(M_PI);
-            CUmodule module = cu.createModule(CudaNonbondedSlicingKernelSources::vectorOps+
-                                              CommonNonbondedSlicingKernelSources::realtofixedpoint+
-                                              CommonNonbondedSlicingKernelSources::ewald, replacements);
-            ewaldSumsKernel = cu.getKernel(module, "calculateEwaldCosSinSums");
-            ewaldForcesKernel = cu.getKernel(module, "calculateEwaldForces");
-            int elementSize = (cu.getUseDoublePrecision() ? sizeof(double2) : sizeof(float2));
-            cosSinSums.initialize(cu, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
-        }
-    }
-    else if (((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME) {
+    if (hasCoulomb) {
         // Compute the PME parameters.
 
         SlicedNonbondedForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
@@ -602,7 +567,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
     // Add code to subtract off the reciprocal part of excluded interactions.
 
-    if ((nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) && pmeio == NULL) {
+    if (pmeio == NULL) {
         int numContexts = cu.getPlatformData().contexts.size();
         int startIndex = cu.getContextIndex()*force.getNumExceptions()/numContexts;
         int endIndex = (cu.getContextIndex()+1)*force.getNumExceptions()/numContexts;
@@ -1069,24 +1034,20 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
     // Compute other values.
     
     ewaldSelfEnergy = 0.0;
-    if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
-        if (cu.getContextIndex() == 0) {
-            for (int i = 0; i < force.getNumParticles(); i++) {
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-                if (doLJPME)
-                    ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-            }
+    if (cu.getContextIndex() == 0) {
+        for (int i = 0; i < force.getNumParticles(); i++) {
+            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            if (doLJPME)
+                ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
         }
     }
-    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && (nonbondedMethod == CutoffPeriodic || nonbondedMethod == Ewald || nonbondedMethod == PME))
+    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0)
         dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
     cu.invalidateMolecules();
     recomputeParams = true;
 }
 
 void CudaCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    if (nonbondedMethod != PME)
-        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
     if (cu.getPlatformData().useCpuPme)
         cpuPme.getAs<CalcPmeReciprocalForceKernel>().getPMEParameters(alpha, nx, ny, nz);
     else {

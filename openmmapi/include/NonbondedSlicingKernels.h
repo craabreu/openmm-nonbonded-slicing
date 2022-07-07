@@ -47,14 +47,6 @@ namespace NonbondedSlicing {
  */
 class CalcSlicedNonbondedForceKernel : public KernelImpl {
 public:
-    enum NonbondedMethod {
-        NoCutoff = 0,
-        CutoffNonPeriodic = 1,
-        CutoffPeriodic = 2,
-        Ewald = 3,
-        PME = 4,
-        LJPME = 5
-    };
     static std::string Name() {
         return "CalcSlicedNonbondedForce";
     }

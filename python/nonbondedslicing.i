@@ -52,14 +52,6 @@ namespace NonbondedSlicing {
 
 class SlicedNonbondedForce : public OpenMM::Force {
 public:
-    enum NonbondedMethod {
-        NoCutoff = 0,
-        CutoffNonPeriodic = 1,
-        CutoffPeriodic = 2,
-        Ewald = 3,
-        PME = 4,
-        LJPME = 5
-    };
     SlicedNonbondedForce(int numSubsets=1);
     SlicedNonbondedForce(const OpenMM::NonbondedForce&, int numSubsets=1);
     int getNumSubsets() const;
@@ -68,8 +60,6 @@ public:
     int getNumGlobalParameters() const;
     int getNumParticleParameterOffsets() const;
     int getNumExceptionParameterOffsets() const;
-    NonbondedMethod getNonbondedMethod() const;
-    void setNonbondedMethod(NonbondedMethod method);
     double getCutoffDistance() const;
     void setCutoffDistance(double distance);
     bool getUseSwitchingFunction() const;

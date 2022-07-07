@@ -107,7 +107,6 @@ def testLargeSystem(platformName, precision):
         iz = k//(M*M)
         iy = (k - iz*M*M)//M
         ix = k - M*(iy + iz*M)
-        # print(ix, iy, iz)
         x = (ix + 0.5)*boxSize/M
         y = (iy + 0.5)*boxSize/M
         z = (iz + 0.5)*boxSize/M

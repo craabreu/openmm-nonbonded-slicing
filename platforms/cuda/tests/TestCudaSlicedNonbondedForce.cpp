@@ -35,7 +35,7 @@
 // #include <cuda.h>
 #include <string>
 
-void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
+void testParallelComputation() {
     System system;
     const int numParticles = 200;
     for (int i = 0; i < numParticles; i++)
@@ -43,7 +43,6 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
     SlicedNonbondedForce* force = new SlicedNonbondedForce();
     for (int i = 0; i < numParticles; i++)
         force->addParticle(i%2-0.5);
-    force->setNonbondedMethod(method);
     system.addForce(force);
     system.setDefaultPeriodicBoxVectors(Vec3(5,0,0), Vec3(0,5,0), Vec3(0,0,5));
     OpenMM_SFMT::SFMT sfmt;
@@ -106,7 +105,6 @@ void testReordering() {
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(6, 0, 0), Vec3(2.1, 6, 0), Vec3(-1.5, -0.5, 6));
     SlicedNonbondedForce *nonbonded = new SlicedNonbondedForce();
-    nonbonded->setNonbondedMethod(SlicedNonbondedForce::PME);
     system.addForce(nonbonded);
     vector<Vec3> positions;
     OpenMM_SFMT::SFMT sfmt;
@@ -133,7 +131,6 @@ void testDeterministicForces() {
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(6, 0, 0), Vec3(2.1, 6, 0), Vec3(-1.5, -0.5, 6));
     SlicedNonbondedForce *nonbonded = new SlicedNonbondedForce();
-    nonbonded->setNonbondedMethod(SlicedNonbondedForce::PME);
     system.addForce(nonbonded);
     vector<Vec3> positions;
     OpenMM_SFMT::SFMT sfmt;
@@ -182,10 +179,7 @@ void testDeterministicForces() {
 // }
 
 void runPlatformTests() {
-    testParallelComputation(SlicedNonbondedForce::NoCutoff);
-    testParallelComputation(SlicedNonbondedForce::Ewald);
-    testParallelComputation(SlicedNonbondedForce::PME);
-    testParallelComputation(SlicedNonbondedForce::LJPME);
+    testParallelComputation();
     testReordering();
     testDeterministicForces();
     // if (canRunHugeTest())

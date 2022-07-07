@@ -263,10 +263,9 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         exclusionList[exclusion.first].push_back(exclusion.second);
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
-    nonbondedMethod = CalcSlicedNonbondedForceKernel::NonbondedMethod(force.getNonbondedMethod());
-    bool useCutoff = (nonbondedMethod != NoCutoff);
-    bool usePeriodic = (nonbondedMethod != NoCutoff && nonbondedMethod != CutoffNonPeriodic);
-    doLJPME = (nonbondedMethod == LJPME && hasLJ);
+    bool useCutoff = true;
+    bool usePeriodic = true;
+    doLJPME = false;
     usePosqCharges = hasCoulomb ? cl.requestPosqCharges() : false;
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
@@ -308,40 +307,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         paramsDefines["USE_POSQ_CHARGES"] = "1";
     if (doLJPME)
         paramsDefines["INCLUDE_LJPME_EXCEPTIONS"] = "1";
-    if (nonbondedMethod == Ewald) {
-        // Compute the Ewald parameters.
-
-        int kmaxx, kmaxy, kmaxz;
-        SlicedNonbondedForceImpl::calcEwaldParameters(system, force, alpha, kmaxx, kmaxy, kmaxz);
-        defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
-        defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-        defines["USE_EWALD"] = "1";
-        if (cl.getContextIndex() == 0) {
-            paramsDefines["INCLUDE_EWALD"] = "1";
-            paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            for (int i = 0; i < numParticles; i++)
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-
-            // Create the reciprocal space kernels.
-
-            map<string, string> replacements;
-            replacements["NUM_ATOMS"] = cl.intToString(numParticles);
-            replacements["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
-            replacements["KMAX_X"] = cl.intToString(kmaxx);
-            replacements["KMAX_Y"] = cl.intToString(kmaxy);
-            replacements["KMAX_Z"] = cl.intToString(kmaxz);
-            replacements["EXP_COEFFICIENT"] = cl.doubleToString(-1.0/(4.0*alpha*alpha));
-            replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
-            replacements["M_PI"] = cl.doubleToString(M_PI);
-            cl::Program program = cl.createProgram(CommonNonbondedSlicingKernelSources::realtofixedpoint+
-                                                   CommonNonbondedSlicingKernelSources::ewald, replacements);
-            ewaldSumsKernel = cl::Kernel(program, "calculateEwaldCosSinSums");
-            ewaldForcesKernel = cl::Kernel(program, "calculateEwaldForces");
-            int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double2) : sizeof(mm_float2));
-            cosSinSums.initialize(cl, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
-        }
-    }
-    else if (((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME) {
+    if (hasCoulomb) {
         // Compute the PME parameters.
 
         SlicedNonbondedForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
@@ -544,7 +510,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
 
     // Add code to subtract off the reciprocal part of excluded interactions.
 
-    if ((nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) && pmeio == NULL) {
+    if (pmeio == NULL) {
         int numContexts = cl.getPlatformData().contexts.size();
         int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
         int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
@@ -1218,24 +1184,20 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
     // Compute other values.
     
     ewaldSelfEnergy = 0.0;
-    if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
-        if (cl.getContextIndex() == 0) {
-            for (int i = 0; i < force.getNumParticles(); i++) {
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-                if (doLJPME)
-                    ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-            }
+    if (cl.getContextIndex() == 0) {
+        for (int i = 0; i < force.getNumParticles(); i++) {
+            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            if (doLJPME)
+                ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
         }
     }
-    if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0 && (nonbondedMethod == CutoffPeriodic || nonbondedMethod == Ewald || nonbondedMethod == PME))
+    if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0)
         dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
     cl.invalidateMolecules(info);
     recomputeParams = true;
 }
 
 void OpenCLCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    if (nonbondedMethod != PME)
-        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
     if (cl.getPlatformData().useCpuPme)
         cpuPme.getAs<CalcPmeReciprocalForceKernel>().getPMEParameters(alpha, nx, ny, nz);
     else {
@@ -1247,8 +1209,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& 
 }
 
 void OpenCLCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    if (nonbondedMethod != LJPME)
-        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
+    throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
     if (cl.getPlatformData().useCpuPme)
         //cpuPme.getAs<CalcPmeReciprocalForceKernel>().getLJPMEParameters(alpha, nx, ny, nz);
         throw OpenMMException("getPMEParametersInContext: CPUPME has not been implemented for LJPME yet.");

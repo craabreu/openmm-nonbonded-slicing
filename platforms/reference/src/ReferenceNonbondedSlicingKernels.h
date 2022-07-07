@@ -102,7 +102,6 @@ private:
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic;
     std::vector<std::set<int> > exclusions;
-    NonbondedMethod nonbondedMethod;
     OpenMM::NeighborList* neighborList;
 };
 

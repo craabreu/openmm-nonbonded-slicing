@@ -57,7 +57,6 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
                 sliceForceGroup.createChildNode("sliceForceGroup").setIntProperty("subset1", i).setIntProperty("subset2", j).setIntProperty("group", group);
         }
     node.setStringProperty("name", force.getName());
-    node.setIntProperty("method", (int) force.getNonbondedMethod());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
     node.setBoolProperty("useSwitchingFunction", force.getUseSwitchingFunction());
     node.setDoubleProperty("switchingDistance", force.getSwitchingDistance());
@@ -125,7 +124,6 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         for (auto& sliceForceGroup : sliceForceGroups.getChildren())
             force->setSliceForceGroup(sliceForceGroup.getIntProperty("subset1"), sliceForceGroup.getIntProperty("subset2"), sliceForceGroup.getIntProperty("group"));
         force->setName(node.getStringProperty("name", force->getName()));
-        force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) node.getIntProperty("method"));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
         force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction", false));
         force->setSwitchingDistance(node.getDoubleProperty("switchingDistance", -1.0));

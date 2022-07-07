@@ -46,7 +46,6 @@ void testSerialization() {
     force.setForceGroup(3);
     force.setSliceForceGroup(0, 1, 1);
     force.setName("custom name");
-    force.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
     force.setSwitchingDistance(1.5);
     force.setUseSwitchingFunction(true);
     force.setCutoffDistance(2.0);
@@ -86,7 +85,6 @@ void testSerialization() {
         for (int j = 0; j < force.getNumSubsets(); j++)
             ASSERT_EQUAL(force.getSliceForceGroup(i,j), force2.getSliceForceGroup(i, j));
     ASSERT_EQUAL(force.getName(), force2.getName());
-    ASSERT_EQUAL(force.getNonbondedMethod(), force2.getNonbondedMethod());
     ASSERT_EQUAL(force.getSwitchingDistance(), force2.getSwitchingDistance());
     ASSERT_EQUAL(force.getUseSwitchingFunction(), force2.getUseSwitchingFunction());
     ASSERT_EQUAL(force.getCutoffDistance(), force2.getCutoffDistance());
