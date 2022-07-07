@@ -48,7 +48,6 @@ void testSerialization() {
     force.setName("custom name");
     force.setCutoffDistance(2.0);
     force.setEwaldErrorTolerance(1e-3);
-    force.setReactionFieldDielectric(50.0);
     force.setExceptionsUsePeriodicBoundaryConditions(true);
     force.setIncludeDirectSpace(false);
     double alpha = 0.5;
@@ -84,7 +83,6 @@ void testSerialization() {
     ASSERT_EQUAL(force.getName(), force2.getName());
     ASSERT_EQUAL(force.getCutoffDistance(), force2.getCutoffDistance());
     ASSERT_EQUAL(force.getEwaldErrorTolerance(), force2.getEwaldErrorTolerance());
-    ASSERT_EQUAL(force.getReactionFieldDielectric(), force2.getReactionFieldDielectric());
     ASSERT_EQUAL(force.getExceptionsUsePeriodicBoundaryConditions(), force2.getExceptionsUsePeriodicBoundaryConditions());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());

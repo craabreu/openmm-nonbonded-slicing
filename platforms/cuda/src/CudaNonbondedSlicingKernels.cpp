@@ -263,14 +263,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
     defines["HAS_LENNARD_JONES"] = (hasLJ ? "1" : "0");
-    if (useCutoff) {
-        // Compute the reaction field constants.
-
-        double reactionFieldK = pow(force.getCutoffDistance(), -3.0)*(force.getReactionFieldDielectric()-1.0)/(2.0*force.getReactionFieldDielectric()+1.0);
-        double reactionFieldC = (1.0 / force.getCutoffDistance())*(3.0*force.getReactionFieldDielectric())/(2.0*force.getReactionFieldDielectric()+1.0);
-        defines["REACTION_FIELD_K"] = cu.doubleToString(reactionFieldK);
-        defines["REACTION_FIELD_C"] = cu.doubleToString(reactionFieldC);
-    }
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;

@@ -62,8 +62,6 @@ public:
     int getNumExceptionParameterOffsets() const;
     double getCutoffDistance() const;
     void setCutoffDistance(double distance);
-    double getReactionFieldDielectric() const;
-    void setReactionFieldDielectric(double dielectric);
     double getEwaldErrorTolerance() const;
     void setEwaldErrorTolerance(double tol);
 

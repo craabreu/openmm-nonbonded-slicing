@@ -51,7 +51,7 @@ using std::vector;
 #define ASSERT_VALID_SUBSET(subset) {if (subset < 0 || subset >= numSubsets) throwException(__FILE__, __LINE__, "Subset out of range");};
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : numSubsets(numSubsets),
-        cutoffDistance(1.0), rfDielectric(78.3),
+        cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
     vector<int> row(numSubsets, -1);
@@ -64,7 +64,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     if (method == NonbondedForce::NoCutoff || method == NonbondedForce::CutoffNonPeriodic)
         throw OpenMMException("SlicedNonbondedForce: cannot instantiate from a non-periodic NonbondedForce");
     cutoffDistance = force.getCutoffDistance();
-    rfDielectric = force.getReactionFieldDielectric();
     ewaldErrorTol = force.getEwaldErrorTolerance();
     force.getPMEParameters(alpha, nx, ny, nz);
     force.getLJPMEParameters(dalpha, dnx, dny, dnz);
@@ -112,14 +111,6 @@ double SlicedNonbondedForce::getCutoffDistance() const {
 
 void SlicedNonbondedForce::setCutoffDistance(double distance) {
     cutoffDistance = distance;
-}
-
-double SlicedNonbondedForce::getReactionFieldDielectric() const {
-    return rfDielectric;
-}
-
-void SlicedNonbondedForce::setReactionFieldDielectric(double dielectric) {
-    rfDielectric = dielectric;
 }
 
 double SlicedNonbondedForce::getEwaldErrorTolerance() const {

@@ -59,7 +59,6 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setStringProperty("name", force.getName());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
     node.setDoubleProperty("ewaldTolerance", force.getEwaldErrorTolerance());
-    node.setDoubleProperty("rfDielectric", force.getReactionFieldDielectric());
     node.setIntProperty("exceptionsUsePeriodic", force.getExceptionsUsePeriodicBoundaryConditions());
     node.setBoolProperty("includeDirectSpace", force.getIncludeDirectSpace());
     double alpha;
@@ -123,7 +122,6 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         force->setName(node.getStringProperty("name", force->getName()));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldTolerance"));
-        force->setReactionFieldDielectric(node.getDoubleProperty("rfDielectric"));
         force->setIncludeDirectSpace(node.getBoolProperty("includeDirectSpace"));
         double alpha = node.getDoubleProperty("alpha", 0.0);
         int nx = node.getIntProperty("nx", 0);

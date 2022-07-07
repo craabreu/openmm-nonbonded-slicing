@@ -146,7 +146,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     double energy = 0;
     ReferenceLJCoulombIxn clj;
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
-    clj.setUseCutoff(nonbondedCutoff, *neighborList, rfDielectric);
+    clj.setUseCutoff(nonbondedCutoff, *neighborList);
     Vec3* boxVectors = extractBoxVectors(context);
     double minAllowedSize = 1.999999*nonbondedCutoff;
     if (boxVectors[0][0] < minAllowedSize || boxVectors[1][1] < minAllowedSize || boxVectors[2][2] < minAllowedSize)

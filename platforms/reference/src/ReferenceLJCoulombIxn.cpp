@@ -67,17 +67,14 @@ ReferenceLJCoulombIxn::~ReferenceLJCoulombIxn() {
 
      @param distance            the cutoff distance
      @param neighbors           the neighbor list to use
-     @param solventDielectric   the dielectric constant of the bulk solvent
 
      --------------------------------------------------------------------------------------- */
 
-void ReferenceLJCoulombIxn::setUseCutoff(double distance, const OpenMM::NeighborList& neighbors, double solventDielectric) {
+void ReferenceLJCoulombIxn::setUseCutoff(double distance, const OpenMM::NeighborList& neighbors) {
 
     cutoff = true;
     cutoffDistance = distance;
     neighborList = &neighbors;
-    krf = pow(cutoffDistance, -3.0)*(solventDielectric-1.0)/(2.0*solventDielectric+1.0);
-    crf = (1.0/cutoffDistance)*(3.0*solventDielectric)/(2.0*solventDielectric+1.0);
 }
 
 /**---------------------------------------------------------------------------------------
@@ -575,16 +572,10 @@ void ReferenceLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCo
 
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
     double dEdR = eps*(12.0*sig6 - 6.0)*sig6;
-    if (cutoff)
-        dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
-    else
-        dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
-    dEdR     *= inverseR*inverseR;
+    dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+    dEdR *= inverseR*inverseR;
     double energy = eps*(sig6-1.0)*sig6;
-    if (cutoff)
-        energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
-    else
-        energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+    energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
 
     // accumulate forces
 

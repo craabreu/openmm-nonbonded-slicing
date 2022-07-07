@@ -41,7 +41,6 @@ class ReferenceLJCoulombIxn {
       const OpenMM::NeighborList* neighborList;
       OpenMM::Vec3 periodicBoxVectors[3];
       double cutoffDistance;
-      double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
       int meshDim[3], dispersionMeshDim[3];
@@ -94,11 +93,10 @@ class ReferenceLJCoulombIxn {
       
          @param distance            the cutoff distance
          @param neighbors           the neighbor list to use
-         @param solventDielectric   the dielectric constant of the bulk solvent
       
          --------------------------------------------------------------------------------------- */
       
-      void setUseCutoff(double distance, const OpenMM::NeighborList& neighbors, double solventDielectric);
+      void setUseCutoff(double distance, const OpenMM::NeighborList& neighbors);
       
       /**---------------------------------------------------------------------------------------
       
