@@ -87,8 +87,8 @@ private:
     int numParticles, num14;
     std::vector<std::vector<int> >bonded14IndexArray;
     std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
-    std::vector<std::array<double, 3> > baseParticleParams, baseExceptionParams;
-    std::map<std::pair<std::string, int>, std::array<double, 3> > particleParamOffsets, exceptionParamOffsets;
+    std::vector<double> particleCharges, exceptionCharges;
+    std::map<std::pair<std::string, int>, double> particleParamOffsets, exceptionParamOffsets;
     double nonbondedCutoff, ewaldAlpha;
     int kmax[3], gridSize[3];
     bool exceptionsArePeriodic;

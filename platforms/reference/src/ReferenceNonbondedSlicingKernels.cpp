@@ -41,8 +41,8 @@
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <cstring>
 
-#include "ReferenceLJCoulombIxn.h"
-#include "ReferenceLJCoulomb14.h"
+#include "openmm/reference/ReferenceLJCoulombIxn.h"
+#include "openmm/reference/ReferenceLJCoulomb14.h"
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -102,18 +102,13 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     bonded14IndexArray.resize(num14, vector<int>(2));
     bonded14ParamArray.resize(num14, vector<double>(3));
     particleParamArray.resize(numParticles, vector<double>(3));
-    baseParticleParams.resize(numParticles);
-    baseExceptionParams.resize(num14);
-    for (int i = 0; i < numParticles; ++i) {
-       baseParticleParams[i][0] = force.getParticleCharge(i);
-       baseParticleParams[i][1] = 1.0;
-       baseParticleParams[i][2] = 0.0;
-    }
+    particleCharges.resize(numParticles);
+    exceptionCharges.resize(num14);
+    for (int i = 0; i < numParticles; ++i)
+       particleCharges[i] = force.getParticleCharge(i);
     for (int i = 0; i < num14; ++i) {
         int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0]);
-        baseExceptionParams[i][1] = 1.0;
-        baseExceptionParams[i][2] = 0.0;
+        force.getExceptionParameters(nb14s[i], particle1, particle2, exceptionCharges[i]);
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
     }
@@ -122,14 +117,14 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         int particle;
         double charge;
         force.getParticleParameterOffset(i, param, particle, charge);
-        particleParamOffsets[make_pair(param, particle)] = {charge, 0, 0};
+        particleParamOffsets[make_pair(param, particle)] = charge;
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
         int exception;
         double charge;
         force.getExceptionParameterOffset(i, param, exception, charge);
-        exceptionParamOffsets[make_pair(param, nb14Index[exception])] = {charge, 0, 0};
+        exceptionParamOffsets[make_pair(param, nb14Index[exception])] = charge;
     }
     nonbondedCutoff = force.getCutoffDistance();
     neighborList = new NeighborList();
@@ -146,7 +141,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     double energy = 0;
     ReferenceLJCoulombIxn clj;
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
-    clj.setUseCutoff(nonbondedCutoff, *neighborList);
+    clj.setUseCutoff(nonbondedCutoff, *neighborList, 1.0);
     Vec3* boxVectors = extractBoxVectors(context);
     double minAllowedSize = 1.999999*nonbondedCutoff;
     if (boxVectors[0][0] < minAllowedSize || boxVectors[1][1] < minAllowedSize || boxVectors[2][2] < minAllowedSize)
@@ -194,16 +189,11 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     // Record the values.
 
-    for (int i = 0; i < numParticles; ++i) {
-        baseParticleParams[i][0] = force.getParticleCharge(i);
-        baseParticleParams[i][1] = 1.0;
-        baseParticleParams[i][2] = 0.0;
-    }
+    for (int i = 0; i < numParticles; ++i)
+        particleCharges[i] = force.getParticleCharge(i);
     for (int i = 0; i < num14; ++i) {
         int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0]);
-        baseExceptionParams[i][1] = 1.0;
-        baseExceptionParams[i][2] = 0.0;
+        force.getExceptionParameters(nb14s[i], particle1, particle2, exceptionCharges[i]);
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
     }
@@ -219,45 +209,33 @@ void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, in
 void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& context) {
     // Compute particle parameters.
 
-    vector<double> charges(numParticles), sigmas(numParticles), epsilons(numParticles);
-    for (int i = 0; i < numParticles; i++) {
-        charges[i] = baseParticleParams[i][0];
-        sigmas[i] = baseParticleParams[i][1];
-        epsilons[i] = baseParticleParams[i][2];
-    }
+    vector<double> charges(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        charges[i] = particleCharges[i];
     for (auto& offset : particleParamOffsets) {
         double value = context.getParameter(offset.first.first);
         int index = offset.first.second;
-        charges[index] += value*offset.second[0];
-        sigmas[index] += value*offset.second[1];
-        epsilons[index] += value*offset.second[2];
+        charges[index] += value*offset.second;
     }
     for (int i = 0; i < numParticles; i++) {
-        particleParamArray[i][0] = 0.5*sigmas[i];
-        particleParamArray[i][1] = 2.0*sqrt(epsilons[i]);
+        particleParamArray[i][0] = 0.5;
+        particleParamArray[i][1] = 0.0;
         particleParamArray[i][2] = charges[i];
     }
 
     // Compute exception parameters.
 
     charges.resize(num14);
-    sigmas.resize(num14);
-    epsilons.resize(num14);
-    for (int i = 0; i < num14; i++) {
-        charges[i] = baseExceptionParams[i][0];
-        sigmas[i] = baseExceptionParams[i][1];
-        epsilons[i] = baseExceptionParams[i][2];
-    }
+    for (int i = 0; i < num14; i++)
+        charges[i] = exceptionCharges[i];
     for (auto& offset : exceptionParamOffsets) {
         double value = context.getParameter(offset.first.first);
         int index = offset.first.second;
-        charges[index] += value*offset.second[0];
-        sigmas[index] += value*offset.second[1];
-        epsilons[index] += value*offset.second[2];
+        charges[index] += value*offset.second;
     }
     for (int i = 0; i < num14; i++) {
-        bonded14ParamArray[i][0] = sigmas[i];
-        bonded14ParamArray[i][1] = 4.0*epsilons[i];
+        bonded14ParamArray[i][0] = 1.0;
+        bonded14ParamArray[i][1] = 0.0;
         bonded14ParamArray[i][2] = charges[i];
     }
 }
