@@ -29,35 +29,6 @@
     real epssig6 = sig6*eps;
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = epssig6*(sig6 - 1.0f);
-#if DO_LJPME
-    // The multiplicative term to correct for the multiplicative terms that are always
-    // present in reciprocal space.
-    const real dispersionAlphaR = EWALD_DISPERSION_ALPHA*r;
-    const real dar2 = dispersionAlphaR*dispersionAlphaR;
-    const real dar4 = dar2*dar2;
-    const real dar6 = dar4*dar2;
-    const real invR2 = invR*invR;
-    const real expDar2 = EXP(-dar2);
-    const float2 sigExpProd = SIGMA_EPSILON1*SIGMA_EPSILON2;
-    const real c6 = 64*sigExpProd.x*sigExpProd.x*sigExpProd.x*sigExpProd.y;
-    const real coef = invR2*invR2*invR2*c6;
-    const real eprefac = 1.0f + dar2 + 0.5f*dar4;
-    const real dprefac = eprefac + dar6/6.0f;
-    // The multiplicative grid term
-    ljEnergy += coef*(1.0f - expDar2*eprefac);
-    tempForce += 6.0f*coef*(1.0f - expDar2*dprefac);
-    // The potential shift accounts for the step at the cutoff introduced by the
-    // transition from additive to multiplicative combintion rules and is only
-    // needed for the real (not excluded) terms.  By addin these terms to ljEnergy
-    // instead of tempEnergy here, the includeInteraction mask is correctly applied.
-    sig2 = sig*sig;
-    sig6 = sig2*sig2*sig2*INVCUT6;
-    epssig6 = eps*sig6;
-    // The additive part of the potential shift
-    ljEnergy += epssig6*(1.0f - sig6);
-    // The multiplicative part of the potential shift
-    ljEnergy += MULTSHIFT6*c6;
-#endif
     tempForce += prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
     tempEnergy += includeInteraction ? ljEnergy + prefactor*erfcAlphaR : 0;
 #else

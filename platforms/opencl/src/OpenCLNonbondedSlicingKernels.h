@@ -48,7 +48,7 @@ namespace NonbondedSlicing {
 class OpenCLCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
     OpenCLCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), dispersionFft(NULL), pmeio(NULL), usePmeQueue(false) {
+            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), pmeio(NULL), usePmeQueue(false) {
     }
     ~OpenCLCalcSlicedNonbondedForceKernel();
     /**
@@ -93,7 +93,7 @@ public:
      * @param ny      the number of grid points along the Y axis
      * @param nz      the number of grid points along the Z axis
      */
-    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {};
 private:
     class SortTrait : public OpenCLSort::SortTrait {
         int getDataSize() const {return 8;}
@@ -131,9 +131,6 @@ private:
     OpenCLArray pmeBsplineModuliX;
     OpenCLArray pmeBsplineModuliY;
     OpenCLArray pmeBsplineModuliZ;
-    OpenCLArray pmeDispersionBsplineModuliX;
-    OpenCLArray pmeDispersionBsplineModuliY;
-    OpenCLArray pmeDispersionBsplineModuliZ;
     OpenCLArray pmeBsplineTheta;
     OpenCLArray pmeAtomRange;
     OpenCLArray pmeAtomGridIndex;
@@ -142,7 +139,6 @@ private:
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
     OpenCLFFT3D* fft;
-    OpenCLFFT3D* dispersionFft;
     Kernel cpuPme;
     PmeIO* pmeio;
     SyncQueuePostComputation* syncQueue;
@@ -150,29 +146,20 @@ private:
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
     cl::Kernel pmeAtomRangeKernel;
-    cl::Kernel pmeDispersionAtomRangeKernel;
     cl::Kernel pmeZIndexKernel;
-    cl::Kernel pmeDispersionZIndexKernel;
     cl::Kernel pmeGridIndexKernel;
-    cl::Kernel pmeDispersionGridIndexKernel;
     cl::Kernel pmeSpreadChargeKernel;
-    cl::Kernel pmeDispersionSpreadChargeKernel;
     cl::Kernel pmeFinishSpreadChargeKernel;
-    cl::Kernel pmeDispersionFinishSpreadChargeKernel;
     cl::Kernel pmeConvolutionKernel;
-    cl::Kernel pmeDispersionConvolutionKernel;
     cl::Kernel pmeEvalEnergyKernel;
-    cl::Kernel pmeDispersionEvalEnergyKernel;
     cl::Kernel pmeInterpolateForceKernel;
-    cl::Kernel pmeDispersionInterpolateForceKernel;
     std::map<std::string, std::string> pmeDefines;
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
-    int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
-    bool hasCoulomb, hasLJ, usePmeQueue, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
+    bool hasCoulomb, hasLJ, usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };
 

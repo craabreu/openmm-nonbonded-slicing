@@ -280,7 +280,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
         defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
         defines["USE_EWALD"] = "1";
-        defines["DO_LJPME"] = "0";
         if (cu.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cu.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
@@ -477,7 +476,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionParams.getDevicePointer(), "float4");
             replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-            replacements["DO_LJPME"] = "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (force.getIncludeDirectSpace())
                 cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
