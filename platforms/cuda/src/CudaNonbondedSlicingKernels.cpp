@@ -229,7 +229,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     vector<float4> baseParticleParamVec(cu.getPaddedNumAtoms(), make_float4(0, 0, 0, 0));
     vector<vector<int> > exclusionList(numParticles);
     hasCoulomb = false;
-    hasLJ = false;
     for (int i = 0; i < numParticles; i++) {
         double charge = force.getParticleCharge(i);
         baseParticleParamVec[i] = make_float4(charge, 1, 0, 0);
@@ -255,7 +254,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
-    defines["HAS_LENNARD_JONES"] = (hasLJ ? "1" : "0");
+    defines["HAS_LENNARD_JONES"] = "0";
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
@@ -501,11 +500,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     if (hasCoulomb && !usePosqCharges)
         cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDevicePointer()));
     sigmaEpsilon.initialize<float2>(cu, cu.getPaddedNumAtoms(), "sigmaEpsilon");
-    if (hasLJ) {
-        replacements["SIGMA_EPSILON1"] = prefix+"sigmaEpsilon1";
-        replacements["SIGMA_EPSILON2"] = prefix+"sigmaEpsilon2";
-        cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"sigmaEpsilon", "float", 2, sizeof(float2), sigmaEpsilon.getDevicePointer()));
-    }
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
@@ -781,12 +775,10 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
     ContextSelector selector(cu);
     if (force.getNumParticles() != cu.getNumAtoms())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
-    if (!hasCoulomb || !hasLJ) {
-        for (int i = 0; i < force.getNumParticles(); i++) {
-            double charge = force.getParticleCharge(i);
-            if (!hasCoulomb && charge != 0.0)
-                throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Coulomb interactions, because all charges were originally 0");
-        }
+    for (int i = 0; i < force.getNumParticles(); i++) {
+        double charge = force.getParticleCharge(i);
+        if (!hasCoulomb && charge != 0.0)
+            throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Coulomb interactions, because all charges were originally 0");
     }
     set<int> exceptionsWithOffsets;
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {

@@ -20,21 +20,8 @@
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
     real tempForce = 0.0f;
-#if HAS_LENNARD_JONES
-    real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
-    real sig2 = invR*sig;
-    sig2 *= sig2;
-    real sig6 = sig2*sig2*sig2;
-    real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
-    real epssig6 = sig6*eps;
-    tempForce = epssig6*(12.0f*sig6 - 6.0f);
-    real ljEnergy = epssig6*(sig6 - 1.0f);
-    tempForce += prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? ljEnergy + prefactor*erfcAlphaR : 0;
-#else
     tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
     tempEnergy += includeInteraction ? prefactor*erfcAlphaR : 0;
-#endif
     dEdR += includeInteraction ? tempForce*invR*invR : 0;
 #else
 #ifdef USE_CUTOFF
@@ -43,16 +30,6 @@
     unsigned int includeInteraction = (!isExcluded);
 #endif
     real tempForce = 0.0f;
-#if HAS_LENNARD_JONES
-    real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
-    real sig2 = invR*sig;
-    sig2 *= sig2;
-    real sig6 = sig2*sig2*sig2;
-    real epssig6 = sig6*(SIGMA_EPSILON1.y*SIGMA_EPSILON2.y);
-    tempForce = epssig6*(12.0f*sig6 - 6.0f);
-    real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
-    tempEnergy += ljEnergy;
-#endif
 #if HAS_COULOMB
     const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2*invR;
     tempForce += prefactor;
