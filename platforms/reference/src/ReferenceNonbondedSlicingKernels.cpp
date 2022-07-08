@@ -216,14 +216,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, in
     nz = gridSize[2];
 }
 
-void ReferenceCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    throw OpenMMException("getPMEParametersInContext: This Context is not using LJPME");
-    alpha = ewaldDispersionAlpha;
-    nx = dispersionGridSize[0];
-    ny = dispersionGridSize[1];
-    nz = dispersionGridSize[2];
-}
-
 void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& context) {
     // Compute particle parameters.
 

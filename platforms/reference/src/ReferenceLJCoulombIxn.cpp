@@ -50,7 +50,7 @@ using namespace OpenMM;
    --------------------------------------------------------------------------------------- */
 
 ReferenceLJCoulombIxn::ReferenceLJCoulombIxn() : cutoff(false), periodic(false),
-    periodicExceptions(false), pme(false), ljpme(false) {
+    periodicExceptions(false), pme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -117,23 +117,6 @@ void ReferenceLJCoulombIxn::setUsePME(double alpha, int meshSize[3]) {
     pme = true;
 }
 
-/**---------------------------------------------------------------------------------------
-
-     Set the force to use Particle-Mesh Ewald (PME) summation for dispersion terms.
-
-     @param alpha  the dispersion Ewald separation parameter
-     @param gridSize the dimensions of the dispersion mesh
-
-     --------------------------------------------------------------------------------------- */
-
-void ReferenceLJCoulombIxn::setUseLJPME(double alpha, int meshSize[3]) {
-    alphaDispersionEwald = alpha;
-    dispersionMeshDim[0] = meshSize[0];
-    dispersionMeshDim[1] = meshSize[1];
-    dispersionMeshDim[2] = meshSize[2];
-    ljpme = true;
-}
-
 void ReferenceLJCoulombIxn::setPeriodicExceptions(bool periodic) {
     periodicExceptions = periodic;
 }
@@ -170,13 +153,8 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
     double totalSelfEwaldEnergy     = 0.0;
     double realSpaceEwaldEnergy     = 0.0;
     double recipEnergy              = 0.0;
-    double recipDispersionEnergy    = 0.0;
     double totalRecipEnergy         = 0.0;
     double vdwEnergy                = 0.0;
-
-    // A couple of sanity checks for
-    if (ljpme && !pme)
-        throw OpenMMException("LJPME has been set, without PME being set");
 
     // **************************************************************************************
     // SELF ENERGY
@@ -184,12 +162,8 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
 
     if (includeReciprocal) {
         for (int atomID = 0; atomID < numberOfAtoms; atomID++) {
-            double selfEwaldEnergy       = ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex] * alphaEwald/SQRT_PI;
-            if(ljpme) {
-                // Dispersion self term
-                selfEwaldEnergy -= pow(alphaDispersionEwald, 6.0) * 64.0*pow(atomParameters[atomID][SigIndex], 6.0) * pow(atomParameters[atomID][EpsIndex], 2.0) / 12.0;
-            }
-            totalSelfEwaldEnergy            -= selfEwaldEnergy;
+            double selfEwaldEnergy = ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex] * alphaEwald/SQRT_PI;
+            totalSelfEwaldEnergy -= selfEwaldEnergy;
         }
     }
 
@@ -217,20 +191,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
 
         pme_destroy(pmedata);
 
-        if (ljpme) {
-            // Dispersion reciprocal space terms
-            pme_init(&pmedata,alphaDispersionEwald,numberOfAtoms,dispersionMeshDim,5,1);
-
-            std::vector<Vec3> dpmeforces(numberOfAtoms);
-            for (int i = 0; i < numberOfAtoms; i++)
-                charges[i] = 8.0*pow(atomParameters[i][SigIndex], 3.0) * atomParameters[i][EpsIndex];
-            pme_exec_dpme(pmedata,atomCoordinates,dpmeforces,charges,periodicBoxVectors,&recipDispersionEnergy);
-            for (int i = 0; i < numberOfAtoms; i++)
-                forces[i] += dpmeforces[i];
-            if (totalEnergy)
-                *totalEnergy += recipDispersionEnergy;
-            pme_destroy(pmedata);
-        }
     }
 
     // **************************************************************************************
@@ -253,7 +213,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
         double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
         double alphaR = alphaEwald * r;
 
-
         double dEdR = ONE_4PI_EPS0 * atomParameters[ii][QIndex] * atomParameters[jj][QIndex] * inverseR * inverseR * inverseR;
         dEdR = dEdR * (erfc(alphaR) + 2 * alphaR * exp (- alphaR * alphaR) / SQRT_PI);
 
@@ -264,36 +223,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
         double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
         dEdR += eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
         vdwEnergy = eps*(sig6-1.0)*sig6;
-
-        if (ljpme) {
-            double dalphaR   = alphaDispersionEwald * r;
-            double dar2 = dalphaR*dalphaR;
-            double dar4 = dar2*dar2;
-            double dar6 = dar4*dar2;
-            double inverseR2 = inverseR*inverseR;
-            double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0) * atomParameters[ii][EpsIndex];
-            double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0) * atomParameters[jj][EpsIndex];
-            // For the energies and forces, we first add the regular Lorentz−Berthelot terms.  The C12 term is treated as usual
-            // but we then subtract out (remembering that the C6 term is negative) the multiplicative C6 term that has been
-            // computed in real space.  Finally, we add a potential shift term to account for the difference between the LB
-            // and multiplicative functional forms at the cutoff.
-            double emult = c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
-            dEdR += 6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4 + dar6/6.0));
-
-            double inverseCut2 = 1.0/(cutoffDistance*cutoffDistance);
-            double inverseCut6 = inverseCut2*inverseCut2*inverseCut2;
-            sig2 = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
-            sig2 *= sig2;
-            sig6 = sig2*sig2*sig2;
-            // The additive part of the potential shift
-            double potentialshift = eps*(1.0-sig6*inverseCut6)*sig6*inverseCut6;
-            dalphaR   = alphaDispersionEwald * cutoffDistance;
-            dar2 = dalphaR*dalphaR;
-            dar4 = dar2*dar2;
-            // The multiplicative part of the potential shift
-            potentialshift -= c6i*c6j*inverseCut6*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
-            vdwEnergy += emult + potentialshift;
-        }
 
         // accumulate forces
 
@@ -353,24 +282,6 @@ void ReferenceLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& a
                     realSpaceEwaldEnergy = alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
                 }
 
-                if(ljpme){
-                    // Dispersion terms.  Here we just back out the reciprocal space terms, and don't add any extra real space terms.
-                    double dalphaR   = alphaDispersionEwald * r;
-                    double inverseR2 = inverseR*inverseR;
-                    double dar2 = dalphaR*dalphaR;
-                    double dar4 = dar2*dar2;
-                    double dar6 = dar4*dar2;
-                    double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0) * atomParameters[ii][EpsIndex];
-                    double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0) * atomParameters[jj][EpsIndex];
-                    realSpaceEwaldEnergy -= c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
-                    double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4 + dar6/6.0));
-                    for (int kk = 0; kk < 3; kk++) {
-                        double force = dEdR*deltaR[0][kk];
-                        forces[ii][kk] -= force;
-                        forces[jj][kk] += force;
-                    }
-                }
-
                 totalExclusionEnergy += realSpaceEwaldEnergy;
             }
         }
@@ -400,7 +311,7 @@ void ReferenceLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& at
                                              vector<vector<double> >& atomParameters, vector<set<int> >& exclusions,
                                              vector<Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const {
 
-    if (pme || ljpme) {
+    if (pme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomParameters, exclusions, forces,
                           totalEnergy, includeDirect, includeReciprocal);
         return;

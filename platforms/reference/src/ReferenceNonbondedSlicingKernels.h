@@ -90,7 +90,7 @@ public:
      * @param ny      the number of grid points along the Y axis
      * @param nz      the number of grid points along the Z axis
      */
-    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {};
 private:
     void computeParameters(OpenMM::ContextImpl& context);
     int numParticles, num14;
@@ -98,8 +98,8 @@ private:
     std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
     std::vector<std::array<double, 3> > baseParticleParams, baseExceptionParams;
     std::map<std::pair<std::string, int>, std::array<double, 3> > particleParamOffsets, exceptionParamOffsets;
-    double nonbondedCutoff, ewaldAlpha, ewaldDispersionAlpha;
-    int kmax[3], gridSize[3], dispersionGridSize[3];
+    double nonbondedCutoff, ewaldAlpha;
+    int kmax[3], gridSize[3];
     bool exceptionsArePeriodic;
     std::vector<std::set<int> > exclusions;
     OpenMM::NeighborList* neighborList;
