@@ -1,14 +1,19 @@
-OpenMM Nonbonded Slicing Plugin
-===============================
+OpenMM PME Slicing Plugin
+=========================
 
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3ALinux)
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project is an [OpenMM] plugin that allows a [NonbondedForce], including its electrostatic
-component, to be divided into pieces depending on which pairs of particles are involved. All
-particles in the system are split into disjoint subsets, and the interactions between all particles
-in a subset I and all those in a subset J can be assigned to a specific force group.
+This project is an [OpenMM] plugin that implements a variant of the smooth Particle Mesh Ewald
+(PME) method in which Coulomb interactions can be divided into slices depending on which pairs of
+particles are involved.
+After distributing all particles among non-intersecting subsets, two indices I and J will
+distinguish each slice, defined as the sum of Coulomb interactions between every particle in
+subset I and every particle in subset J.
+
+This plugin aims at filling a gap in [OpenMM]: the lack of an `addInteractionGroup` method
+for the [NonbondedForce] class, like the one that exists for [CustomNonbondedForce].
 
 Building the Plugin
 ===================
@@ -66,7 +71,8 @@ To run the C++ test cases, build the "test" target, for example by typing `make 
 To run the Python test cases, build the "PythonTest" target, for example by typing `make PythonTest`.
 
 
-[CMake]:            http://www.cmake.org
-[NonbondedForce]:   http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
-[OpenMM]:           https://openmm.org
-[SWIG]:             http://www.swig.org
+[CMake]:                http://www.cmake.org
+[CustomNonbondedForce]: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html
+[NonbondedForce]:       http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
+[OpenMM]:               https://openmm.org
+[SWIG]:                 http://www.swig.org
