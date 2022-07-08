@@ -53,9 +53,6 @@ void testSerialization() {
     double alpha = 0.5;
     int nx = 3, ny = 5, nz = 7;
     force.setPMEParameters(alpha, nx, ny, nz);
-    double dalpha = 0.8;
-    int dnx = 4, dny = 6, dnz = 7;
-    force.setLJPMEParameters(dalpha, dnx, dny, dnz);
     force.addParticle(1, 0);
     force.addParticle(0.5, 0);
     force.addParticle(-0.5, 1);
@@ -97,13 +94,6 @@ void testSerialization() {
     ASSERT_EQUAL(nx, nx2);
     ASSERT_EQUAL(ny, ny2);
     ASSERT_EQUAL(nz, nz2);    
-    double dalpha2;
-    int dnx2, dny2, dnz2;
-    force2.getLJPMEParameters(dalpha2, dnx2, dny2, dnz2);
-    ASSERT_EQUAL(dalpha, dalpha2);
-    ASSERT_EQUAL(dnx, dnx2);
-    ASSERT_EQUAL(dny, dny2);
-    ASSERT_EQUAL(dnz, dnz2);
     for (int i = 0; i < force.getNumGlobalParameters(); i++) {
         ASSERT_EQUAL(force.getGlobalParameterName(i), force2.getGlobalParameterName(i));
         ASSERT_EQUAL(force.getGlobalParameterDefaultValue(i), force2.getGlobalParameterDefaultValue(i));

@@ -172,10 +172,7 @@ void SlicedNonbondedForceImpl::calcEwaldParameters(const System& system, const S
 }
 
 void SlicedNonbondedForceImpl::calcPMEParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& xsize, int& ysize, int& zsize, bool lj) {
-    if (lj)
-        force.getLJPMEParameters(alpha, xsize, ysize, zsize);
-    else
-        force.getPMEParameters(alpha, xsize, ysize, zsize);
+    force.getPMEParameters(alpha, xsize, ysize, zsize);
     if (alpha == 0.0) {
         Vec3 boxVectors[3];
         system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
@@ -217,8 +214,4 @@ void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
 
 void SlicedNonbondedForceImpl::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
     kernel.getAs<CalcSlicedNonbondedForceKernel>().getPMEParameters(alpha, nx, ny, nz);
-}
-
-void SlicedNonbondedForceImpl::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    kernel.getAs<CalcSlicedNonbondedForceKernel>().getLJPMEParameters(alpha, nx, ny, nz);
 }

@@ -70,21 +70,18 @@ public:
     %apply int& OUTPUT {int& ny};
     %apply int& OUTPUT {int& nz};
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
-    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     %clear double& alpha;
     %clear int& nx;
     %clear int& ny;
     %clear int& nz;
 
     void setPMEParameters(double alpha, int nx, int ny, int nz);
-    void setLJPMEParameters(double alpha, int nx, int ny, int nz);
 
     %apply double& OUTPUT {double& alpha};
     %apply int& OUTPUT {int& nx};
     %apply int& OUTPUT {int& ny};
     %apply int& OUTPUT {int& nz};
     void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
-    void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     %clear double& alpha;
     %clear int& nx;
     %clear int& ny;

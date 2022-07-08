@@ -66,7 +66,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     cutoffDistance = force.getCutoffDistance();
     ewaldErrorTol = force.getEwaldErrorTolerance();
     force.getPMEParameters(alpha, nx, ny, nz);
-    force.getLJPMEParameters(dalpha, dnx, dny, dnz);
     exceptionsUsePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
     recipForceGroup = force.getReciprocalSpaceForceGroup();
     includeDirectSpace = force.getIncludeDirectSpace();
@@ -128,13 +127,6 @@ void SlicedNonbondedForce::getPMEParameters(double& alpha, int& nx, int& ny, int
     nz = this->nz;
 }
 
-void SlicedNonbondedForce::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    alpha = this->dalpha;
-    nx = this->dnx;
-    ny = this->dny;
-    nz = this->dnz;
-}
-
 void SlicedNonbondedForce::setPMEParameters(double alpha, int nx, int ny, int nz) {
     this->alpha = alpha;
     this->nx = nx;
@@ -142,19 +134,8 @@ void SlicedNonbondedForce::setPMEParameters(double alpha, int nx, int ny, int nz
     this->nz = nz;
 }
 
-void SlicedNonbondedForce::setLJPMEParameters(double alpha, int nx, int ny, int nz) {
-    this->dalpha = alpha;
-    this->dnx = nx;
-    this->dny = ny;
-    this->dnz = nz;
-}
-
 void SlicedNonbondedForce::getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const {
     dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getPMEParameters(alpha, nx, ny, nz);
-}
-
-void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const {
-    dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getLJPMEParameters(alpha, nx, ny, nz);
 }
 
 int SlicedNonbondedForce::addParticle(double charge, int subset) {

@@ -68,7 +68,6 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setIntProperty("nx", nx);
     node.setIntProperty("ny", ny);
     node.setIntProperty("nz", nz);
-    force.getLJPMEParameters(alpha, nx, ny, nz);
     node.setDoubleProperty("ljAlpha", alpha);
     node.setIntProperty("ljnx", nx);
     node.setIntProperty("ljny", ny);
@@ -132,7 +131,6 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         nx = node.getIntProperty("ljnx", 0);
         ny = node.getIntProperty("ljny", 0);
         nz = node.getIntProperty("ljnz", 0);
-        force->setLJPMEParameters(alpha, nx, ny, nz);
         force->setReciprocalSpaceForceGroup(node.getIntProperty("recipForceGroup", -1));
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())
