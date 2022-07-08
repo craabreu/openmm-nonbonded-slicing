@@ -35,6 +35,10 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     #ifdef INCLUDE_EWALD
         energy -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
     #endif
+    #ifdef INCLUDE_LJPME
+        real sig3 = params.y*params.y*params.y;
+        energy += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
+    #endif
 #endif
     }
 
@@ -72,8 +76,15 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
 #else
         real chargeProd = charge[atoms.x]*charge[atoms.y];
 #endif
+#ifdef INCLUDE_LJPME_EXCEPTIONS
+        float2 sigEps1 = sigmaEpsilon[atoms.x];
+        float2 sigEps2 = sigmaEpsilon[atoms.y];
+        float sigma = sigEps1.x*sigEps2.x;
+        float epsilon = sigEps1.y*sigEps2.y;
+#else
         float sigma = 0;
         float epsilon = 0;
+#endif
         exclusionParams[i] = make_float4((float) (ONE_4PI_EPS0*chargeProd), sigma, epsilon, 0);
     }
 }

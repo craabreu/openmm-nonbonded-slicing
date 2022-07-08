@@ -392,7 +392,15 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
+#ifdef USE_LJPME
+    const real recipScaleFactor = -(2*M_PI/6)*SQRT(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
+    real bfac = M_PI / EWALD_ALPHA;
+    real fac1 = 2*M_PI*M_PI*M_PI*SQRT(M_PI);
+    real fac2 = EWALD_ALPHA*EWALD_ALPHA*EWALD_ALPHA;
+    real fac3 = -2*EWALD_ALPHA*M_PI*M_PI;
+#else
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
+#endif
 
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         // real indices
@@ -411,11 +419,23 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
         real bz = pmeBsplineModuliZ[kz];
         real2 grid = pmeGrid[index];
         real m2 = mhx*mhx+mhy*mhy+mhz*mhz;
+#ifdef USE_LJPME
+        real denom = recipScaleFactor/(bx*by*bz);
+        real m = SQRT(m2);
+        real m3 = m*m2;
+        real b = bfac*m;
+        real expfac = -b*b;
+        real expterm = EXP(expfac);
+        real erfcterm = ERFC(b);
+        real eterm = (fac1*erfcterm*m3 + expterm*(fac2 + fac3*m2)) * denom;
+        pmeGrid[index] = make_real2(grid.x*eterm, grid.y*eterm);
+#else
         real denom = m2*bx*by*bz;
         real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
         if (kx != 0 || ky != 0 || kz != 0) {
             pmeGrid[index] = make_real2(grid.x*eterm, grid.y*eterm);
         }
+#endif
     }
 }
 
@@ -424,7 +444,15 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
                       real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+ #ifdef USE_LJPME
+    const real recipScaleFactor = -(2*M_PI/6)*SQRT(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
+    real bfac = M_PI / EWALD_ALPHA;
+    real fac1 = 2*M_PI*M_PI*M_PI*SQRT(M_PI);
+    real fac2 = EWALD_ALPHA*EWALD_ALPHA*EWALD_ALPHA;
+    real fac3 = -2*EWALD_ALPHA*M_PI*M_PI;
+#else
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
+#endif
 
     mixed energy = 0;
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
@@ -443,8 +471,19 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         real bx = pmeBsplineModuliX[kx];
         real by = pmeBsplineModuliY[ky];
         real bz = pmeBsplineModuliZ[kz];
+#ifdef USE_LJPME
+        real denom = recipScaleFactor/(bx*by*bz);
+        real m = SQRT(m2);
+        real m3 = m*m2;
+        real b = bfac*m;
+        real expfac = -b*b;
+        real expterm = EXP(expfac);
+        real erfcterm = ERFC(b);
+        real eterm = (fac1*erfcterm*m3 + expterm*(fac2 + fac3*m2)) * denom;
+#else
         real denom = m2*bx*by*bz;
         real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
+#endif
         if (kz >= (GRID_SIZE_Z/2+1)) {
             kx = ((kx == 0) ? kx : GRID_SIZE_X-kx);
             ky = ((ky == 0) ? ky : GRID_SIZE_Y-ky);
@@ -452,10 +491,12 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         } 
         int indexInHalfComplexGrid = kz + ky*(GRID_SIZE_Z/2+1)+kx*(GRID_SIZE_Y*(GRID_SIZE_Z/2+1));
         real2 grid = pmeGrid[indexInHalfComplexGrid];
+#ifndef USE_LJPME
         if (kx != 0 || ky != 0 || kz != 0)
+#endif
             energy += eterm*(grid.x*grid.x + grid.y*grid.y);
     }
-#if defined(USE_PME_STREAM)
+#if defined(USE_PME_STREAM) && !defined(USE_LJPME)
     energyBuffer[GLOBAL_ID] = 0.5f*energy;
 #else
     energyBuffer[GLOBAL_ID] += 0.5f*energy;
