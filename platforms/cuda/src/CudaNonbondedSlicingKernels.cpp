@@ -248,8 +248,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         exclusionList[exclusion.first].push_back(exclusion.second);
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
-    bool useCutoff = true;
-    bool usePeriodic = true;
     usePosqCharges = hasCoulomb ? cu.requestPosqCharges() : false;
 
     map<string, string> defines;
@@ -504,7 +502,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     sigmaEpsilon.initialize<float2>(cu, cu.getPaddedNumAtoms(), "sigmaEpsilon");
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
-        cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
+        cu.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
 
     // Initialize the exceptions.
 
@@ -527,7 +525,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
         map<string, string> replacements;
-        replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
+        replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams.getDevicePointer(), "float4");
         if (force.getIncludeDirectSpace())
             cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());

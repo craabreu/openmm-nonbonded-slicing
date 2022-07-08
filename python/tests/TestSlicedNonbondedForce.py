@@ -61,7 +61,6 @@ def testCoulomb(platformName, precision):
     nonbonded.addParticle(1.5, 1.0, 0.0)
     nonbonded.addParticle(-1.5, 1.0, 0.0)
     system.addForce(nonbonded)
-    ASSERT(nonbonded.usesPeriodicBoundaryConditions())
     ASSERT(system.usesPeriodicBoundaryConditions())
 
     slicedNonbonded = plugin.SlicedNonbondedForce(nonbonded)

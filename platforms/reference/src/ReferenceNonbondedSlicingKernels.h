@@ -90,7 +90,7 @@ private:
     std::vector<double> particleCharges, exceptionCharges;
     std::map<std::pair<std::string, int>, double> particleParamOffsets, exceptionParamOffsets;
     double nonbondedCutoff, ewaldAlpha;
-    int kmax[3], gridSize[3];
+    int gridSize[3];
     bool exceptionsArePeriodic;
     std::vector<std::set<int> > exclusions;
     OpenMM::NeighborList* neighborList;

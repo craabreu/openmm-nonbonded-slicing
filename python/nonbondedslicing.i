@@ -136,7 +136,6 @@ public:
     bool getIncludeDirectSpace() const;
     void setIncludeDirectSpace(bool include);
     void updateParametersInContext(Context& context);
-    bool usesPeriodicBoundaryConditions() const;
     bool getExceptionsUsePeriodicBoundaryConditions() const;
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
     int getSliceForceGroup(int subset1, int subset2) const;

@@ -483,15 +483,6 @@ public:
      */
     void updateParametersInContext(Context& context);
     /**
-     * Returns whether or not this force makes use of periodic boundary
-     * conditions.
-     *
-     * @returns true if force uses PBC and false otherwise
-     */
-    bool usesPeriodicBoundaryConditions() const {
-        return true;
-    }
-    /**
      * Get whether periodic boundary conditions should be applied to exceptions.  Usually this is not
      * appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and
      * 1-4 pairs), but there are situations when it does make sense.  For nonbondedslicing, you may want to simulate
@@ -537,6 +528,7 @@ public:
     void setSliceForceGroup(int subset1, int subset2, int group);
 protected:
     ForceImpl* createImpl() const;
+    bool usesPeriodicBoundaryConditions() const {return true;}
 private:
     class ParticleInfo;
     class ExceptionInfo;

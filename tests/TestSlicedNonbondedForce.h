@@ -129,7 +129,6 @@ void testCoulomb(Platform& platform) {
     force->setForceGroup(1);
     force->addParticle(1.5);
     force->addParticle(-1.5);
-    ASSERT(force->usesPeriodicBoundaryConditions());
     system.addForce(force);
     ASSERT(system.usesPeriodicBoundaryConditions());
 
@@ -229,7 +228,6 @@ void testPeriodic(Platform& platform) {
     nonbonded->addException(0, 1, 0.0, 1.0, 0.0);
     nonbonded->setCutoffDistance(cutoff);
     system.addForce(nonbonded);
-    ASSERT(nonbonded->usesPeriodicBoundaryConditions());
     ASSERT(system.usesPeriodicBoundaryConditions());
 
     SlicedNonbondedForce* slicedNonbonded = new SlicedNonbondedForce(*nonbonded);

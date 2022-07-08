@@ -260,8 +260,6 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         exclusionList[exclusion.first].push_back(exclusion.second);
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
-    bool useCutoff = true;
-    bool usePeriodic = true;
     usePosqCharges = hasCoulomb ? cl.requestPosqCharges() : false;
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
@@ -486,7 +484,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     sigmaEpsilon.initialize<mm_float2>(cl, cl.getPaddedNumAtoms(), "sigmaEpsilon");
     source = cl.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
-        cl.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
+        cl.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
 
     // Initialize the exceptions.
 
@@ -509,7 +507,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
         map<string, string> replacements;
-        replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
+        replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
         if (force.getIncludeDirectSpace())
             cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
