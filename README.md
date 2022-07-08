@@ -1,8 +1,8 @@
 OpenMM Nonbonded Slicing Plugin
 ===============================
 
-[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3ALinux)
-[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
+[![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3ALinux)
+[![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This project is an [OpenMM] plugin that allows a [NonbondedForce], including its electrostatic
@@ -29,10 +29,10 @@ the OpenMM header files and libraries.
 this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
 
 6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that NONBONDEDSLICING_BUILD_OPENCL_LIB is selected.
+OPENCL_LIBRARY are set correctly, and that PMESLICING_BUILD_OPENCL_LIB is selected.
 
 7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that NONBONDEDSLICING_BUILD_CUDA_LIB is selected.
+and that PMESLICING_BUILD_CUDA_LIB is selected.
 
 8. Press "Configure" again if necessary, then press "Generate".
 
@@ -52,9 +52,9 @@ Once you do that, you can use the plugin from your Python scripts:
 
 ```py
     import openmm as mm
-    import nonbondedslicing as plugin
+    import pmeslicing as plugin
     system = mm.System()
-    force = plugin.SlicedNonbondedForce()
+    force = plugin.SlicedPmeForce()
     system.addForce(force)
 ```
 
