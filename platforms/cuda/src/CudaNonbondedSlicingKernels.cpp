@@ -177,18 +177,12 @@ CudaCalcSlicedNonbondedForceKernel::~CudaCalcSlicedNonbondedForceKernel() {
         delete sort;
     if (fft != NULL)
         delete fft;
-    if (dispersionFft != NULL)
-        delete dispersionFft;
     if (pmeio != NULL)
         delete pmeio;
     if (hasInitializedFFT) {
         if (useCudaFFT) {
             cufftDestroy(fftForward);
             cufftDestroy(fftBackward);
-            if (doLJPME) {
-                cufftDestroy(dispersionFftForward);
-                cufftDestroy(dispersionFftBackward);                
-            }
         }
         if (usePmeStream) {
             cuStreamDestroy(pmeStream);
@@ -257,7 +251,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     }
     bool useCutoff = true;
     bool usePeriodic = true;
-    doLJPME = false;
     usePosqCharges = hasCoulomb ? cu.requestPosqCharges() : false;
 
     map<string, string> defines;
@@ -276,8 +269,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         paramsDefines["HAS_EXCEPTION_OFFSETS"] = "1";
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
-    if (doLJPME)
-        paramsDefines["INCLUDE_LJPME_EXCEPTIONS"] = "1";
     if (hasCoulomb) {
         // Compute the PME parameters.
 
@@ -285,39 +276,16 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX);
         gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
         gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
-        if (doLJPME) {
-            SlicedNonbondedForceImpl::calcPMEParameters(system, force, dispersionAlpha, dispersionGridSizeX,
-                                                  dispersionGridSizeY, dispersionGridSizeZ, true);
-            dispersionGridSizeX = CudaFFT3D::findLegalDimension(dispersionGridSizeX);
-            dispersionGridSizeY = CudaFFT3D::findLegalDimension(dispersionGridSizeY);
-            dispersionGridSizeZ = CudaFFT3D::findLegalDimension(dispersionGridSizeZ);
-        }
 
         defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
         defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
         defines["USE_EWALD"] = "1";
-        defines["DO_LJPME"] = doLJPME ? "1" : "0";
-        if (doLJPME) {
-            defines["EWALD_DISPERSION_ALPHA"] = cu.doubleToString(dispersionAlpha);
-            double invRCut6 = pow(force.getCutoffDistance(), -6);
-            double dalphaR = dispersionAlpha * force.getCutoffDistance();
-            double dar2 = dalphaR*dalphaR;
-            double dar4 = dar2*dar2;
-            double multShift6 = -invRCut6*(1.0 - exp(-dar2) * (1.0 + dar2 + 0.5*dar4));
-            defines["INVCUT6"] = cu.doubleToString(invRCut6);
-            defines["MULTSHIFT6"] = cu.doubleToString(multShift6);
-        }
+        defines["DO_LJPME"] = "0";
         if (cu.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cu.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
             for (int i = 0; i < numParticles; i++)
                 ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            if (doLJPME) {
-                paramsDefines["INCLUDE_LJPME"] = "1";
-                paramsDefines["LJPME_SELF_ENERGY_SCALE"] = cu.doubleToString(pow(dispersionAlpha, 6)/3.0);
-                for (int i = 0; i < numParticles; i++)
-                    ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-            }
             char deviceName[100];
             cuDeviceGetName(deviceName, 100, cu.getDevice());
             usePmeStream = (!cu.getPlatformData().disablePmeStream && !cu.getPlatformData().useCpuPme && string(deviceName) != "GeForce GTX 980"); // Using a separate stream is slower on GTX 980
@@ -340,7 +308,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             CUmodule module = cu.createModule(CudaNonbondedSlicingKernelSources::vectorOps+
                                               CommonNonbondedSlicingKernelSources::realtofixedpoint+
                                               cu.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
-            if (cu.getPlatformData().useCpuPme && !doLJPME && usePosqCharges) {
+            if (cu.getPlatformData().useCpuPme && usePosqCharges) {
                 // Create the CPU PME kernel.
 
                 try {
@@ -364,48 +332,18 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 pmeFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
                 cuFuncSetCacheConfig(pmeSpreadChargeKernel, CU_FUNC_CACHE_PREFER_SHARED);
                 cuFuncSetCacheConfig(pmeInterpolateForceKernel, CU_FUNC_CACHE_PREFER_L1);
-                if (doLJPME) {
-                    pmeDefines["EWALD_ALPHA"] = cu.doubleToString(dispersionAlpha);
-                    pmeDefines["GRID_SIZE_X"] = cu.intToString(dispersionGridSizeX);
-                    pmeDefines["GRID_SIZE_Y"] = cu.intToString(dispersionGridSizeY);
-                    pmeDefines["GRID_SIZE_Z"] = cu.intToString(dispersionGridSizeZ);
-                    pmeDefines["RECIP_EXP_FACTOR"] = cu.doubleToString(M_PI*M_PI/(dispersionAlpha*dispersionAlpha));
-                    pmeDefines["USE_LJPME"] = "1";
-                    pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
-                    if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
-                        pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
-                    module = cu.createModule(CudaNonbondedSlicingKernelSources::vectorOps+
-                                             CommonNonbondedSlicingKernelSources::realtofixedpoint+
-                                             CommonNonbondedSlicingKernelSources::pme, pmeDefines);
-                    pmeDispersionFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
-                    pmeDispersionGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");
-                    pmeDispersionSpreadChargeKernel = cu.getKernel(module, "gridSpreadCharge");
-                    pmeDispersionConvolutionKernel = cu.getKernel(module, "reciprocalConvolution");
-                    pmeEvalDispersionEnergyKernel = cu.getKernel(module, "gridEvaluateEnergy");
-                    pmeInterpolateDispersionForceKernel = cu.getKernel(module, "gridInterpolateForce");
-                    cuFuncSetCacheConfig(pmeDispersionSpreadChargeKernel, CU_FUNC_CACHE_PREFER_L1);
-                }
 
                 // Create required data structures.
 
                 int elementSize = (cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
                 int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
                 int gridElements = gridSizeX*gridSizeY*roundedZSize;
-                if (doLJPME) {
-                    roundedZSize = PmeOrder*(int) ceil(dispersionGridSizeZ/(double) PmeOrder);
-                    gridElements = max(gridElements, dispersionGridSizeX*dispersionGridSizeY*roundedZSize);
-                }
                 pmeGrid1.initialize(cu, gridElements, 2*elementSize, "pmeGrid1");
                 pmeGrid2.initialize(cu, gridElements, 2*elementSize, "pmeGrid2");
                 cu.addAutoclearBuffer(pmeGrid2);
                 pmeBsplineModuliX.initialize(cu, gridSizeX, elementSize, "pmeBsplineModuliX");
                 pmeBsplineModuliY.initialize(cu, gridSizeY, elementSize, "pmeBsplineModuliY");
                 pmeBsplineModuliZ.initialize(cu, gridSizeZ, elementSize, "pmeBsplineModuliZ");
-                if (doLJPME) {
-                    pmeDispersionBsplineModuliX.initialize(cu, dispersionGridSizeX, elementSize, "pmeDispersionBsplineModuliX");
-                    pmeDispersionBsplineModuliY.initialize(cu, dispersionGridSizeY, elementSize, "pmeDispersionBsplineModuliY");
-                    pmeDispersionBsplineModuliZ.initialize(cu, dispersionGridSizeZ, elementSize, "pmeDispersionBsplineModuliZ");
-                }
                 pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
                 pmeEnergyBuffer.initialize(cu, cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
@@ -421,21 +359,9 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                     result = cufftPlan3d(&fftBackward, gridSizeX, gridSizeY, gridSizeZ, cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R);
                     if (result != CUFFT_SUCCESS)
                         throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
-                    if (doLJPME) {
-                        result = cufftPlan3d(&dispersionFftForward, dispersionGridSizeX, dispersionGridSizeY, 
-                                                dispersionGridSizeZ, cu.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C);
-                        if (result != CUFFT_SUCCESS)
-                            throw OpenMMException("Error initializing disperison FFT: "+cu.intToString(result));
-                        result = cufftPlan3d(&dispersionFftBackward, dispersionGridSizeX, dispersionGridSizeY,
-                                             dispersionGridSizeZ, cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R);
-                        if (result != CUFFT_SUCCESS)
-                            throw OpenMMException("Error initializing disperison FFT: "+cu.intToString(result));
-                    }
                 }
                 else {
                     fft = new CudaFFT3D(cu, gridSizeX, gridSizeY, gridSizeZ, true);
-                    if (doLJPME)
-                        dispersionFft = new CudaFFT3D(cu, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, true);
                 }
 
                 // Prepare for doing PME on its own stream.
@@ -445,10 +371,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                     if (useCudaFFT) {
                         cufftSetStream(fftForward, pmeStream);
                         cufftSetStream(fftBackward, pmeStream);
-                        if (doLJPME) {
-                            cufftSetStream(dispersionFftForward, pmeStream);
-                            cufftSetStream(dispersionFftBackward, pmeStream);
-                        }
                     }
                     CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                     CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
@@ -462,82 +384,70 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
                 // Initialize the b-spline moduli.
 
-                for (int grid = 0; grid < 2; grid++) {
-                    int xsize, ysize, zsize;
-                    CudaArray *xmoduli, *ymoduli, *zmoduli;
-                    if (grid == 0) {
-                        xsize = gridSizeX;
-                        ysize = gridSizeY;
-                        zsize = gridSizeZ;
-                        xmoduli = &pmeBsplineModuliX;
-                        ymoduli = &pmeBsplineModuliY;
-                        zmoduli = &pmeBsplineModuliZ;
-                    }
-                    else {
-                        if (!doLJPME)
-                            continue;
-                        xsize = dispersionGridSizeX;
-                        ysize = dispersionGridSizeY;
-                        zsize = dispersionGridSizeZ;
-                        xmoduli = &pmeDispersionBsplineModuliX;
-                        ymoduli = &pmeDispersionBsplineModuliY;
-                        zmoduli = &pmeDispersionBsplineModuliZ;
-                    }
-                    int maxSize = max(max(xsize, ysize), zsize);
-                    vector<double> data(PmeOrder);
-                    vector<double> ddata(PmeOrder);
-                    vector<double> bsplines_data(maxSize);
-                    data[PmeOrder-1] = 0.0;
-                    data[1] = 0.0;
-                    data[0] = 1.0;
-                    for (int i = 3; i < PmeOrder; i++) {
-                        double div = 1.0/(i-1.0);
-                        data[i-1] = 0.0;
-                        for (int j = 1; j < (i-1); j++)
-                            data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
-                        data[0] = div*data[0];
-                    }
+                int xsize, ysize, zsize;
+                CudaArray *xmoduli, *ymoduli, *zmoduli;
 
-                    // Differentiate.
+                xsize = gridSizeX;
+                ysize = gridSizeY;
+                zsize = gridSizeZ;
+                xmoduli = &pmeBsplineModuliX;
+                ymoduli = &pmeBsplineModuliY;
+                zmoduli = &pmeBsplineModuliZ;
 
-                    ddata[0] = -data[0];
-                    for (int i = 1; i < PmeOrder; i++)
-                        ddata[i] = data[i-1]-data[i];
-                    double div = 1.0/(PmeOrder-1);
-                    data[PmeOrder-1] = 0.0;
-                    for (int i = 1; i < (PmeOrder-1); i++)
-                        data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+                int maxSize = max(max(xsize, ysize), zsize);
+                vector<double> data(PmeOrder);
+                vector<double> ddata(PmeOrder);
+                vector<double> bsplines_data(maxSize);
+                data[PmeOrder-1] = 0.0;
+                data[1] = 0.0;
+                data[0] = 1.0;
+                for (int i = 3; i < PmeOrder; i++) {
+                    double div = 1.0/(i-1.0);
+                    data[i-1] = 0.0;
+                    for (int j = 1; j < (i-1); j++)
+                        data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
                     data[0] = div*data[0];
-                    for (int i = 0; i < maxSize; i++)
-                        bsplines_data[i] = 0.0;
-                    for (int i = 1; i <= PmeOrder; i++)
-                        bsplines_data[i] = data[i-1];
+                }
 
-                    // Evaluate the actual bspline moduli for X/Y/Z.
+                // Differentiate.
 
-                    for (int dim = 0; dim < 3; dim++) {
-                        int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
-                        vector<double> moduli(ndata);
-                        for (int i = 0; i < ndata; i++) {
-                            double sc = 0.0;
-                            double ss = 0.0;
-                            for (int j = 0; j < ndata; j++) {
-                                double arg = (2.0*M_PI*i*j)/ndata;
-                                sc += bsplines_data[j]*cos(arg);
-                                ss += bsplines_data[j]*sin(arg);
-                            }
-                            moduli[i] = sc*sc+ss*ss;
+                ddata[0] = -data[0];
+                for (int i = 1; i < PmeOrder; i++)
+                    ddata[i] = data[i-1]-data[i];
+                double div = 1.0/(PmeOrder-1);
+                data[PmeOrder-1] = 0.0;
+                for (int i = 1; i < (PmeOrder-1); i++)
+                    data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+                data[0] = div*data[0];
+                for (int i = 0; i < maxSize; i++)
+                    bsplines_data[i] = 0.0;
+                for (int i = 1; i <= PmeOrder; i++)
+                    bsplines_data[i] = data[i-1];
+
+                // Evaluate the actual bspline moduli for X/Y/Z.
+
+                for (int dim = 0; dim < 3; dim++) {
+                    int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
+                    vector<double> moduli(ndata);
+                    for (int i = 0; i < ndata; i++) {
+                        double sc = 0.0;
+                        double ss = 0.0;
+                        for (int j = 0; j < ndata; j++) {
+                            double arg = (2.0*M_PI*i*j)/ndata;
+                            sc += bsplines_data[j]*cos(arg);
+                            ss += bsplines_data[j]*sin(arg);
                         }
-                        for (int i = 0; i < ndata; i++)
-                            if (moduli[i] < 1.0e-7)
-                                moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
-                        if (dim == 0)
-                            xmoduli->upload(moduli, true);
-                        else if (dim == 1)
-                            ymoduli->upload(moduli, true);
-                        else
-                            zmoduli->upload(moduli, true);
+                        moduli[i] = sc*sc+ss*ss;
                     }
+                    for (int i = 0; i < ndata; i++)
+                        if (moduli[i] < 1.0e-7)
+                            moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
+                    if (dim == 0)
+                        xmoduli->upload(moduli, true);
+                    else if (dim == 1)
+                        ymoduli->upload(moduli, true);
+                    else
+                        zmoduli->upload(moduli, true);
                 }
             }
         }
@@ -567,10 +477,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionParams.getDevicePointer(), "float4");
             replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-            replacements["DO_LJPME"] = doLJPME ? "1" : "0";
+            replacements["DO_LJPME"] = "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-            if (doLJPME)
-                replacements["EWALD_DISPERSION_ALPHA"] = cu.doubleToString(dispersionAlpha);
             if (force.getIncludeDirectSpace())
                 cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
         }
@@ -860,75 +768,6 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             cu.executeKernel(pmeInterpolateForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
         }
 
-        if (doLJPME && hasLJ) {
-            if (!hasCoulomb) {
-                void* gridIndexArgs[] = {&cu.getPosq().getDevicePointer(), &pmeAtomGridIndex.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
-                        cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
-                        recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
-                cu.executeKernel(pmeDispersionGridIndexKernel, gridIndexArgs, cu.getNumAtoms());
-
-                sort->sort(pmeAtomGridIndex);
-                cu.clearBuffer(pmeEnergyBuffer);
-            }
-
-            cu.clearBuffer(pmeGrid2);
-            void* spreadArgs[] = {&cu.getPosq().getDevicePointer(), &pmeGrid2.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
-                    cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
-                    recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                    &sigmaEpsilon.getDevicePointer()};
-            cu.executeKernel(pmeDispersionSpreadChargeKernel, spreadArgs, cu.getNumAtoms(), 128);
-
-            void* finishSpreadArgs[] = {&pmeGrid2.getDevicePointer(), &pmeGrid1.getDevicePointer()};
-            cu.executeKernel(pmeDispersionFinishSpreadChargeKernel, finishSpreadArgs, dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ, 256);
-
-            if (useCudaFFT) {
-                if (cu.getUseDoublePrecision()) {
-                    cufftResult result = cufftExecD2Z(dispersionFftForward, (double*) pmeGrid1.getDevicePointer(), (double2*) pmeGrid2.getDevicePointer());
-                    if (result != CUFFT_SUCCESS)
-                        throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-                } else {
-                    cufftResult result = cufftExecR2C(dispersionFftForward, (float*) pmeGrid1.getDevicePointer(), (float2*) pmeGrid2.getDevicePointer());
-                    if (result != CUFFT_SUCCESS)
-                        throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-                }
-            }
-            else {
-                dispersionFft->execFFT(pmeGrid1, pmeGrid2, true);
-            }
-
-            if (includeEnergy) {
-                void* computeEnergyArgs[] = {&pmeGrid2.getDevicePointer(), usePmeStream ? &pmeEnergyBuffer.getDevicePointer() : &cu.getEnergyBuffer().getDevicePointer(),
-                        &pmeDispersionBsplineModuliX.getDevicePointer(), &pmeDispersionBsplineModuliY.getDevicePointer(), &pmeDispersionBsplineModuliZ.getDevicePointer(),
-                        recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
-                cu.executeKernel(pmeEvalDispersionEnergyKernel, computeEnergyArgs, dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ);
-            }
-
-            void* convolutionArgs[] = {&pmeGrid2.getDevicePointer(), &pmeDispersionBsplineModuliX.getDevicePointer(),
-                    &pmeDispersionBsplineModuliY.getDevicePointer(), &pmeDispersionBsplineModuliZ.getDevicePointer(),
-                    recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
-            cu.executeKernel(pmeDispersionConvolutionKernel, convolutionArgs, dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ, 256);
-
-            if (useCudaFFT) {
-                if (cu.getUseDoublePrecision()) {
-                    cufftResult result = cufftExecZ2D(dispersionFftBackward, (double2*) pmeGrid2.getDevicePointer(), (double*) pmeGrid1.getDevicePointer());
-                    if (result != CUFFT_SUCCESS)
-                        throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-                } else {
-                    cufftResult result = cufftExecC2R(dispersionFftBackward, (float2*) pmeGrid2.getDevicePointer(), (float*)  pmeGrid1.getDevicePointer());
-                    if (result != CUFFT_SUCCESS)
-                        throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-                }
-            }
-            else {
-                dispersionFft->execFFT(pmeGrid2, pmeGrid1, false);
-            }
-
-            void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
-                    cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
-                    recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                    &sigmaEpsilon.getDevicePointer()};
-            cu.executeKernel(pmeInterpolateDispersionForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
-        }
         if (usePmeStream) {
             cuEventRecord(pmeSyncEvent, pmeStream);
             cu.restoreDefaultStream();
@@ -1005,8 +844,6 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
     if (cu.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {
             ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            if (doLJPME)
-                ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
         }
     }
     cu.invalidateMolecules();
@@ -1024,16 +861,3 @@ void CudaCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx
     }
 }
 
-void CudaCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    if (!doLJPME)
-        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
-    if (cu.getPlatformData().useCpuPme)
-        //cpuPme.getAs<CalcPmeReciprocalForceKernel>().getLJPMEParameters(alpha, nx, ny, nz);
-        throw OpenMMException("getPMEParametersInContext: CPUPME has not been implemented for LJPME yet.");
-    else {
-        alpha = this->dispersionAlpha;
-        nx = dispersionGridSizeX;
-        ny = dispersionGridSizeY;
-        nz = dispersionGridSizeZ;
-    }
-}

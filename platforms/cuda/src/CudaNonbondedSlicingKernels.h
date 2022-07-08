@@ -52,7 +52,7 @@ namespace NonbondedSlicing {
 class CudaCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
     CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-            cu(cu), hasInitializedFFT(false), sort(NULL), dispersionFft(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {
+            cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {
     }
     ~CudaCalcSlicedNonbondedForceKernel();
     /**
@@ -97,7 +97,7 @@ public:
      * @param ny      the number of grid points along the Y axis
      * @param nz      the number of grid points along the Z axis
      */
-    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {};
 private:
     class SortTrait : public CudaSort::SortTrait {
         int getDataSize() const {return 8;}
@@ -135,9 +135,6 @@ private:
     CudaArray pmeBsplineModuliX;
     CudaArray pmeBsplineModuliY;
     CudaArray pmeBsplineModuliZ;
-    CudaArray pmeDispersionBsplineModuliX;
-    CudaArray pmeDispersionBsplineModuliY;
-    CudaArray pmeDispersionBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
     CudaSort* sort;
@@ -148,32 +145,22 @@ private:
     CudaFFT3D* fft;
     cufftHandle fftForward;
     cufftHandle fftBackward;
-    CudaFFT3D* dispersionFft;
-    cufftHandle dispersionFftForward;
-    cufftHandle dispersionFftBackward;
     CUfunction computeParamsKernel, computeExclusionParamsKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;
     CUfunction pmeGridIndexKernel;
-    CUfunction pmeDispersionGridIndexKernel;
     CUfunction pmeSpreadChargeKernel;
-    CUfunction pmeDispersionSpreadChargeKernel;
     CUfunction pmeFinishSpreadChargeKernel;
-    CUfunction pmeDispersionFinishSpreadChargeKernel;
     CUfunction pmeEvalEnergyKernel;
-    CUfunction pmeEvalDispersionEnergyKernel;
     CUfunction pmeConvolutionKernel;
-    CUfunction pmeDispersionConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    CUfunction pmeInterpolateDispersionForceKernel;
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
-    int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
-    bool hasCoulomb, hasLJ, usePmeStream, useCudaFFT, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
+    bool hasCoulomb, hasLJ, usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };
 
