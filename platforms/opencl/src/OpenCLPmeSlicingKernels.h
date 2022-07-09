@@ -150,7 +150,7 @@ private:
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
-    bool hasCoulomb, usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
+    bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };
 

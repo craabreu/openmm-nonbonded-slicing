@@ -151,7 +151,7 @@ private:
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
-    bool hasCoulomb, usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
+    bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };
 
