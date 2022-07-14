@@ -11,6 +11,8 @@
 #include "OpenMMDrude.h"
 #include "openmm/RPMDIntegrator.h"
 #include "openmm/RPMDMonteCarloBarostat.h"
+
+#define SWIG_PYTHON_CAST_MODE
 %}
 
 %pythoncode %{
@@ -92,7 +94,7 @@ public:
     void setParticleSubset(int index, int subset);
     double getParticleCharge(int index) const;
     void setParticleCharge(int index, double charge);
-    int addException(int particle1, int particle2, double chargeProd, bool replace = false);
+    int addException(int particle1, int particle2, double chargeProd, bool replace=false);
 
     %apply int& OUTPUT {int& particle1};
     %apply int& OUTPUT {int& particle2};
