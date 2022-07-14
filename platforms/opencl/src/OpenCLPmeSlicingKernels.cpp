@@ -238,11 +238,10 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
-    vector<mm_float4> baseParticleParamVec(cl.getPaddedNumAtoms(), mm_float4(0, 0, 0, 0));
+    vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
-        double charge = force.getParticleCharge(i);
-        baseParticleParamVec[i] = mm_float4(charge, 1, 0, 0);
+        baseParticleChargeVec[i] = force.getParticleCharge(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -281,7 +280,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         paramsDefines["INCLUDE_EWALD"] = "1";
         paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
         for (int i = 0; i < numParticles; i++)
-            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
         pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
@@ -431,7 +430,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             paramsDefines["HAS_EXCLUSIONS"] = "1";
             vector<vector<int> > atoms(numExclusions, vector<int>(2));
             exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
-            exclusionParams.initialize<mm_float4>(cl, numExclusions, "exclusionParams");
+            exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
             vector<mm_int2> exclusionAtomsVec(numExclusions);
             for (int i = 0; i < numExclusions; i++) {
                 int j = i+startIndex;
@@ -441,7 +440,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             }
             exclusionAtoms.upload(exclusionAtomsVec);
             map<string, string> replacements;
-            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionParams.getDeviceBuffer(), "float4");
+            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
             replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
             replacements["DO_LJPME"] = "0";
@@ -455,8 +454,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     
     string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
-    baseParticleParams.initialize<mm_float4>(cl, cl.getPaddedNumAtoms(), "baseParticleParams");
-    baseParticleParams.upload(baseParticleParamVec);
+    baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
+    baseParticleCharges.upload(baseParticleChargeVec);
     map<string, string> replacements;
     replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
     if (usePosqCharges) {
@@ -484,27 +483,27 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         paramsDefines["HAS_EXCEPTIONS"] = "1";
         exceptionAtoms.resize(numExceptions);
         vector<vector<int> > atoms(numExceptions, vector<int>(2));
-        exceptionParams.initialize<mm_float4>(cl, numExceptions, "exceptionParams");
-        baseExceptionParams.initialize<mm_float4>(cl, numExceptions, "baseExceptionParams");
-        vector<mm_float4> baseExceptionParamsVec(numExceptions);
+        exceptionChargeProds.initialize<float>(cl, numExceptions, "exceptionChargeProds");
+        baseExceptionChargeProds.initialize<float>(cl, numExceptions, "baseExceptionChargeProds");
+        vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             double chargeProd;
             force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd);
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, 1, 0, 0);
+            baseExceptionChargeProdsVec[i] = chargeProd;
             exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
         }
-        baseExceptionParams.upload(baseExceptionParamsVec);
+        baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
-        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
+        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
         if (force.getIncludeDirectSpace())
             cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
 
-    vector<vector<mm_float4> > particleOffsetVec(force.getNumParticles());
-    vector<vector<mm_float4> > exceptionOffsetVec(numExceptions);
+    vector<vector<mm_float2> > particleOffsetVec(force.getNumParticles());
+    vector<vector<mm_float2> > exceptionOffsetVec(numExceptions);
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
         int particle;
@@ -518,7 +517,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        particleOffsetVec[particle].push_back(mm_float4(charge, 0, 0, paramIndex));
+        particleOffsetVec[particle].push_back(mm_float2(charge, paramIndex));
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
@@ -536,13 +535,13 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        exceptionOffsetVec[index-startIndex].push_back(mm_float4(charge, 0, 0, paramIndex));
+        exceptionOffsetVec[index-startIndex].push_back(mm_float2(charge, paramIndex));
     }
     paramValues.resize(paramNames.size(), 0.0);
-    particleParamOffsets.initialize<mm_float4>(cl, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
+    particleParamOffsets.initialize<mm_float2>(cl, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
     particleOffsetIndices.initialize<cl_int>(cl, cl.getPaddedNumAtoms()+1, "particleOffsetIndices");
     vector<cl_int> particleOffsetIndicesVec, exceptionOffsetIndicesVec;
-    vector<mm_float4> p, e;
+    vector<mm_float2> p, e;
     for (int i = 0; i < particleOffsetVec.size(); i++) {
         particleOffsetIndicesVec.push_back(p.size());
         for (int j = 0; j < particleOffsetVec[i].size(); j++)
@@ -560,7 +559,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         particleParamOffsets.upload(p);
         particleOffsetIndices.upload(particleOffsetIndicesVec);
     }
-    exceptionParamOffsets.initialize<mm_float4>(cl, max((int) e.size(), 1), "exceptionParamOffsets");
+    exceptionParamOffsets.initialize<mm_float2>(cl, max((int) e.size(), 1), "exceptionParamOffsets");
     exceptionOffsetIndices.initialize<cl_int>(cl, exceptionOffsetIndicesVec.size(), "exceptionOffsetIndices");
     if (e.size() > 0) {
         exceptionParamOffsets.upload(e);
@@ -589,26 +588,26 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         index++;
         computeParamsKernel.setArg<cl::Buffer>(index++, globalParams.getDeviceBuffer());
         computeParamsKernel.setArg<cl_int>(index++, cl.getPaddedNumAtoms());
-        computeParamsKernel.setArg<cl::Buffer>(index++, baseParticleParams.getDeviceBuffer());
+        computeParamsKernel.setArg<cl::Buffer>(index++, baseParticleCharges.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, cl.getPosq().getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, charges.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, sigmaEpsilon.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleParamOffsets.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleOffsetIndices.getDeviceBuffer());
-        if (exceptionParams.isInitialized()) {
-            computeParamsKernel.setArg<cl_int>(index++, exceptionParams.getSize());
-            computeParamsKernel.setArg<cl::Buffer>(index++, baseExceptionParams.getDeviceBuffer());
-            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParams.getDeviceBuffer());
+        if (exceptionChargeProds.isInitialized()) {
+            computeParamsKernel.setArg<cl_int>(index++, exceptionChargeProds.getSize());
+            computeParamsKernel.setArg<cl::Buffer>(index++, baseExceptionChargeProds.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionChargeProds.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParamOffsets.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionOffsetIndices.getDeviceBuffer());
         }
-        if (exclusionParams.isInitialized()) {
+        if (exclusionChargeProds.isInitialized()) {
             computeExclusionParamsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(1, charges.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(2, sigmaEpsilon.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl_int>(3, exclusionParams.getSize());
+            computeExclusionParamsKernel.setArg<cl_int>(3, exclusionChargeProds.getSize());
             computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionAtoms.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionParams.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionChargeProds.getDeviceBuffer());
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
@@ -696,8 +695,8 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     if (recomputeParams || hasOffsets) {
         computeParamsKernel.setArg<cl_int>(1, includeEnergy && includeReciprocal);
         cl.executeKernel(computeParamsKernel, cl.getPaddedNumAtoms());
-        if (exclusionParams.isInitialized())
-            cl.executeKernel(computeExclusionParamsKernel, exclusionParams.getSize());
+        if (exclusionChargeProds.isInitialized())
+            cl.executeKernel(computeExclusionParamsKernel, exclusionChargeProds.getSize());
         if (usePmeQueue) {
             vector<cl::Event> events(1);
             cl.getQueue().enqueueMarkerWithWaitList(NULL, &events[0]);
@@ -859,26 +858,24 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
 
     // Record the per-particle parameters.
 
-    vector<mm_float4> baseParticleParamVec(cl.getPaddedNumAtoms(), mm_float4(0, 0, 0, 0));
-    for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge = force.getParticleCharge(i);
-        baseParticleParamVec[i] = mm_float4(charge, 1, 0, 0);
-    }
-    baseParticleParams.upload(baseParticleParamVec);
+    vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
+    for (int i = 0; i < force.getNumParticles(); i++)
+        baseParticleChargeVec[i] = force.getParticleCharge(i);
+    baseParticleCharges.upload(baseParticleChargeVec);
     
     // Record the exceptions.
     
     if (numExceptions > 0) {
-        vector<mm_float4> baseExceptionParamsVec(numExceptions);
+        vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             int particle1, particle2;
             double chargeProd;
             force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd);
             if (make_pair(particle1, particle2) != exceptionAtoms[i])
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, 1, 0, 0);
+            baseExceptionChargeProdsVec[i] = chargeProd;
         }
-        baseExceptionParams.upload(baseExceptionParamsVec);
+        baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
     
     // Compute other values.
@@ -886,7 +883,7 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     ewaldSelfEnergy = 0.0;
     if (cl.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {
-            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
         }
     }
     cl.invalidateMolecules(info);

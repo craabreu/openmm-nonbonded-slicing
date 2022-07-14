@@ -111,11 +111,11 @@ private:
     bool hasInitializedFFT;
     CudaArray charges;
     CudaArray sigmaEpsilon;
-    CudaArray exceptionParams;
+    CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
-    CudaArray exclusionParams;
-    CudaArray baseParticleParams;
-    CudaArray baseExceptionParams;
+    CudaArray exclusionChargeProds;
+    CudaArray baseParticleCharges;
+    CudaArray baseExceptionChargeProds;
     CudaArray particleParamOffsets;
     CudaArray exceptionParamOffsets;
     CudaArray particleOffsetIndices;

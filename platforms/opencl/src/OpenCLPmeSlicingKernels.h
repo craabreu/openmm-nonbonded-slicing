@@ -107,11 +107,11 @@ private:
     bool hasInitializedKernel;
     OpenCLArray charges;
     OpenCLArray sigmaEpsilon;
-    OpenCLArray exceptionParams;
+    OpenCLArray exceptionChargeProds;
     OpenCLArray exclusionAtoms;
-    OpenCLArray exclusionParams;
-    OpenCLArray baseParticleParams;
-    OpenCLArray baseExceptionParams;
+    OpenCLArray exclusionChargeProds;
+    OpenCLArray baseParticleCharges;
+    OpenCLArray baseExceptionChargeProds;
     OpenCLArray particleParamOffsets;
     OpenCLArray exceptionParamOffsets;
     OpenCLArray particleOffsetIndices;

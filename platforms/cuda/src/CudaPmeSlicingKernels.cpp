@@ -226,11 +226,10 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
-    vector<float4> baseParticleParamVec(cu.getPaddedNumAtoms(), make_float4(0, 0, 0, 0));
+    vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
-        double charge = force.getParticleCharge(i);
-        baseParticleParamVec[i] = make_float4(charge, 1, 0, 0);
+        baseParticleChargeVec[i] = force.getParticleCharge(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -271,7 +270,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         paramsDefines["INCLUDE_EWALD"] = "1";
         paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cu.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
         for (int i = 0; i < numParticles; i++)
-            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
         char deviceName[100];
         cuDeviceGetName(deviceName, 100, cu.getDevice());
         usePmeStream = (!cu.getPlatformData().disablePmeStream && !cu.getPlatformData().useCpuPme && string(deviceName) != "GeForce GTX 980"); // Using a separate stream is slower on GTX 980
@@ -449,7 +448,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             paramsDefines["HAS_EXCLUSIONS"] = "1";
             vector<vector<int> > atoms(numExclusions, vector<int>(2));
             exclusionAtoms.initialize<int2>(cu, numExclusions, "exclusionAtoms");
-            exclusionParams.initialize<float4>(cu, numExclusions, "exclusionParams");
+            exclusionChargeProds.initialize<float>(cu, numExclusions, "exclusionChargeProds");
             vector<int2> exclusionAtomsVec(numExclusions);
             for (int i = 0; i < numExclusions; i++) {
                 int j = i+startIndex;
@@ -459,7 +458,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             }
             exclusionAtoms.upload(exclusionAtomsVec);
             map<string, string> replacements;
-            replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionParams.getDevicePointer(), "float4");
+            replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionChargeProds.getDevicePointer(), "float");
             replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
             replacements["DO_LJPME"] = "0";
@@ -473,8 +472,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
-    baseParticleParams.initialize<float4>(cu, cu.getPaddedNumAtoms(), "baseParticleParams");
-    baseParticleParams.upload(baseParticleParamVec);
+    baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
+    baseParticleCharges.upload(baseParticleChargeVec);
     map<string, string> replacements;
     replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
     if (usePosqCharges) {
@@ -502,27 +501,27 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         paramsDefines["HAS_EXCEPTIONS"] = "1";
         exceptionAtoms.resize(numExceptions);
         vector<vector<int> > atoms(numExceptions, vector<int>(2));
-        exceptionParams.initialize<float4>(cu, numExceptions, "exceptionParams");
-        baseExceptionParams.initialize<float4>(cu, numExceptions, "baseExceptionParams");
-        vector<float4> baseExceptionParamsVec(numExceptions);
+        exceptionChargeProds.initialize<float>(cu, numExceptions, "exceptionChargeProds");
+        baseExceptionChargeProds.initialize<float>(cu, numExceptions, "baseExceptionChargeProds");
+        vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             double chargeProd;
             force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd);
-            baseExceptionParamsVec[i] = make_float4(chargeProd, 1, 0, 0);
+            baseExceptionChargeProdsVec[i] = chargeProd;
             exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
         }
-        baseExceptionParams.upload(baseExceptionParamsVec);
+        baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
-        replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams.getDevicePointer(), "float4");
+        replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionChargeProds.getDevicePointer(), "float");
         if (force.getIncludeDirectSpace())
             cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
 
-    vector<vector<float4> > particleOffsetVec(force.getNumParticles());
-    vector<vector<float4> > exceptionOffsetVec(numExceptions);
+    vector<vector<float2> > particleOffsetVec(force.getNumParticles());
+    vector<vector<float2> > exceptionOffsetVec(numExceptions);
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
         int particle;
@@ -536,7 +535,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        particleOffsetVec[particle].push_back(make_float4(charge, 0, 0, paramIndex));
+        particleOffsetVec[particle].push_back(make_float2(charge, paramIndex));
     }
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
@@ -554,13 +553,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         }
         else
             paramIndex = paramPos-paramNames.begin();
-        exceptionOffsetVec[index-startIndex].push_back(make_float4(charge, 0, 0, paramIndex));
+        exceptionOffsetVec[index-startIndex].push_back(make_float2(charge, paramIndex));
     }
     paramValues.resize(paramNames.size(), 0.0);
-    particleParamOffsets.initialize<float4>(cu, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
+    particleParamOffsets.initialize<float2>(cu, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
     particleOffsetIndices.initialize<int>(cu, cu.getPaddedNumAtoms()+1, "particleOffsetIndices");
     vector<int> particleOffsetIndicesVec, exceptionOffsetIndicesVec;
-    vector<float4> p, e;
+    vector<float2> p, e;
     for (int i = 0; i < particleOffsetVec.size(); i++) {
         particleOffsetIndicesVec.push_back(p.size());
         for (int j = 0; j < particleOffsetVec[i].size(); j++)
@@ -578,7 +577,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         particleParamOffsets.upload(p);
         particleOffsetIndices.upload(particleOffsetIndicesVec);
     }
-    exceptionParamOffsets.initialize<float4>(cu, max((int) e.size(), 1), "exceptionParamOffsets");
+    exceptionParamOffsets.initialize<float2>(cu, max((int) e.size(), 1), "exceptionParamOffsets");
     exceptionOffsetIndices.initialize<int>(cu, exceptionOffsetIndicesVec.size(), "exceptionOffsetIndices");
     if (e.size() > 0) {
         exceptionParamOffsets.upload(e);
@@ -619,23 +618,23 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         int computeSelfEnergy = (includeEnergy && includeReciprocal);
         int numAtoms = cu.getPaddedNumAtoms();
         vector<void*> paramsArgs = {&cu.getEnergyBuffer().getDevicePointer(), &computeSelfEnergy, &globalParams.getDevicePointer(), &numAtoms,
-                &baseParticleParams.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
+                &baseParticleCharges.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
                 &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer()};
         int numExceptions;
-        if (exceptionParams.isInitialized()) {
-            numExceptions = exceptionParams.getSize();
+        if (exceptionChargeProds.isInitialized()) {
+            numExceptions = exceptionChargeProds.getSize();
             paramsArgs.push_back(&numExceptions);
-            paramsArgs.push_back(&baseExceptionParams.getDevicePointer());
-            paramsArgs.push_back(&exceptionParams.getDevicePointer());
+            paramsArgs.push_back(&baseExceptionChargeProds.getDevicePointer());
+            paramsArgs.push_back(&exceptionChargeProds.getDevicePointer());
             paramsArgs.push_back(&exceptionParamOffsets.getDevicePointer());
             paramsArgs.push_back(&exceptionOffsetIndices.getDevicePointer());
         }
         cu.executeKernel(computeParamsKernel, &paramsArgs[0], cu.getPaddedNumAtoms());
-        if (exclusionParams.isInitialized()) {
-            int numExclusions = exclusionParams.getSize();
-            vector<void*> exclusionParamsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
-                    &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionParams.getDevicePointer()};
-            cu.executeKernel(computeExclusionParamsKernel, &exclusionParamsArgs[0], numExclusions);
+        if (exclusionChargeProds.isInitialized()) {
+            int numExclusions = exclusionChargeProds.getSize();
+            vector<void*> exclusionChargeProdsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
+                    &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionChargeProds.getDevicePointer()};
+            cu.executeKernel(computeExclusionParamsKernel, &exclusionChargeProdsArgs[0], numExclusions);
         }
         if (usePmeStream) {
             cuEventRecord(paramsSyncEvent, cu.getCurrentStream());
@@ -785,27 +784,25 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     
     // Record the per-particle parameters.
     
-    vector<float4> baseParticleParamVec(cu.getPaddedNumAtoms(), make_float4(0, 0, 0, 0));
+    vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
     const vector<int>& order = cu.getAtomIndex();
-    for (int i = 0; i < force.getNumParticles(); i++) {
-        double charge = force.getParticleCharge(i);
-        baseParticleParamVec[i] = make_float4(charge, 1, 0, 0);
-    }
-    baseParticleParams.upload(baseParticleParamVec);
+    for (int i = 0; i < force.getNumParticles(); i++)
+        baseParticleChargeVec[i] = force.getParticleCharge(i);
+    baseParticleCharges.upload(baseParticleChargeVec);
     
     // Record the exceptions.
     
     if (numExceptions > 0) {
-        vector<float4> baseExceptionParamsVec(numExceptions);
+        vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             int particle1, particle2;
             double chargeProd;
             force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd);
             if (make_pair(particle1, particle2) != exceptionAtoms[i])
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-            baseExceptionParamsVec[i] = make_float4(chargeProd, 1, 0, 0);
+            baseExceptionChargeProdsVec[i] = chargeProd;
         }
-        baseExceptionParams.upload(baseExceptionParamsVec);
+        baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
     
     // Compute other values.
@@ -813,7 +810,7 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     ewaldSelfEnergy = 0.0;
     if (cu.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {
-            ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
         }
     }
     cu.invalidateMolecules();
