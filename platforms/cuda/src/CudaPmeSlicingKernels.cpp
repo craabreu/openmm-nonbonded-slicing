@@ -515,7 +515,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionChargeProds.getDevicePointer(), "float");
         if (force.getIncludeDirectSpace())
-            cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
+            cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::pmeExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
@@ -590,7 +590,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     
     // Initialize the kernel for updating parameters.
     
-    CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::nonbondedParameters, paramsDefines);
+    CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::pmeParameters, paramsDefines);
     computeParamsKernel = cu.getKernel(module, "computeParameters");
     computeExclusionParamsKernel = cu.getKernel(module, "computeExclusionParameters");
     info = new ForceInfo(force);

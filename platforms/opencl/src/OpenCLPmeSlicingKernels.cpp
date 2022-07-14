@@ -497,7 +497,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
         if (force.getIncludeDirectSpace())
-            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
+            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::pmeExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
@@ -572,7 +572,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     
     // Initialize the kernel for updating parameters.
     
-    cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::nonbondedParameters, paramsDefines);
+    cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::pmeParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
     info = new ForceInfo(cl.getNonbondedUtilities().getNumForceBuffers(), force);
