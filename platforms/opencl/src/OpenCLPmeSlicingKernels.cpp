@@ -468,7 +468,6 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     }
     if (!usePosqCharges)
         cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDeviceBuffer()));
-    sigmaEpsilon.initialize<mm_float2>(cl, cl.getPaddedNumAtoms(), "sigmaEpsilon");
     source = cl.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cl.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
@@ -591,7 +590,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         computeParamsKernel.setArg<cl::Buffer>(index++, baseParticleCharges.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, cl.getPosq().getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, charges.getDeviceBuffer());
-        computeParamsKernel.setArg<cl::Buffer>(index++, sigmaEpsilon.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleParamOffsets.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleOffsetIndices.getDeviceBuffer());
         if (exceptionChargeProds.isInitialized()) {
@@ -604,10 +602,9 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         if (exclusionChargeProds.isInitialized()) {
             computeExclusionParamsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(1, charges.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(2, sigmaEpsilon.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl_int>(3, exclusionChargeProds.getSize());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionAtoms.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionChargeProds.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl_int>(2, exclusionChargeProds.getSize());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(3, exclusionAtoms.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionChargeProds.getDeviceBuffer());
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.

@@ -486,7 +486,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     }
     if (!usePosqCharges)
         cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDevicePointer()));
-    sigmaEpsilon.initialize<float2>(cu, cu.getPaddedNumAtoms(), "sigmaEpsilon");
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cu.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
@@ -618,7 +617,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         int computeSelfEnergy = (includeEnergy && includeReciprocal);
         int numAtoms = cu.getPaddedNumAtoms();
         vector<void*> paramsArgs = {&cu.getEnergyBuffer().getDevicePointer(), &computeSelfEnergy, &globalParams.getDevicePointer(), &numAtoms,
-                &baseParticleCharges.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
+                &baseParticleCharges.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(),
                 &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer()};
         int numExceptions;
         if (exceptionChargeProds.isInitialized()) {
@@ -632,7 +631,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         cu.executeKernel(computeParamsKernel, &paramsArgs[0], cu.getPaddedNumAtoms());
         if (exclusionChargeProds.isInitialized()) {
             int numExclusions = exclusionChargeProds.getSize();
-            vector<void*> exclusionChargeProdsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
+            vector<void*> exclusionChargeProdsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(),
                     &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionChargeProds.getDevicePointer()};
             cu.executeKernel(computeExclusionParamsKernel, &exclusionChargeProdsArgs[0], numExclusions);
         }

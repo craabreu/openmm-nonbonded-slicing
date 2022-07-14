@@ -3,7 +3,7 @@
  */
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float* RESTRICT baseParticleCharges, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
-        GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float2* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices
+        GLOBAL float2* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices
 #ifdef HAS_EXCEPTIONS
         , int numExceptions, GLOBAL const float* RESTRICT baseExceptionChargeProds, GLOBAL float* RESTRICT exceptionChargeProds,
         GLOBAL float2* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
@@ -56,7 +56,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 /**
  * Compute parameters for subtracting the reciprocal part of excluded interactions.
  */
-KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge, GLOBAL float2* RESTRICT sigmaEpsilon,
+KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL float* RESTRICT exclusionChargeProds) {
     for (int i = GLOBAL_ID; i < numExclusions; i += GLOBAL_SIZE) {
         int2 atoms = exclusionAtoms[i];

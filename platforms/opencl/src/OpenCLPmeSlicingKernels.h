@@ -106,7 +106,6 @@ private:
     ForceInfo* info;
     bool hasInitializedKernel;
     OpenCLArray charges;
-    OpenCLArray sigmaEpsilon;
     OpenCLArray exceptionChargeProds;
     OpenCLArray exclusionAtoms;
     OpenCLArray exclusionChargeProds;

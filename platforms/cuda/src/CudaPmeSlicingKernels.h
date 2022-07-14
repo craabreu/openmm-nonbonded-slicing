@@ -110,7 +110,6 @@ private:
     ForceInfo* info;
     bool hasInitializedFFT;
     CudaArray charges;
-    CudaArray sigmaEpsilon;
     CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
     CudaArray exclusionChargeProds;
