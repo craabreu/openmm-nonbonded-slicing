@@ -89,7 +89,7 @@ ENDIF (APPLE)
 INSTALL(TARGETS ${SHARED_TARGET} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/plugins)
 # Ensure that links to the main OPENCL library will be resolved.
 IF (APPLE)
-    SET(OPENCL_LIBRARY libOpenMMOPENCL.dylib)
+    SET(OPENCL_LIBRARY libOpenMMOpenCL.dylib)
     INSTALL(CODE "EXECUTE_PROCESS(COMMAND install_name_tool -change ${OPENCL_LIBRARY} @loader_path/${OPENCL_LIBRARY} ${CMAKE_INSTALL_PREFIX}/lib/plugins/lib${SHARED_TARGET}.dylib)")
 ENDIF (APPLE)
 
