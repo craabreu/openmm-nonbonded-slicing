@@ -301,7 +301,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
                 cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), *cl.getPlatformData().context);
                 cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
                 cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::realtofixedpoint+
-                                                        CommonPmeSlicingKernelSources::pme, pmeDefines);
+                                                        CommonPmeSlicingKernelSources::slicedPme, pmeDefines);
                 cl::Kernel addForcesKernel = cl::Kernel(program, "addForces");
                 pmeio = new PmeIO(cl, addForcesKernel);
                 cl.addPreComputation(new PmePreComputation(cl, cpuPme, *pmeio));
@@ -446,7 +446,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             replacements["DO_LJPME"] = "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (force.getIncludeDirectSpace())
-                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
+                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
         }
     }
 
@@ -496,7 +496,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
         if (force.getIncludeDirectSpace())
-            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::pmeExceptions, replacements), force.getForceGroup());
+            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
     
     // Initialize parameter offsets.
@@ -571,7 +571,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     
     // Initialize the kernel for updating parameters.
     
-    cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::pmeParameters, paramsDefines);
+    cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
     info = new ForceInfo(cl.getNonbondedUtilities().getNumForceBuffers(), force);
@@ -612,7 +612,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
             cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::realtofixedpoint+
-                                                   cl.replaceStrings(CommonPmeSlicingKernelSources::pme, replacements), pmeDefines);
+                                                   cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
