@@ -110,6 +110,7 @@ private:
     ForceInfo* info;
     bool hasInitializedFFT;
     CudaArray charges;
+    CudaArray subsets;
     CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
     CudaArray exclusionChargeProds;
@@ -149,7 +150,7 @@ private:
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
-    int gridSizeX, gridSizeY, gridSizeZ;
+    int gridSizeX, gridSizeY, gridSizeZ, numSubsets;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };

@@ -1,4 +1,4 @@
-KERNEL void findAtomGridIndex(GLOBAL const real4* RESTRICT posq, GLOBAL int2* RESTRICT pmeAtomGridIndex,
+KERNEL void findAtomGridIndex(GLOBAL const real4* RESTRICT posq, GLOBAL const int* RESTRICT subsets, GLOBAL int2* RESTRICT pmeAtomGridIndex,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ
 #ifndef SUPPORTS_64_BIT_ATOMICS
@@ -20,7 +20,8 @@ KERNEL void findAtomGridIndex(GLOBAL const real4* RESTRICT posq, GLOBAL int2* RE
         int3 gridIndex = make_int3(((int) t.x) % GRID_SIZE_X,
                                    ((int) t.y) % GRID_SIZE_Y,
                                    ((int) t.z) % GRID_SIZE_Z);
-        pmeAtomGridIndex[atom] = make_int2(atom, gridIndex.x*GRID_SIZE_Y*GRID_SIZE_Z+gridIndex.y*GRID_SIZE_Z+gridIndex.z);
+        int subset = subsets[atom];
+        pmeAtomGridIndex[atom] = make_int2(atom, ((subset*GRID_SIZE_X+gridIndex.x)*GRID_SIZE_Y+gridIndex.y)*GRID_SIZE_Z+gridIndex.z);
 #ifndef SUPPORTS_64_BIT_ATOMICS
         // Compute B-splines here for use in the charge spreading kernel.
         const real4 scale = 1/(real) (PME_ORDER-1);

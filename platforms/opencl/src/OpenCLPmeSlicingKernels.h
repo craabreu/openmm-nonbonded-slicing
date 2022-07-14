@@ -33,10 +33,10 @@
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
+#include "internal/OpenCLFFT3DMany.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/opencl/OpenCLContext.h"
 #include "openmm/opencl/OpenCLArray.h"
-#include "openmm/opencl/OpenCLFFT3D.h"
 #include "openmm/opencl/OpenCLSort.h"
 #include <vector>
 
@@ -106,6 +106,7 @@ private:
     ForceInfo* info;
     bool hasInitializedKernel;
     OpenCLArray charges;
+    OpenCLArray subsets;
     OpenCLArray exceptionChargeProds;
     OpenCLArray exclusionAtoms;
     OpenCLArray exclusionChargeProds;
@@ -128,7 +129,7 @@ private:
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
-    OpenCLFFT3D* fft;
+    OpenCLFFT3DMany* fft;
     Kernel cpuPme;
     PmeIO* pmeio;
     SyncQueuePostComputation* syncQueue;
