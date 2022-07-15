@@ -649,8 +649,10 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(10, pmeAtomGridIndex.getDeviceBuffer());
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(11, charges.getDeviceBuffer());
             }
-            else if (deviceIsCpu)
+            else if (deviceIsCpu) {
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(10, charges.getDeviceBuffer());
+                pmeSpreadChargeKernel.setArg<cl::Buffer>(12, subsets.getDeviceBuffer());
+            }
             else {
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(2, pmeAtomGridIndex.getDeviceBuffer());
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(3, pmeAtomRange.getDeviceBuffer());
