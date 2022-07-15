@@ -261,9 +261,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     // Compute the PME parameters.
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
-    gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX);
-    gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
-    gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
+    gridSizeX = CudaFFT3DMany::findLegalDimension(gridSizeX);
+    gridSizeY = CudaFFT3DMany::findLegalDimension(gridSizeY);
+    gridSizeZ = CudaFFT3DMany::findLegalDimension(gridSizeZ);
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -355,7 +355,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                     throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
             }
             else {
-                fft = new CudaFFT3D(cu, gridSizeX, gridSizeY, gridSizeZ, true);
+                fft = new CudaFFT3DMany(cu, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
             }
 
             // Prepare for doing PME on its own stream.

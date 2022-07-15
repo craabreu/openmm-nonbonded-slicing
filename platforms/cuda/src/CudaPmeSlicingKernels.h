@@ -33,11 +33,11 @@
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
+#include "internal/CudaFFT3DMany.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaSort.h"
-#include "openmm/cuda/CudaFFT3D.h"
 #include <vector>
 #include <cufft.h>
 
@@ -133,7 +133,7 @@ private:
     PmeIO* pmeio;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
-    CudaFFT3D* fft;
+    CudaFFT3DMany* fft;
     cufftHandle fftForward;
     cufftHandle fftBackward;
     CUfunction computeParamsKernel, computeExclusionParamsKernel;

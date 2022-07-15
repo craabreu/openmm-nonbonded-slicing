@@ -1,5 +1,5 @@
-#ifndef __OPENMM_OPENCLFFT3DMANY_H__
-#define __OPENMM_OPENCLFFT3DMANY_H__
+#ifndef __OPENMM_CUDAFFT3DMANY_H__
+#define __OPENMM_CUDAFFT3DMANY_H__
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -27,7 +27,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.      *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/opencl/OpenCLArray.h"
+#include "openmm/cuda/CudaArray.h"
 
 using namespace OpenMM;
 
@@ -54,10 +54,10 @@ namespace PmeSlicing {
  * multiply every value of the original data set by the total number of data points.
  */
 
-class OpenCLFFT3DMany {
+class CudaFFT3DMany {
 public:
     /**
-     * Create an OpenCLFFT3DMany object for performing transforms of a particular size.
+     * Create an CudaFFT3DMany object for performing transforms of a particular size.
      *
      * @param context the context in which to perform calculations
      * @param xsize   the first dimension of the data sets on which FFTs will be performed
@@ -66,7 +66,7 @@ public:
      * @param batch   the number of simultaneous FFTs
      * @param realToComplex  if true, a real-to-complex transform will be done.  Otherwise, it is complex-to-complex.
      */
-    OpenCLFFT3DMany(OpenCLContext& context, int xsize, int ysize, int zsize, int batch, bool realToComplex=false);
+    CudaFFT3DMany(CudaContext& context, int xsize, int ysize, int zsize, int batch, bool realToComplex=false);
     /**
      * Perform a Fourier transform.  The transform cannot be done in-place: the input and output
      * arrays must be different.  Also, the input array is used as workspace, so its contents
@@ -80,7 +80,7 @@ public:
      * @param out      on exit, this contains the transformed data
      * @param forward  true to perform a forward transform, false to perform an inverse transform
      */
-    void execFFT(OpenCLArray& in, OpenCLArray& out, bool forward = true);
+    void execFFT(CudaArray& in, CudaArray& out, bool forward = true);
     /**
      * Get the smallest legal size for a dimension of the grid (that is, a size with no prime
      * factors other than 2, 3, 5, and 7).
@@ -89,16 +89,16 @@ public:
      */
     static int findLegalDimension(int minimum);
 private:
-    cl::Kernel createKernel(int xsize, int ysize, int zsize, int batch, int& threads, int axis, bool forward, bool inputIsReal);
+    CUfunction createKernel(int xsize, int ysize, int zsize, int batch, int& threads, int axis, bool forward, bool inputIsReal);
     int xsize, ysize, zsize;
     int xthreads, ythreads, zthreads;
     bool packRealAsComplex;
-    OpenCLContext& context;
-    cl::Kernel xkernel, ykernel, zkernel;
-    cl::Kernel invxkernel, invykernel, invzkernel;
-    cl::Kernel packForwardKernel, unpackForwardKernel, packBackwardKernel, unpackBackwardKernel;
+    CudaContext& context;
+    CUfunction xkernel, ykernel, zkernel;
+    CUfunction invxkernel, invykernel, invzkernel;
+    CUfunction packForwardKernel, unpackForwardKernel, packBackwardKernel, unpackBackwardKernel;
 };
 
 } // namespace PmeSlicing
 
-#endif // __OPENMM_OPENCLFFT3DMANY_H__
+#endif // __OPENMM_CUDAFFT3DMANY_H__
