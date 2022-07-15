@@ -79,6 +79,8 @@ OpenCLFFT3DMany::OpenCLFFT3DMany(OpenCLContext& context, int xsize, int ysize, i
             defines["PACKED_YSIZE"] = context.intToString(packedYSize);
             defines["PACKED_ZSIZE"] = context.intToString(packedZSize);
             defines["M_PI"] = context.doubleToString(M_PI);
+            defines["ONESIZE"] = context.intToString(xsize*ysize*zsize);
+            defines["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
             cl::Program program = context.createProgram(OpenCLPmeSlicingKernelSources::fftR2C, defines);
             packForwardKernel = cl::Kernel(program, "packForwardData");
             unpackForwardKernel = cl::Kernel(program, "unpackForwardData");
@@ -89,12 +91,12 @@ OpenCLFFT3DMany::OpenCLFFT3DMany(OpenCLContext& context, int xsize, int ysize, i
         }
     }
     bool inputIsReal = (realToComplex && !packRealAsComplex);
-    zkernel = createKernel(packedXSize, packedYSize, packedZSize, zthreads, 0, true, inputIsReal);
-    xkernel = createKernel(packedYSize, packedZSize, packedXSize, xthreads, 1, true, inputIsReal);
-    ykernel = createKernel(packedZSize, packedXSize, packedYSize, ythreads, 2, true, inputIsReal);
-    invzkernel = createKernel(packedXSize, packedYSize, packedZSize, zthreads, 0, false, inputIsReal);
-    invxkernel = createKernel(packedYSize, packedZSize, packedXSize, xthreads, 1, false, inputIsReal);
-    invykernel = createKernel(packedZSize, packedXSize, packedYSize, ythreads, 2, false, inputIsReal);
+    zkernel = createKernel(packedXSize, packedYSize, packedZSize, batch, zthreads, 0, true, inputIsReal);
+    xkernel = createKernel(packedYSize, packedZSize, packedXSize, batch, xthreads, 1, true, inputIsReal);
+    ykernel = createKernel(packedZSize, packedXSize, packedYSize, batch, ythreads, 2, true, inputIsReal);
+    invzkernel = createKernel(packedXSize, packedYSize, packedZSize, batch, zthreads, 0, false, inputIsReal);
+    invxkernel = createKernel(packedYSize, packedZSize, packedXSize, batch, xthreads, 1, false, inputIsReal);
+    invykernel = createKernel(packedZSize, packedXSize, packedYSize, batch, ythreads, 2, false, inputIsReal);
 }
 
 void OpenCLFFT3DMany::execFFT(OpenCLArray& in, OpenCLArray& out, bool forward) {
@@ -160,7 +162,7 @@ int OpenCLFFT3DMany::findLegalDimension(int minimum) {
     }
 }
 
-cl::Kernel OpenCLFFT3DMany::createKernel(int xsize, int ysize, int zsize, int& threads, int axis, bool forward, bool inputIsReal) {
+cl::Kernel OpenCLFFT3DMany::createKernel(int xsize, int ysize, int zsize, int batch, int& threads, int axis, bool forward, bool inputIsReal) {
     int maxThreads = min(256, (int) context.getDevice().getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>());
     while (maxThreads > 128 && maxThreads-64 >= zsize)
         maxThreads -= 64;
@@ -323,24 +325,27 @@ cl::Kernel OpenCLFFT3DMany::createKernel(int xsize, int ysize, int zsize, int& t
                 source<<"if (x < XSIZE/2+1)\n";
             source<<"for (int z = get_local_id(0); z < ZSIZE; z += get_local_size(0))\n";
             if (outputIsPacked)
-                source<<"out[y*(ZSIZE*(XSIZE/2+1))+z*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
+                source<<"out[offset+y*(ZSIZE*(XSIZE/2+1))+z*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
             else
-                source<<"out[y*(ZSIZE*XSIZE)+z*XSIZE+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
+                source<<"out[offset+y*(ZSIZE*XSIZE)+z*XSIZE+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
         }
         else {
             if (outputIsPacked) {
                 source<<"if (index < XSIZE*YSIZE && x < XSIZE/2+1)\n";
-                source<<"out[y*(ZSIZE*(XSIZE/2+1))+(get_local_id(0)%ZSIZE)*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
+                source<<"out[offset+y*(ZSIZE*(XSIZE/2+1))+(get_local_id(0)%ZSIZE)*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
             }
             else {
                 source<<"if (index < XSIZE*YSIZE)\n";
-                source<<"out[y*(ZSIZE*XSIZE)+(get_local_id(0)%ZSIZE)*XSIZE+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
+                source<<"out[offset+y*(ZSIZE*XSIZE)+(get_local_id(0)%ZSIZE)*XSIZE+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
             }
         }
         map<string, string> replacements;
         replacements["XSIZE"] = context.intToString(xsize);
         replacements["YSIZE"] = context.intToString(ysize);
         replacements["ZSIZE"] = context.intToString(zsize);
+        replacements["BATCH"] = context.intToString(batch);
+        replacements["ONESIZE"] = context.intToString(xsize*ysize*zsize);
+        replacements["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
         replacements["BLOCKS_PER_GROUP"] = context.intToString(blocksPerGroup);
         replacements["M_PI"] = context.doubleToString(M_PI);
         replacements["COMPUTE_FFT"] = source.str();
