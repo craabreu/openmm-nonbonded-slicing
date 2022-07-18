@@ -139,6 +139,7 @@ void SlicedPmeForce::getPMEParametersInContext(const Context& context, double& a
 }
 
 int SlicedPmeForce::addParticle(double charge, int subset) {
+    ASSERT_VALID_SUBSET(subset);
     particles.push_back(ParticleInfo(charge, subset));
     return particles.size()-1;
 }
