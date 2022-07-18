@@ -72,13 +72,12 @@ CudaFFT3DMany::CudaFFT3DMany(CudaContext& context, int xsize, int ysize, int zsi
             defines["XSIZE"] = context.intToString(xsize);
             defines["YSIZE"] = context.intToString(ysize);
             defines["ZSIZE"] = context.intToString(zsize);
+            defines["BATCH"] = context.intToString(batch);
             defines["PACKED_AXIS"] = context.intToString(packedAxis);
             defines["PACKED_XSIZE"] = context.intToString(packedXSize);
             defines["PACKED_YSIZE"] = context.intToString(packedYSize);
             defines["PACKED_ZSIZE"] = context.intToString(packedZSize);
             defines["M_PI"] = context.doubleToString(M_PI);
-            defines["ONESIZE"] = context.intToString(xsize*ysize*zsize);
-            defines["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
             CUmodule module = context.createModule(CudaPmeSlicingKernelSources::vectorOps+CudaPmeSlicingKernelSources::fftR2C, defines);
             packForwardKernel = context.getKernel(module, "packForwardData");
             unpackForwardKernel = context.getKernel(module, "unpackForwardData");
@@ -330,18 +329,17 @@ CUfunction CudaFFT3DMany::createKernel(int xsize, int ysize, int zsize, int batc
         source<<"if (index < XSIZE*YSIZE)\n";
     source<<"for (int i = threadIdx.x-block*THREADS_PER_BLOCK; i < ZSIZE; i += THREADS_PER_BLOCK)\n";
     if (outputIsPacked)
-        source<<"out[offset+y*(ZSIZE*(XSIZE/2+1))+i*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[i+block*ZSIZE]"<<outputSuffix<<";\n";
+        source<<"out[j*odist+y*(ZSIZE*(XSIZE/2+1))+i*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[i+block*ZSIZE]"<<outputSuffix<<";\n";
     else
-            source<<"out[offset+y*(ZSIZE*XSIZE)+i*XSIZE+x] = data"<<(stage%2)<<"[i+block*ZSIZE]"<<outputSuffix<<";\n";
+            source<<"out[j*odist+y*(ZSIZE*XSIZE)+i*XSIZE+x] = data"<<(stage%2)<<"[i+block*ZSIZE]"<<outputSuffix<<";\n";
     map<string, string> replacements;
     replacements["XSIZE"] = context.intToString(xsize);
     replacements["YSIZE"] = context.intToString(ysize);
     replacements["ZSIZE"] = context.intToString(zsize);
+    replacements["BATCH"] = context.intToString(batch);
     replacements["BLOCKS_PER_GROUP"] = context.intToString(blocksPerGroup);
     replacements["THREADS_PER_BLOCK"] = context.intToString(threadsPerBlock);
     replacements["M_PI"] = context.doubleToString(M_PI);
-    replacements["ONESIZE"] = context.intToString(xsize*ysize*zsize);
-    replacements["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
     replacements["COMPUTE_FFT"] = source.str();
     replacements["SIGN"] = (forward ? "1" : "-1");
     replacements["INPUT_TYPE"] = (inputIsReal && axis == 0 && forward ? "real" : "real2");

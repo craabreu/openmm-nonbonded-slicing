@@ -74,13 +74,12 @@ OpenCLFFT3DMany::OpenCLFFT3DMany(OpenCLContext& context, int xsize, int ysize, i
             defines["XSIZE"] = context.intToString(xsize);
             defines["YSIZE"] = context.intToString(ysize);
             defines["ZSIZE"] = context.intToString(zsize);
+            defines["BATCH"] = context.intToString(batch);
             defines["PACKED_AXIS"] = context.intToString(packedAxis);
             defines["PACKED_XSIZE"] = context.intToString(packedXSize);
             defines["PACKED_YSIZE"] = context.intToString(packedYSize);
             defines["PACKED_ZSIZE"] = context.intToString(packedZSize);
             defines["M_PI"] = context.doubleToString(M_PI);
-            defines["ONESIZE"] = context.intToString(xsize*ysize*zsize);
-            defines["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
             cl::Program program = context.createProgram(OpenCLPmeSlicingKernelSources::fftR2C, defines);
             packForwardKernel = cl::Kernel(program, "packForwardData");
             unpackForwardKernel = cl::Kernel(program, "unpackForwardData");
@@ -325,18 +324,18 @@ cl::Kernel OpenCLFFT3DMany::createKernel(int xsize, int ysize, int zsize, int ba
                 source<<"if (x < XSIZE/2+1)\n";
             source<<"for (int z = get_local_id(0); z < ZSIZE; z += get_local_size(0))\n";
             if (outputIsPacked)
-                source<<"out[offset+y*(ZSIZE*(XSIZE/2+1))+z*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
+                source<<"out[j*odist+y*(ZSIZE*(XSIZE/2+1))+z*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
             else
-                source<<"out[offset+y*(ZSIZE*XSIZE)+z*XSIZE+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
+                source<<"out[j*odist+y*(ZSIZE*XSIZE)+z*XSIZE+x] = data"<<(stage%2)<<"[z]"<<outputSuffix<<";\n";
         }
         else {
             if (outputIsPacked) {
                 source<<"if (index < XSIZE*YSIZE && x < XSIZE/2+1)\n";
-                source<<"out[offset+y*(ZSIZE*(XSIZE/2+1))+(get_local_id(0)%ZSIZE)*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
+                source<<"out[j*odist+y*(ZSIZE*(XSIZE/2+1))+(get_local_id(0)%ZSIZE)*(XSIZE/2+1)+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
             }
             else {
                 source<<"if (index < XSIZE*YSIZE)\n";
-                source<<"out[offset+y*(ZSIZE*XSIZE)+(get_local_id(0)%ZSIZE)*XSIZE+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
+                source<<"out[j*odist+y*(ZSIZE*XSIZE)+(get_local_id(0)%ZSIZE)*XSIZE+x] = data"<<(stage%2)<<"[get_local_id(0)]"<<outputSuffix<<";\n";
             }
         }
         map<string, string> replacements;
@@ -344,8 +343,6 @@ cl::Kernel OpenCLFFT3DMany::createKernel(int xsize, int ysize, int zsize, int ba
         replacements["YSIZE"] = context.intToString(ysize);
         replacements["ZSIZE"] = context.intToString(zsize);
         replacements["BATCH"] = context.intToString(batch);
-        replacements["ONESIZE"] = context.intToString(xsize*ysize*zsize);
-        replacements["TOTALSIZE"] = context.intToString(batch*xsize*ysize*zsize);
         replacements["BLOCKS_PER_GROUP"] = context.intToString(blocksPerGroup);
         replacements["M_PI"] = context.doubleToString(M_PI);
         replacements["COMPUTE_FFT"] = source.str();

@@ -343,16 +343,26 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
             if (useCudaFFT) {
                 int n[3] = {gridSizeX, gridSizeY, gridSizeZ};
-                int dist = gridSizeX*gridSizeY*gridSizeZ;
-                cufftResult result;
-                result = cufftPlanMany(&fftForward, 3, n, NULL, 1, dist, NULL, 1, dist,
-                                       cu.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C, numSubsets);
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
-                result = cufftPlanMany(&fftBackward, 3, n, NULL, 1, dist, NULL, 1, dist,
-                                       cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R, numSubsets);
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
+                int inembed[] = {gridSizeX, gridSizeY, gridSizeZ};
+                int onembed[] = {gridSizeX, gridSizeY, gridSizeZ/2+1};
+                int idist = gridSizeX*gridSizeY*gridSizeZ;
+                int odist = gridSizeX*gridSizeY*(gridSizeZ/2+1);
+                int istride = 1;
+                int ostride = 1;
+
+                cufftResult resultForward = cufftPlanMany(
+                    &fftForward, 3, n, inembed, istride, idist, onembed, ostride, odist,
+                    cu.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C, numSubsets
+                );
+                if (resultForward != CUFFT_SUCCESS)
+                    throw OpenMMException("Error initializing FFT: "+cu.intToString(resultForward));
+
+                cufftResult resultBackward = cufftPlanMany(
+                    &fftBackward, 3, n, onembed, ostride, odist, inembed, istride, idist,
+                    cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R, numSubsets
+                );
+                if (resultBackward != CUFFT_SUCCESS)
+                    throw OpenMMException("Error initializing FFT: "+cu.intToString(resultBackward));
             }
             else {
                 fft = new CudaFFT3DMany(cu, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
