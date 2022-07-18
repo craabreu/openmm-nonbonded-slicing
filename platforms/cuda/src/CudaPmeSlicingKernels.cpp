@@ -264,6 +264,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     gridSizeX = CudaFFT3DMany::findLegalDimension(gridSizeX);
     gridSizeY = CudaFFT3DMany::findLegalDimension(gridSizeY);
     gridSizeZ = CudaFFT3DMany::findLegalDimension(gridSizeZ);
+    int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -286,6 +287,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         pmeDefines["GRID_SIZE_X"] = cu.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cu.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cu.intToString(gridSizeZ);
+        pmeDefines["ROUNDED_Z_SIZE"] = cu.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cu.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cu.doubleToString(M_PI);
         if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
@@ -319,13 +321,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeInterpolateForceKernel = cu.getKernel(module, "gridInterpolateForce");
             pmeEvalEnergyKernel = cu.getKernel(module, "gridEvaluateEnergy");
             pmeFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
+            pmeCollapseGridKernel = cu.getKernel(module, "collapseGrid");
             cuFuncSetCacheConfig(pmeSpreadChargeKernel, CU_FUNC_CACHE_PREFER_SHARED);
             cuFuncSetCacheConfig(pmeInterpolateForceKernel, CU_FUNC_CACHE_PREFER_L1);
 
             // Create required data structures.
 
             int elementSize = (cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
             int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
             pmeGrid1.initialize(cu, gridElements, 2*elementSize, "pmeGrid1");
             pmeGrid2.initialize(cu, gridElements, 2*elementSize, "pmeGrid2");
@@ -715,7 +717,6 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         void* finishSpreadArgs[] = {&pmeGrid2.getDevicePointer(), &pmeGrid1.getDevicePointer()};
         cu.executeKernel(pmeFinishSpreadChargeKernel, finishSpreadArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
-
         if (useCudaFFT) {
             if (cu.getUseDoublePrecision()) {
                 cufftResult result = cufftExecD2Z(fftForward, (double*) pmeGrid1.getDevicePointer(), (double2*) pmeGrid2.getDevicePointer());
@@ -730,6 +731,9 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         else {
             fft->execFFT(pmeGrid1, pmeGrid2, true);
         }
+
+        void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
+        cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
         if (includeEnergy) {
             void* computeEnergyArgs[] = {&pmeGrid2.getDevicePointer(), usePmeStream ? &pmeEnergyBuffer.getDevicePointer() : &cu.getEnergyBuffer().getDevicePointer(),

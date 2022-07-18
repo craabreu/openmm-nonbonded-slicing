@@ -37,7 +37,6 @@ extern "C" __global__ void execFFT(const INPUT_TYPE* __restrict__ in, OUTPUT_TYP
 #endif
 
     const int block = threadIdx.x/THREADS_PER_BLOCK;
-    const int gridSize = XSIZE*YSIZE*ZSIZE;
     for (int baseIndex = blockIdx.x*BLOCKS_PER_GROUP; baseIndex < XSIZE*YSIZE; baseIndex += gridDim.x*BLOCKS_PER_GROUP) {
         int index = baseIndex+block;
         int x = index/YSIZE;

@@ -27,6 +27,7 @@ extern "C" __global__ void packForwardData(const real* __restrict__ in, real2* _
  */
 extern "C" __global__ void unpackForwardData(const real2* __restrict__ in, real2* __restrict__ out) {
     // Compute the phase factors.
+
 #if PACKED_AXIS == 0
     __shared__ real2 w[PACKED_XSIZE];
     for (int i = threadIdx.x; i < PACKED_XSIZE; i += blockDim.x)

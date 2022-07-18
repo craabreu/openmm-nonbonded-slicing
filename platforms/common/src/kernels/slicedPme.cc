@@ -83,9 +83,10 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
     real3 data[PME_ORDER];
     const real scale = RECIP((real) (PME_ORDER-1));
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+    const unsigned int extendedSize = GRID_SIZE_X*GRID_SIZE_Y*ROUNDED_Z_SIZE;
     for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
         int atom = pmeAtomGridIndex[i].x;
-        int offset = (pmeAtomGridIndex[i].y/gridSize)*gridSize;
+        int offset = extendedSize*(pmeAtomGridIndex[i].y/gridSize);
         real4 pos = posq[atom];
         const real charge = (CHARGE)*EPSILON_FACTOR;
         APPLY_PERIODIC_TO_POS(pos)
@@ -128,7 +129,7 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
         for (int ix = 0; ix < PME_ORDER; ix++) {
             int xbase = gridIndex.x+ix;
             xbase -= (xbase >= GRID_SIZE_X ? GRID_SIZE_X : 0);
-            xbase = xbase*GRID_SIZE_Y;
+            xbase *= GRID_SIZE_Y;
             real dx = charge*data[ix].x;
             for (int iy = 0; iy < PME_ORDER; iy++) {
                 int ybase = gridIndex.y+iy;
@@ -171,7 +172,7 @@ KERNEL void finishSpreadCharge(
     }
     SYNC_THREADS;
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
-    const unsigned int totalSize = NUM_SUBSETS*gridSize;
+    const unsigned int extendedSize = GRID_SIZE_X*GRID_SIZE_Y*ROUNDED_Z_SIZE;
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
     real scale = 1/(real) 0x100000000;
 #endif
@@ -179,11 +180,11 @@ KERNEL void finishSpreadCharge(
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         int zindex = index%GRID_SIZE_Z;
         int loadIndex = zindexTable[zindex] + blockSize*(int) (index/GRID_SIZE_Z);
-        for (int offset = 0; offset < totalSize; offset += gridSize)
+        for (int j = 0; j < NUM_SUBSETS; j++)
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
-            grid2[offset+index] = scale*grid1[offset+loadIndex];
+            grid2[j*gridSize+index] = scale*grid1[j*extendedSize+loadIndex];
 #else
-            grid2[offset+index] = grid1[offset+loadIndex];
+            grid2[j*gridSize+index] = grid1[j*extendedSize+loadIndex];
 #endif
     }
 }
@@ -273,13 +274,7 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq, GLOBAL real* RES
  * For each grid point, find the range of sorted atoms associated with that point.
  */
 KERNEL void findAtomRangeForGrid(GLOBAL int2* RESTRICT pmeAtomGridIndex, GLOBAL int* RESTRICT pmeAtomRange, GLOBAL const real4* RESTRICT posq) {
-    // Fill in values that will remain beyond the last atom in each subset
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
-    for (int atom = GLOBAL_ID; atom < NUM_ATOMS; atom += GLOBAL_SIZE)
-        for (int j = atom; j < NUM_SUBSETS*gridSize; j += NUM_ATOMS)
-            pmeAtomRange[j] = NUM_ATOMS;
-    SYNC_THREADS
-
     int start = (NUM_ATOMS*GLOBAL_ID)/GLOBAL_SIZE;
     int end = (NUM_ATOMS*(GLOBAL_ID+1))/GLOBAL_SIZE;
     int last = (start == 0 ? -1 : pmeAtomGridIndex[start-1].y);
@@ -287,12 +282,18 @@ KERNEL void findAtomRangeForGrid(GLOBAL int2* RESTRICT pmeAtomGridIndex, GLOBAL 
         int2 atomData = pmeAtomGridIndex[i];
         int gridIndex = atomData.y;
         if (gridIndex != last) {
-            int offset = (gridIndex/gridSize)*gridSize;
-            for (int j = max(last+1, offset); j <= gridIndex; ++j)
-                pmeAtomRange[j] = i;
+            int firstInSubset = (gridIndex/gridSize)*gridSize;
+            for (int j = last+1; j <= gridIndex; ++j)
+                pmeAtomRange[j] = j < firstInSubset ? NUM_ATOMS : i;
             last = gridIndex;
         }
     }
+
+    // Fill in values beyond the last atom.
+
+    if (GLOBAL_ID == GLOBAL_SIZE-1)
+        for (int j = last+1; j <= NUM_SUBSETS*gridSize; ++j)
+            pmeAtomRange[j] = NUM_ATOMS;
 }
 
 /**
@@ -315,13 +316,13 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq, GLOBAL real* RES
         GLOBAL const real4* RESTRICT pmeBsplineTheta
         , GLOBAL const real* RESTRICT charges
     ) {
-    unsigned int numGridPoints = NUM_SUBSETS*GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     for (int gridIndex = GLOBAL_ID; gridIndex < numGridPoints; gridIndex += GLOBAL_SIZE) {
         // Compute the charge on a grid point.
 
         int4 gridPoint;
-        gridPoint.w = gridIndex/(GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z);
-        int remainder = gridIndex-gridPoint.w*GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+        gridPoint.w = gridIndex/gridSize;
+        int remainder = gridIndex-gridPoint.w*gridSize;
         gridPoint.x = remainder/(GRID_SIZE_Y*GRID_SIZE_Z);
         remainder -= gridPoint.x*GRID_SIZE_Y*GRID_SIZE_Z;
         gridPoint.y = remainder/GRID_SIZE_Z;
@@ -369,6 +370,16 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq, GLOBAL real* RES
     }
 }
 #endif
+
+KERNEL void collapseGrid(GLOBAL real2* RESTRICT pmeGrid) {
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
+    for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
+        for (int j = 1; j < NUM_SUBSETS; j++) {
+            pmeGrid[index] += pmeGrid[j*gridSize+index];
+            pmeGrid[j*gridSize+index] = make_real2(0, 0);
+        }
+    }
+}
 
 KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const real* RESTRICT pmeBsplineModuliX,
         GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
