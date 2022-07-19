@@ -275,6 +275,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeX = OpenCLFFT3DMany::findLegalDimension(gridSizeX);
     gridSizeY = OpenCLFFT3DMany::findLegalDimension(gridSizeY);
     gridSizeZ = OpenCLFFT3DMany::findLegalDimension(gridSizeZ);
+    int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
+
     defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
     defines["USE_EWALD"] = "1";
@@ -292,6 +294,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["GRID_SIZE_X"] = cl.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cl.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cl.intToString(gridSizeZ);
+        pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
@@ -319,8 +322,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             // Create required data structures.
 
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
-            int gridElements = gridSizeX*gridSizeY*roundedZSize;
+            int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
             pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
             pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
             if (cl.getSupports64BitGlobalAtomics())
@@ -621,6 +623,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                                                    cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
+            pmeCollapseGridKernel = cl::Kernel(program, "collapseGrid");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
@@ -790,6 +793,10 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             }
         }
         fft->execFFT(pmeGrid1, pmeGrid2, true);
+
+        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
+        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
+
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         if (cl.getUseDoublePrecision()) {
             pmeConvolutionKernel.setArg<mm_double4>(4, recipBoxVectors[0]);
