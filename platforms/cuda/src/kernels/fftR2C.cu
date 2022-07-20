@@ -13,7 +13,7 @@ extern "C" __global__ void packForwardData(const real* __restrict__ in, real2* _
 #if PACKED_AXIS == 0
             real2 value = make_real2(in[j*idist+2*x*YSIZE*ZSIZE+y*ZSIZE+z], in[j*idist+(2*x+1)*YSIZE*ZSIZE+y*ZSIZE+z]);
 #elif PACKED_AXIS == 1
-            real2 value = make_real2(in[j*idist+x**ZYSIZESIZE+2*y*ZSIZE+z], in[j*idist+x*YSIZE*ZSIZE+(2*y+1)*ZSIZE+z]);
+            real2 value = make_real2(in[j*idist+x*YSIZE*ZSIZE+2*y*ZSIZE+z], in[j*idist+x*YSIZE*ZSIZE+(2*y+1)*ZSIZE+z]);
 #else
             real2 value = make_real2(in[j*idist+x*YSIZE*ZSIZE+y*ZSIZE+2*z], in[j*idist+x*YSIZE*ZSIZE+y*ZSIZE+(2*z+1)]);
 #endif
@@ -53,9 +53,6 @@ extern "C" __global__ void unpackForwardData(const real2* __restrict__ in, real2
         int remainder = index-x*(PACKED_YSIZE*PACKED_ZSIZE);
         int y = remainder/PACKED_ZSIZE;
         int z = remainder-y*PACKED_ZSIZE;
-        int xp = (x == 0 ? 0 : PACKED_XSIZE-x);
-        int yp = (y == 0 ? 0 : PACKED_YSIZE-y);
-        int zp = (z == 0 ? 0 : PACKED_ZSIZE-z);
 #if PACKED_AXIS == 0
         real2 wfac = w[x];
 #elif PACKED_AXIS == 1
@@ -63,28 +60,31 @@ extern "C" __global__ void unpackForwardData(const real2* __restrict__ in, real2
 #else
         real2 wfac = w[z];
 #endif
+        int xpi = (x == 0 ? 0 : PACKED_XSIZE-x);
+        int ypi = (y == 0 ? 0 : PACKED_YSIZE-y);
+        int zpi = (z == 0 ? 0 : PACKED_ZSIZE-z);
+        int xpo = (x == 0 ? 0 : XSIZE-x);
+        int ypo = (y == 0 ? 0 : YSIZE-y);
+        int zpo = (z == 0 ? 0 : ZSIZE-z);
         for (int j = 0; j < BATCH; j++) {
             real2 z1 = in[j*gridSize+x*PACKED_YSIZE*PACKED_ZSIZE+y*PACKED_ZSIZE+z];
-            real2 z2 = in[j*gridSize+xp*PACKED_YSIZE*PACKED_ZSIZE+yp*PACKED_ZSIZE+zp];
+            real2 z2 = in[j*gridSize+xpi*PACKED_YSIZE*PACKED_ZSIZE+ypi*PACKED_ZSIZE+zpi];
             real2 output = make_real2((z1.x+z2.x - wfac.x*(z1.x-z2.x) + wfac.y*(z1.y+z2.y))/2, (z1.y-z2.y - wfac.y*(z1.x-z2.x) - wfac.x*(z1.y+z2.y))/2);
             if (z < outputZSize)
                 out[j*odist+x*YSIZE*outputZSize+y*outputZSize+z] = output;
-            xp = (x == 0 ? 0 : XSIZE-x);
-            yp = (y == 0 ? 0 : YSIZE-y);
-            zp = (z == 0 ? 0 : ZSIZE-z);
-            if (zp < outputZSize) {
+            if (zpo < outputZSize) {
 #if PACKED_AXIS == 0
                 if (x == 0)
-                    out[j*odist+PACKED_XSIZE*YSIZE*outputZSize+yp*outputZSize+zp] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
+                    out[j*odist+PACKED_XSIZE*YSIZE*outputZSize+ypo*outputZSize+zpo] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
 #elif PACKED_AXIS == 1
                 if (y == 0)
-                    out[j*odist+xp*YSIZE*outputZSize+PACKED_YSIZE*outputZSize+zp] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
+                    out[j*odist+xpo*YSIZE*outputZSize+PACKED_YSIZE*outputZSize+zpo] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
 #else
                 if (z == 0)
-                    out[j*odist+xp*YSIZE*outputZSize+yp*outputZSize+PACKED_ZSIZE] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
+                    out[j*odist+xpo*YSIZE*outputZSize+ypo*outputZSize+PACKED_ZSIZE] = make_real2((z1.x-z1.y+z2.x-z2.y)/2, (-z1.x-z1.y+z2.x+z2.y)/2);
 #endif
                 else
-                    out[j*odist+xp*YSIZE*outputZSize+yp*outputZSize+zp] = make_real2(output.x, -output.y);
+                    out[j*odist+xpo*YSIZE*outputZSize+ypo*outputZSize+zpo] = make_real2(output.x, -output.y);
             }
         }
     }

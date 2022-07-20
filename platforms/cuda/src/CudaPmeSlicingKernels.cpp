@@ -40,6 +40,7 @@
 #include "openmm/common/ContextSelector.h"
 #include <cstring>
 #include <algorithm>
+#include "cufft.h"
 
 #define CHECK_RESULT(result, prefix) \
     if (result != CUDA_SUCCESS) { \

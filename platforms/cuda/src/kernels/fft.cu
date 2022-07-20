@@ -28,11 +28,15 @@ extern "C" __global__ void execFFT(const INPUT_TYPE* __restrict__ in, OUTPUT_TYP
         w[i] = make_real2(cos(-(SIGN)*i*2*M_PI/ZSIZE), sin(-(SIGN)*i*2*M_PI/ZSIZE));
     __syncthreads();
 
-#if INPUT_IS_REAL
-    const int idist = XSIZE*YSIZE*ZSIZE;
-    const int odist = XSIZE*YSIZE*(ZSIZE/2+1);
-#else
+#if INPUT_IS_PACKED
     const int idist = XSIZE*YSIZE*(ZSIZE/2+1);
+#else
+    const int idist = XSIZE*YSIZE*ZSIZE;
+#endif
+
+#if OUTPUT_IS_PACKED
+    const int odist = (XSIZE/2+1)*YSIZE*ZSIZE;
+#else
     const int odist = XSIZE*YSIZE*ZSIZE;
 #endif
 

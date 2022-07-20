@@ -33,6 +33,7 @@ find_path(OPENCL_INCLUDE_DIR
         "/usr/local/cuda"
         "/usr/local/streamsdk"
         "/usr"
+        "${CUDA_TOOLKIT_ROOT_DIR}"
     PATH_SUFFIXES "include"
 )
 
@@ -78,11 +79,11 @@ find_library(OPENCL_LIBRARY
         "/usr/local/cuda"
         "/usr/local/streamsdk"
         "/usr"
+        "${CUDA_TOOLKIT_ROOT_DIR}"
     PATH_SUFFIXES ${path_suffixes} "lib"
 )
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(OPENCL DEFAULT_MSG OPENCL_LIBRARY OPENCL_INCLUDE_DIR)
+find_package_handle_standard_args(OpenCL DEFAULT_MSG OPENCL_LIBRARY OPENCL_INCLUDE_DIR)
 
 if(OPENCL_FOUND)
   set(OPENCL_LIBRARIES ${OPENCL_LIBRARY})
