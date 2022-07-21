@@ -180,10 +180,6 @@ CudaCalcSlicedPmeForceKernel::~CudaCalcSlicedPmeForceKernel() {
     if (pmeio != NULL)
         delete pmeio;
     if (hasInitializedFFT) {
-        if (useCudaFFT) {
-            cufftDestroy(fftForward);
-            cufftDestroy(fftBackward);
-        }
         if (usePmeStream) {
             cuStreamDestroy(pmeStream);
             cuEventDestroy(pmeSyncEvent);
@@ -267,9 +263,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
 
     if (useCudaFFT) {
-        gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX, 7);
-        gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY, 7);
-        gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ, 7);
+        gridSizeX = CudaCuFFT3D::findLegalDimension(gridSizeX);
+        gridSizeY = CudaCuFFT3D::findLegalDimension(gridSizeY);
+        gridSizeZ = CudaCuFFT3D::findLegalDimension(gridSizeZ);
     }
     else {
         gridSizeX = CudaVkFFT3D::findLegalDimension(gridSizeX);
@@ -358,39 +354,14 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             else
                 pmeStream = cu.getCurrentStream();
 
-            if (useCudaFFT) {
-                int n[3] = {gridSizeX, gridSizeY, gridSizeZ};
-                int inembed[] = {gridSizeX, gridSizeY, gridSizeZ};
-                int onembed[] = {gridSizeX, gridSizeY, gridSizeZ/2+1};
-                int idist = gridSizeX*gridSizeY*gridSizeZ;
-                int odist = gridSizeX*gridSizeY*(gridSizeZ/2+1);
-                int istride = 1;
-                int ostride = 1;
-
-                cufftResult resultForward = cufftPlanMany(
-                    &fftForward, 3, n, inembed, istride, idist, onembed, ostride, odist,
-                    cu.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C, numSubsets
-                );
-                if (resultForward != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(resultForward));
-
-                cufftResult resultBackward = cufftPlanMany(
-                    &fftBackward, 3, n, onembed, ostride, odist, inembed, istride, idist,
-                    cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R, numSubsets
-                );
-                if (resultBackward != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(resultBackward));
-            }
+            if (useCudaFFT)
+                fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             else
-                fft = new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
+                fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
 
             // Prepare for doing PME on its own stream.
 
             if (usePmeStream) {
-                if (useCudaFFT) {
-                    cufftSetStream(fftForward, pmeStream);
-                    cufftSetStream(fftBackward, pmeStream);
-                }
                 CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 int recipForceGroup = force.getReciprocalSpaceForceGroup();
@@ -731,19 +702,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         void* finishSpreadArgs[] = {&pmeGrid2.getDevicePointer(), &pmeGrid1.getDevicePointer()};
         cu.executeKernel(pmeFinishSpreadChargeKernel, finishSpreadArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
-        if (useCudaFFT) {
-            if (cu.getUseDoublePrecision()) {
-                cufftResult result = cufftExecD2Z(fftForward, (double*) pmeGrid1.getDevicePointer(), (double2*) pmeGrid2.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            } else {
-                cufftResult result = cufftExecR2C(fftForward, (float*) pmeGrid1.getDevicePointer(), (float2*) pmeGrid2.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            }
-        }
-        else
-            fft->execFFT(true);
+        fft->execFFT(true);
 
         void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
         cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
@@ -760,19 +719,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
         cu.executeKernel(pmeConvolutionKernel, convolutionArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
-        if (useCudaFFT) {
-            if (cu.getUseDoublePrecision()) {
-                cufftResult result = cufftExecZ2D(fftBackward, (double2*) pmeGrid2.getDevicePointer(), (double*) pmeGrid1.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            } else {
-                cufftResult result = cufftExecC2R(fftBackward, (float2*) pmeGrid2.getDevicePointer(), (float*)  pmeGrid1.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            }
-        }
-        else
-            fft->execFFT(false);
+        fft->execFFT(false);
 
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),

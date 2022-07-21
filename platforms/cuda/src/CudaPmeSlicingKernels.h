@@ -33,15 +33,14 @@
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
+#include "internal/CudaFFT3D.h"
+#include "internal/CudaCuFFT3D.h"
 #include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaSort.h"
 #include <vector>
-#include <cufft.h>
-#define VKFFT_BACKEND 1 // CUDA
-#include "internal/vkFFT.h"
 
 using namespace OpenMM;
 using namespace std;
@@ -135,9 +134,7 @@ private:
     PmeIO* pmeio;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
-    CudaVkFFT3D* fft;
-    cufftHandle fftForward;
-    cufftHandle fftBackward;
+    CudaFFT3D* fft;
     CUfunction computeParamsKernel, computeExclusionParamsKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;

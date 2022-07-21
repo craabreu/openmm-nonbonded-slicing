@@ -1,5 +1,5 @@
-#ifndef __OPENMM_CUDAVKFFT3D_H__
-#define __OPENMM_CUDAVKFFT3D_H__
+#ifndef __OPENMM_CUDACUFFT3D_H__
+#define __OPENMM_CUDACUFFT3D_H__
 
 /* -------------------------------------------------------------------------- *
  *                                   OpenMM                                   *
@@ -29,8 +29,7 @@
 
 #include "internal/CudaFFT3D.h"
 #include "openmm/cuda/CudaArray.h"
-#define VKFFT_BACKEND 1 // CUDA
-#include "internal/vkFFT.h"
+#include <cufft.h>
 
 using namespace OpenMM;
 
@@ -45,10 +44,10 @@ namespace PmeSlicing {
  * multiply every value of the original data set by the total number of data points.
  */
 
-class CudaVkFFT3D : public CudaFFT3D {
+class CudaCuFFT3D : public CudaFFT3D {
 public:
     /**
-     * Create an CudaVkFFT3D object for performing transforms of a particular size.
+     * Create an CudaCuFFT3D object for performing transforms of a particular size.
      *
      * The transform cannot be done in-place: the input and output
      * arrays must be different.  Also, the input array is used as workspace, so its contents
@@ -68,8 +67,8 @@ public:
      * @param in      the data to transform, ordered such that in[x*ysize*zsize + y*zsize + z] contains element (x, y, z)
      * @param out     on exit, this contains the transformed data
      */
-    CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out);
-    ~CudaVkFFT3D();
+    CudaCuFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out);
+    ~CudaCuFFT3D();
     /**
      * Perform a Fourier transform.
      *
@@ -84,12 +83,15 @@ public:
      * @param minimum   the minimum size the return value must be greater than or equal to
      */
     static int findLegalDimension(int minimum) {
-        return CudaFFT3D::findLegalDimension(minimum, 13);
+        return CudaFFT3D::findLegalDimension(minimum, 7);
     }
 private:
-    VkFFTApplication* vkfftApp;
+    cufftHandle fftForward;
+    cufftHandle fftBackward;
+    cufftType_t forwardType;
+    cufftType_t backwardType;
 };
 
 } // namespace PmeSlicing
 
-#endif // __OPENMM_CUDAVKFFT3D_H__
+#endif // __OPENMM_CUDACUFFT3D_H__
