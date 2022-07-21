@@ -258,21 +258,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     int cufftVersion;
     cufftGetVersion(&cufftVersion);
-    useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
-    // useCudaFFT = false;
+    useCudaFFT = force.getUseCudaFFT() && (cufftVersion >= 7050); // There was a critical bug in version 7.0
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
 
-    if (useCudaFFT) {
-        gridSizeX = CudaCuFFT3D::findLegalDimension(gridSizeX);
-        gridSizeY = CudaCuFFT3D::findLegalDimension(gridSizeY);
-        gridSizeZ = CudaCuFFT3D::findLegalDimension(gridSizeZ);
-    }
-    else {
-        gridSizeX = CudaVkFFT3D::findLegalDimension(gridSizeX);
-        gridSizeY = CudaVkFFT3D::findLegalDimension(gridSizeY);
-        gridSizeZ = CudaVkFFT3D::findLegalDimension(gridSizeZ);
-    }
+    gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX);
+    gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
+    gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);

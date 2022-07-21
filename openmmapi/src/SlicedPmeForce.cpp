@@ -53,13 +53,13 @@ using std::vector;
 SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets),
         cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
-        includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0) {
+        includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFALT_USE_CUDA_FFT) {
     vector<int> row(numSubsets, -1);
     for (int i = 0; i < numSubsets; i++)
         sliceForceGroup.push_back(row);
 }
 
-SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets) {
+SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets), useCudaFFT(DEFALT_USE_CUDA_FFT) {
     NonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (method == NonbondedForce::NoCutoff || method == NonbondedForce::CutoffNonPeriodic)
         throw OpenMMException("SlicedPmeForce: cannot instantiate from a non-periodic NonbondedForce");

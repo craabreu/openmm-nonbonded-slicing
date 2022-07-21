@@ -86,19 +86,19 @@ public:
     virtual void execFFT(bool forward) {};
     /**
      * Get the smallest legal size for a dimension of the grid (that is, a size with no prime
-     * factors other than 2, 3, 5, 7, ..., maxprime).
+     * factors other than 2, 3, 5, ..., maxPrimeFactor).
      *
      * @param minimum   the minimum size the return value must be greater than or equal to
-     * @param maxprime  the maximum supported prime number factor
+     * @param maxPrimeFactor  the maximum supported prime number factor (default=7)
      */
-    static int findLegalDimension(int minimum, int maxprime) {
+    static int findLegalDimension(int minimum, int maxPrimeFactor=7) {
         if (minimum < 1)
             return 1;
         while (true) {
             // Attempt to factor the current value.
 
             int unfactored = minimum;
-            for (int factor = 2; factor <= maxprime; factor++) {
+            for (int factor = 2; factor <= maxPrimeFactor; factor++) {
                 while (unfactored > 1 && unfactored%factor == 0)
                     unfactored /= factor;
             }

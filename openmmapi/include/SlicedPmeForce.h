@@ -41,6 +41,8 @@
 #include <vector>
 #include "internal/windowsExportPmeSlicing.h"
 
+#define DEFALT_USE_CUDA_FFT false
+
 using namespace OpenMM;
 
 namespace PmeSlicing {
@@ -526,6 +528,22 @@ public:
      *                 use the same force group that is specified via setForceGroup.
      */
     void setSliceForceGroup(int subset1, int subset2, int group);
+ 	/**
+     * Get whether CUDA Toolkit's cuFFT library is used to compute fast Fourier transform when
+     * executing in the CUDA platform.
+     */
+    bool getUseCudaFFT() const {
+        return useCudaFFT;
+    };
+ 	/**
+     * Set whether to use CUDA Toolkit's cuFFT library to compute fast Fourier transform when
+     * executing in the CUDA platform. The default value is 'DEFALT_USE_CUDA_FFT'. This choice
+     * has no effect when using platforms other than CUDA or when the CUDA Toolkit version is
+     * 7.0 or older.
+     */
+    void setUseCuFFT(bool use) {
+        useCudaFFT = use;
+    };
 protected:
     ForceImpl* createImpl() const;
     bool usesPeriodicBoundaryConditions() const {return true;}
@@ -539,6 +557,7 @@ private:
     double cutoffDistance, ewaldErrorTol, alpha, dalpha;
     bool exceptionsUsePeriodic, includeDirectSpace;
     int recipForceGroup, nx, ny, nz, dnx, dny, dnz;
+    bool useCudaFFT;
     void addExclusionsToSet(const std::vector<std::set<int> >& bonded12, std::set<int>& exclusions, int baseParticle, int fromParticle, int currentLevel) const;
     int getGlobalParameterIndex(const std::string& parameter) const;
     std::vector<ParticleInfo> particles;

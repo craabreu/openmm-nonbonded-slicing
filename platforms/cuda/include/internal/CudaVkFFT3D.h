@@ -76,16 +76,6 @@ public:
      * @param forward  true to perform a forward transform, false to perform an inverse transform
      */
     void execFFT(bool forward);
-    /**
-     * Get the smallest legal size for a dimension of the grid (that is, a size with no prime
-     * factors other than 2, 3, 5, 7, 11, 13).  VkFFT supports arbitrary sizes but they may work
-     * slower.
-     *
-     * @param minimum   the minimum size the return value must be greater than or equal to
-     */
-    static int findLegalDimension(int minimum) {
-        return CudaFFT3D::findLegalDimension(minimum, 13);
-    }
 private:
     VkFFTApplication* vkfftApp;
 };
