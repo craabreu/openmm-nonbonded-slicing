@@ -40,7 +40,6 @@
 #include "openmm/common/ContextSelector.h"
 #include <cstring>
 #include <algorithm>
-#include "cufft.h"
 
 #define CHECK_RESULT(result, prefix) \
     if (result != CUDA_SUCCESS) { \
@@ -261,10 +260,22 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Compute the PME parameters.
 
+    int cufftVersion;
+    cufftGetVersion(&cufftVersion);
+    useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
+
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
-    gridSizeX = CudaFFT3DMany::findLegalDimension(gridSizeX);
-    gridSizeY = CudaFFT3DMany::findLegalDimension(gridSizeY);
-    gridSizeZ = CudaFFT3DMany::findLegalDimension(gridSizeZ);
+
+    if (useCudaFFT) {
+        gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX, 7);
+        gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY, 7);
+        gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ, 7);
+    }
+    else {
+        gridSizeX = CudaVkFFT3D::findLegalDimension(gridSizeX);
+        gridSizeY = CudaVkFFT3D::findLegalDimension(gridSizeY);
+        gridSizeZ = CudaVkFFT3D::findLegalDimension(gridSizeZ);
+    }
     int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
@@ -341,9 +352,12 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeEnergyBuffer.initialize(cu, cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
-            int cufftVersion;
-            cufftGetVersion(&cufftVersion);
-            useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
+
+            if (usePmeStream)
+                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
+            else
+                pmeStream = cu.getCurrentStream();
+
             if (useCudaFFT) {
                 int n[3] = {gridSizeX, gridSizeY, gridSizeZ};
                 int inembed[] = {gridSizeX, gridSizeY, gridSizeZ};
@@ -367,14 +381,12 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                 if (resultBackward != CUFFT_SUCCESS)
                     throw OpenMMException("Error initializing FFT: "+cu.intToString(resultBackward));
             }
-            else {
-                fft = new CudaFFT3DMany(cu, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
-            }
+            else
+                fft = new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
 
             // Prepare for doing PME on its own stream.
 
             if (usePmeStream) {
-                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
                 if (useCudaFFT) {
                     cufftSetStream(fftForward, pmeStream);
                     cufftSetStream(fftBackward, pmeStream);
@@ -387,6 +399,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                 cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                 cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
             }
+
             hasInitializedFFT = true;
 
             // Initialize the b-spline moduli.
@@ -729,9 +742,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                     throw OpenMMException("Error executing FFT: "+cu.intToString(result));
             }
         }
-        else {
-            fft->execFFT(pmeGrid1, pmeGrid2, true);
-        }
+        else
+            fft->execFFT(true);
 
         void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
         cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
@@ -759,9 +771,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                     throw OpenMMException("Error executing FFT: "+cu.intToString(result));
             }
         }
-        else {
-            fft->execFFT(pmeGrid2, pmeGrid1, false);
-        }
+        else
+            fft->execFFT(false);
 
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),

@@ -49,15 +49,14 @@ using namespace std;
 
 const double TOL = 1e-5;
 
-void assertForcesAndEnergy(Context& context) {
-    State state0 = context.getState(State::Forces | State::Energy, false, 1<<0);
-    State state1 = context.getState(State::Forces | State::Energy, false, 1<<1);
-
-    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL);
-    const vector<Vec3>& forces0 = state0.getForces();
-    const vector<Vec3>& forces1 = state1.getForces();
-    for (int i = 0; i < context.getSystem().getNumParticles(); i++)
-        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL);
+#define assertForcesAndEnergy(context) { \
+    State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \
+    State state1 = context.getState(State::Forces | State::Energy, false, 1<<1); \
+    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
+    const vector<Vec3>& forces0 = state0.getForces(); \
+    const vector<Vec3>& forces1 = state1.getForces(); \
+    for (int i = 0; i < context.getSystem().getNumParticles(); i++) \
+        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL); \
 }
 
 void testInstantiateFromNonbondedForce(Platform& platform) {
