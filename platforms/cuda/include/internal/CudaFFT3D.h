@@ -105,8 +105,8 @@ public:
             if (unfactored == 1)
                 return minimum;
             minimum++;
+        }
     }
-}
 protected:
     void* inputBuffer;
     void* outputBuffer;

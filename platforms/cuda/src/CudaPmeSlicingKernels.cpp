@@ -259,6 +259,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     int cufftVersion;
     cufftGetVersion(&cufftVersion);
     useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
+    // useCudaFFT = false;
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
 

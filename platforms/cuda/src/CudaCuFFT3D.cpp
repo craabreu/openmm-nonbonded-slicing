@@ -41,15 +41,21 @@ CudaCuFFT3D::CudaCuFFT3D(CudaContext& context, CUstream& stream, int xsize, int 
     int idist = xsize*ysize*zsize;
     int odist = xsize*ysize*(zsize/2+1);
 
-    forwardType = context.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C;
+    if (realToComplex)
+        forwardType = context.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C;
+    else
+        forwardType = context.getUseDoublePrecision() ? CUFFT_Z2Z : CUFFT_C2C;
+
     cufftResult result = cufftPlanMany(&fftForward, 3, n, inembed, 1, idist, onembed, 1, odist, forwardType, batch);
     if (result != CUFFT_SUCCESS)
         throw OpenMMException("Error initializing CuFFT: "+to_string(result));
 
-    backwardType = context.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R;
-    result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, backwardType, batch);
-    if (result != CUFFT_SUCCESS)
-        throw OpenMMException("Error initializing FFT: "+to_string(result));
+    if (realToComplex) {
+        backwardType = context.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R;
+        result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, backwardType, batch);
+        if (result != CUFFT_SUCCESS)
+            throw OpenMMException("Error initializing FFT: "+to_string(result));
+    }
 
     cufftSetStream(fftForward, stream);
     cufftSetStream(fftBackward, stream);
@@ -62,20 +68,23 @@ CudaCuFFT3D::~CudaCuFFT3D() {
 
 void CudaCuFFT3D::execFFT(bool forward) {
     cufftResult result;
-    if (forward) {
-        if (forwardType == CUFFT_D2Z)
+    if (forwardType == CUFFT_Z2Z)
+        result = cufftExecZ2Z(fftForward, (double2*) inputBuffer, (double2*) outputBuffer, forward ? CUFFT_FORWARD : CUFFT_INVERSE);
+    else if (forwardType == CUFFT_C2C)
+        result = cufftExecC2C(fftForward, (float2*) inputBuffer, (float2*) outputBuffer, forward ? CUFFT_FORWARD : CUFFT_INVERSE);
+    else if (forwardType == CUFFT_D2Z) {
+        if (forward)
             result = cufftExecD2Z(fftForward, (double*) inputBuffer, (double2*) outputBuffer);
         else
-            result = cufftExecR2C(fftForward, (float*) inputBuffer, (float2*) outputBuffer);
+            result = cufftExecZ2D(fftBackward, (double2*) outputBuffer, (double*) inputBuffer);
     }
     else {
-        if (backwardType == CUFFT_Z2D)
-            result = cufftExecZ2D(fftBackward, (double2*) outputBuffer, (double*) inputBuffer);
+        if (forward)
+            result = cufftExecR2C(fftForward, (float*) inputBuffer, (float2*) outputBuffer);
         else
             result = cufftExecC2R(fftBackward, (float2*) outputBuffer, (float*) inputBuffer);
     }
 
     if (result != CUFFT_SUCCESS)
         throw OpenMMException("Error executing FFT: "+to_string(result));
-
 }
