@@ -41,7 +41,7 @@ CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int 
     config.device = &device;
     config.num_streams = 1;
     config.stream = &stream;
-    config.doublePrecision = context.getUseDoublePrecision();
+    config.doublePrecision = doublePrecision;
 
     config.FFTdim = 3;
     config.size[0] = zsize;

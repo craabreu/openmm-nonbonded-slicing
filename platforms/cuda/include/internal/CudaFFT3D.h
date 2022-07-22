@@ -69,13 +69,15 @@ public:
      * @param in      the data to transform, ordered such that in[x*ysize*zsize + y*zsize + z] contains element (x, y, z)
      * @param out     on exit, this contains the transformed data
      */
-    CudaFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) {
+    CudaFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
+        realToComplex(realToComplex) {
         inputBuffer = (void*) in.getDevicePointer();
         outputBuffer = (void*) out.getDevicePointer();
         device = context.getDeviceIndex();
         elementSize = context.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
         inputBufferSize = elementSize*zsize*ysize*xsize*batch;
         outputBufferSize = elementSize*(realToComplex ? 2*(zsize/2+1) : zsize)*ysize*xsize*batch;
+        doublePrecision = context.getUseDoublePrecision();
     }
     virtual ~CudaFFT3D() {};
     /**
@@ -91,7 +93,7 @@ public:
      * @param minimum   the minimum size the return value must be greater than or equal to
      * @param maxPrimeFactor  the maximum supported prime number factor (default=7)
      */
-    static int findLegalDimension(int minimum, int maxPrimeFactor=7) {
+    static int findLegalDimension(int minimum, int maxPrimeFactor=7) {  // VkFFT allows maxPrimeFactor up to 13
         if (minimum < 1)
             return 1;
         while (true) {
@@ -114,6 +116,8 @@ protected:
     size_t elementSize;
     uint64_t inputBufferSize;
     uint64_t outputBufferSize;
+    bool realToComplex;
+    bool doublePrecision;
 };
 
 } // namespace PmeSlicing
