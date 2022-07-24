@@ -78,8 +78,6 @@ public:
 private:
     cufftHandle fftForward;
     cufftHandle fftBackward;
-    cufftType_t forwardType;
-    cufftType_t backwardType;
 };
 
 } // namespace PmeSlicing

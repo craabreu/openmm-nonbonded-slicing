@@ -30,9 +30,6 @@
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
 
-#define VKFFT_BACKEND 1 // CUDA
-#include "internal/vkFFT.h"
-
 using namespace OpenMM;
 
 namespace PmeSlicing {
@@ -70,15 +67,8 @@ public:
      * @param out     on exit, this contains the transformed data
      */
     CudaFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
-        realToComplex(realToComplex) {
-        inputBuffer = (void*) in.getDevicePointer();
-        outputBuffer = (void*) out.getDevicePointer();
-        device = context.getDeviceIndex();
-        elementSize = context.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
-        inputBufferSize = elementSize*zsize*ysize*xsize*batch;
-        outputBufferSize = elementSize*(realToComplex ? 2*(zsize/2+1) : zsize)*ysize*xsize*batch;
-        doublePrecision = context.getUseDoublePrecision();
-    }
+        realToComplex(realToComplex), doublePrecision(context.getUseDoublePrecision()),
+        inputBuffer(in.getDevicePointer()), outputBuffer(out.getDevicePointer()) { }
     virtual ~CudaFFT3D() {};
     /**
      * Perform a Fourier transform.
@@ -110,12 +100,8 @@ public:
         }
     }
 protected:
-    void* inputBuffer;
-    void* outputBuffer;
-    int device;
-    size_t elementSize;
-    uint64_t inputBufferSize;
-    uint64_t outputBufferSize;
+    CUdeviceptr inputBuffer;
+    CUdeviceptr outputBuffer;
     bool realToComplex;
     bool doublePrecision;
 };

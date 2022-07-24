@@ -34,9 +34,14 @@ using namespace std;
 
 CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
         CudaFFT3D(context, stream, xsize, ysize, zsize, batch, realToComplex, in, out) {
-    VkFFTConfiguration config = {};
-    vkfftApp = new VkFFTApplication();
+    int outputZSize = realToComplex ? (zsize/2+1) : zsize;
+    size_t realTypeSize = doublePrecision ? sizeof(double) : sizeof(float);
+    size_t inputElementSize = realToComplex ? realTypeSize : 2*realTypeSize;
+    device = context.getDeviceIndex();
+    inputBufferSize = inputElementSize*zsize*ysize*xsize*batch;
+    outputBufferSize = 2*realTypeSize*outputZSize*ysize*xsize*batch;
 
+    VkFFTConfiguration config = {};
     config.performR2C = realToComplex;
     config.device = &device;
     config.num_streams = 1;
@@ -52,29 +57,30 @@ CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int 
     config.inverseReturnToInputBuffer = true;
     config.isInputFormatted = true;
     config.inputBufferSize = &inputBufferSize;
-    config.inputBuffer = &inputBuffer;
+    config.inputBuffer = (void**) &inputBuffer;
     config.inputBufferStride[0] = zsize;
-    config.inputBufferStride[1] = config.inputBufferStride[0]*ysize;
-    config.inputBufferStride[2] = config.inputBufferStride[1]*xsize;
+    config.inputBufferStride[1] = zsize*ysize;
+    config.inputBufferStride[2] = zsize*ysize*xsize;
 
     config.bufferSize = &outputBufferSize;
-    config.buffer = &outputBuffer;
-    config.bufferStride[0] = realToComplex ? (zsize/2+1) : zsize;
-    config.bufferStride[1] = config.bufferStride[0]*ysize;
-    config.bufferStride[2] = config.bufferStride[1]*xsize;
+    config.buffer = (void**) &outputBuffer;
+    config.bufferStride[0] = outputZSize;
+    config.bufferStride[1] = outputZSize*ysize;
+    config.bufferStride[2] = outputZSize*ysize*xsize;
 
-    VkFFTResult result = initializeVkFFT(vkfftApp, config);
+    app = new VkFFTApplication();
+    VkFFTResult result = initializeVkFFT(app, config);
     if (result != VKFFT_SUCCESS)
         throw OpenMMException("Error initializing VkFFT: "+to_string(result));
 }
 
 CudaVkFFT3D::~CudaVkFFT3D() {
-    deleteVkFFT(vkfftApp);
-    delete vkfftApp;
+    deleteVkFFT(app);
+    delete app;
 }
 
 void CudaVkFFT3D::execFFT(bool forward) {
-    VkFFTResult result = VkFFTAppend(vkfftApp, forward ? -1 : 1, NULL);
+    VkFFTResult result = VkFFTAppend(app, forward ? -1 : 1, NULL);
     if (result != VKFFT_SUCCESS)
         throw OpenMMException("Error executing VkFFT: "+to_string(result));
 }

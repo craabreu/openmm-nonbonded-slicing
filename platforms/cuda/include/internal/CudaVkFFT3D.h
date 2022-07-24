@@ -77,7 +77,10 @@ public:
      */
     void execFFT(bool forward);
 private:
-    VkFFTApplication* vkfftApp;
+    int device;
+    uint64_t inputBufferSize;
+    uint64_t outputBufferSize;
+    VkFFTApplication* app;
 };
 
 } // namespace PmeSlicing

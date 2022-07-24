@@ -34,13 +34,14 @@ using namespace std;
 
 CudaCuFFT3D::CudaCuFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
         CudaFFT3D(context, stream, xsize, ysize, zsize, batch, realToComplex, in, out) {
-
+    int outputZSize = realToComplex ? (zsize/2+1) : zsize;
     int n[3] = {xsize, ysize, zsize};
     int inembed[] = {xsize, ysize, zsize};
-    int onembed[] = {xsize, ysize, realToComplex ? zsize/2+1 : zsize};
+    int onembed[] = {xsize, ysize, outputZSize};
     int idist = xsize*ysize*zsize;
-    int odist = xsize*ysize*(realToComplex ? zsize/2+1 : zsize);
+    int odist = xsize*ysize*outputZSize;
 
+    cufftType_t forwardType, backwardType;
     if (realToComplex) {
         forwardType = doublePrecision ? CUFFT_D2Z : CUFFT_R2C;
         backwardType = doublePrecision ? CUFFT_Z2D : CUFFT_C2R;
