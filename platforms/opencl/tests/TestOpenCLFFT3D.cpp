@@ -90,11 +90,11 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     OpenCLArray grid2(context, complexOriginal.size(), sizeof(Real2), "grid2");
     grid1.upload(complexOriginal);
 
-    FFT3D fft(context, context.getQueue(), xsize, ysize, zsize, batch, realToComplex, grid1, grid2);
+    FFT3D fft(context, xsize, ysize, zsize, batch, realToComplex, grid1, grid2);
 
     // Perform a forward FFT, then verify the result is correct.
 
-    fft.execFFT(true);
+    fft.execFFT(true, context.getQueue());
     vector<Real2> result;
     grid2.download(result);
     fftpack_t plan;
@@ -114,7 +114,7 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
 
     // Perform a backward transform and see if we get the original values.
 
-    fft.execFFT(false);
+    fft.execFFT(false, context.getQueue());
     grid1.download(result);
     double scale = 1.0/(xsize*ysize*zsize);
     Real* realResult = (Real*) &result[0];

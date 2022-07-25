@@ -32,10 +32,9 @@ using namespace PmeSlicing;
 using namespace OpenMM;
 using namespace std;
 
-OpenCLVkFFT3D::OpenCLVkFFT3D(OpenCLContext& context, cl::CommandQueue commandQueue, int xsize, int ysize, int zsize, int batch, bool realToComplex, OpenCLArray& in, OpenCLArray& out) {
+OpenCLVkFFT3D::OpenCLVkFFT3D(OpenCLContext& context, int xsize, int ysize, int zsize, int batch, bool realToComplex, OpenCLArray& in, OpenCLArray& out) {
     device = context.getDevice().get();
     cl = context.getContext().get();
-    queue = commandQueue.get();
     inputBuffer = in.getDeviceBuffer().get();
     outputBuffer = out.getDeviceBuffer().get();
 
@@ -72,21 +71,20 @@ OpenCLVkFFT3D::OpenCLVkFFT3D(OpenCLContext& context, cl::CommandQueue commandQue
     config.bufferStride[1] = outputZSize*ysize;
     config.bufferStride[2] = outputZSize*ysize*xsize;
 
-    launchParams = new VkFFTLaunchParams;
-    launchParams->commandQueue = &queue;
-    app = new VkFFTApplication();
-    VkFFTResult result = initializeVkFFT(app, config);
+    VkFFTResult result = initializeVkFFT(&app, config);
     if (result != VKFFT_SUCCESS)
         throw OpenMMException("Error initializing VkFFT: "+to_string(result));
 }
 
 OpenCLVkFFT3D::~OpenCLVkFFT3D() {
-    deleteVkFFT(app);
-    delete app;
+    deleteVkFFT(&app);
 }
 
-void OpenCLVkFFT3D::execFFT(bool forward) {
-    VkFFTResult result = VkFFTAppend(app, forward ? -1 : 1, launchParams);
+void OpenCLVkFFT3D::execFFT(bool forward, cl::CommandQueue queue) {
+    cl_command_queue commandQueue = queue.get();
+    VkFFTLaunchParams launchParams = {};
+    launchParams.commandQueue = &commandQueue;
+    VkFFTResult result = VkFFTAppend(&app, forward ? -1 : 1, &launchParams);
     if (result != VKFFT_SUCCESS)
         throw OpenMMException("Error executing VkFFT: "+to_string(result));
 }

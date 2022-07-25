@@ -272,9 +272,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Compute the PME parameters.
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
-    gridSizeX = OpenCLFFT3DMany::findLegalDimension(gridSizeX);
-    gridSizeY = OpenCLFFT3DMany::findLegalDimension(gridSizeY);
-    gridSizeZ = OpenCLFFT3DMany::findLegalDimension(gridSizeZ);
+    gridSizeX = OpenCLVkFFT3D::findLegalDimension(gridSizeX);
+    gridSizeY = OpenCLVkFFT3D::findLegalDimension(gridSizeY);
+    gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
 
     defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
@@ -339,7 +339,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
             cl.clearBuffer(pmeEnergyBuffer);
             sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-            fft = new OpenCLFFT3DMany(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
+            fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
             bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
             usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && cl.getSupports64BitGlobalAtomics() && isNvidia);
@@ -792,7 +792,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                 cl.executeKernel(pmeSpreadChargeKernel, cl.getNumAtoms());
             }
         }
-        fft->execFFT(pmeGrid1, pmeGrid2, true);
+        fft->execFFT(true, cl.getQueue());
 
         pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
         cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
@@ -817,7 +817,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         if (includeEnergy)
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
         cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
-        fft->execFFT(pmeGrid2, pmeGrid1, false);
+        fft->execFFT(false, cl.getQueue());
         setPeriodicBoxArgs(cl, pmeInterpolateForceKernel, 3);
         if (cl.getUseDoublePrecision()) {
             pmeInterpolateForceKernel.setArg<mm_double4>(8, recipBoxVectors[0]);

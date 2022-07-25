@@ -47,7 +47,7 @@ using namespace PmeSlicing;
 using namespace OpenMM;
 using namespace std;
 
-const double TOL = 1e-4;
+const double TOL = 1e-3;
 
 #define assertForcesAndEnergy(context) { \
     State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \

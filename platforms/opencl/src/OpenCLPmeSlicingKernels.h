@@ -33,7 +33,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
-#include "internal/OpenCLFFT3DMany.h"
+#include "internal/OpenCLVkFFT3D.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/opencl/OpenCLContext.h"
 #include "openmm/opencl/OpenCLArray.h"
@@ -129,7 +129,7 @@ private:
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
-    OpenCLFFT3DMany* fft;
+    OpenCLVkFFT3D* fft;
     Kernel cpuPme;
     PmeIO* pmeio;
     SyncQueuePostComputation* syncQueue;

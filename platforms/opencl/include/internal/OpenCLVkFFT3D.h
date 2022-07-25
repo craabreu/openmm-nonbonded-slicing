@@ -58,7 +58,6 @@ public:
      * and contains only the non-redundant elements.
      *
      * @param context the context in which to perform calculations
-     * @param commandQueue   the OpenCL command queue doing the calculations
      * @param xsize   the first dimension of the data sets on which FFTs will be performed
      * @param ysize   the second dimension of the data sets on which FFTs will be performed
      * @param zsize   the third dimension of the data sets on which FFTs will be performed
@@ -67,14 +66,15 @@ public:
      * @param in      the data to transform, ordered such that in[x*ysize*zsize + y*zsize + z] contains element (x, y, z)
      * @param out     on exit, this contains the transformed data
      */
-    OpenCLVkFFT3D(OpenCLContext& context, cl::CommandQueue commandQueue, int xsize, int ysize, int zsize, int batch, bool realToComplex, OpenCLArray& in, OpenCLArray& out);
+    OpenCLVkFFT3D(OpenCLContext& context, int xsize, int ysize, int zsize, int batch, bool realToComplex, OpenCLArray& in, OpenCLArray& out);
     ~OpenCLVkFFT3D();
     /**
      * Perform a Fourier transform.
      *
      * @param forward  true to perform a forward transform, false to perform an inverse transform
+     * @param commandQueue   the OpenCL command queue doing the calculations
      */
-    void execFFT(bool forward);
+    void execFFT(bool forward, cl::CommandQueue queue);
     /**
      * Get the smallest legal size for a dimension of the grid (that is, a size with no prime
      * factors other than 2, 3, 5, ..., maxPrimeFactor).
@@ -103,11 +103,9 @@ private:
     cl_mem outputBuffer;
     cl_device_id device;
     cl_context cl;
-    cl_command_queue queue;
     uint64_t inputBufferSize;
     uint64_t outputBufferSize;
-    VkFFTLaunchParams* launchParams;
-    VkFFTApplication* app;
+    VkFFTApplication app = {};
 };
 
 } // namespace PmeSlicing
