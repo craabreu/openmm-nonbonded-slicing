@@ -30,9 +30,10 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * This tests the CUDA implementation of sorting.
+ * This tests the CUDA implementation of FFT3D.
  */
 
+#include "internal/CudaCuFFT3D.h"
 #include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
@@ -41,7 +42,6 @@
 #include "openmm/reference/fftpack.h"
 #include "sfmt/SFMT.h"
 #include "openmm/System.h"
-#include <iostream>
 #include <cmath>
 #include <set>
 
@@ -51,8 +51,8 @@ using namespace std;
 
 static CudaPlatform platform;
 
-template <class Real2>
-void testTransform(bool realToComplex, int xsize, int ysize, int zsize) {
+template <class FFT3D, typename Real, class Real2>
+void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batch) {
     System system;
     system.addParticle(0.0);
     CudaPlatform::PlatformData platformData(NULL, system, "", "true", platform.getPropertyDefaultValue("CudaPrecision"), "false",
@@ -63,27 +63,38 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize) {
     context.setAsCurrent();
     OpenMM_SFMT::SFMT sfmt;
     init_gen_rand(0, sfmt);
-    vector<Real2> original(xsize*ysize*zsize);
-    vector<t_complex> reference(original.size());
-    for (int i = 0; i < (int) original.size(); i++) {
-        Real2 value;
-        value.x = (float) genrand_real2(sfmt);
-        value.y = (float) genrand_real2(sfmt);
-        original[i] = value;
-        reference[i] = t_complex(value.x, value.y);
+    int gridSize = xsize*ysize*zsize;
+    int outputZSize = (realToComplex ? zsize/2+1 : zsize);
+
+    vector<vector<t_complex>> reference(batch);
+    for (int j = 0; j < batch; j++) {
+        reference[j].resize(gridSize);
+        for (int i = 0; i < gridSize; i++) {
+            Real x = (float) genrand_real2(sfmt);
+            Real y = realToComplex ? 0 : (float) genrand_real2(sfmt);
+            reference[j][i] = t_complex(x, y);
+        }
     }
-    for (int i = 0; i < (int) reference.size(); i++) {
-        if (realToComplex)
-            reference[i] = t_complex(i%2 == 0 ? original[i/2].x : original[i/2].y, 0);
-        else
-            reference[i] = t_complex(original[i].x, original[i].y);
-    }
-    CudaArray grid1(context, original.size(), sizeof(Real2), "grid1");
-    CudaArray grid2(context, original.size(), sizeof(Real2), "grid2");
-    grid1.upload(original);
+
+    vector<Real2> complexOriginal(gridSize*batch);
+    Real* realOriginal = (Real*) &complexOriginal[0];
+    for (int j = 0; j < batch; j++)
+        for (int i = 0; i < gridSize; i++) {
+            int offset = j*gridSize;
+            if (realToComplex)
+                realOriginal[offset+i] = reference[j][i].re;
+            else {
+                complexOriginal[offset+i].x = reference[j][i].re;
+                complexOriginal[offset+i].y = reference[j][i].im;
+            }
+        }
+
+    CudaArray grid1(context, complexOriginal.size(), sizeof(Real2), "grid1");
+    CudaArray grid2(context, complexOriginal.size(), sizeof(Real2), "grid2");
+    grid1.upload(complexOriginal);
 
     CUstream stream = context.getCurrentStream();
-    CudaVkFFT3D fft(context, stream, xsize, ysize, zsize, 1, realToComplex, grid1, grid2);
+    FFT3D fft(context, stream, xsize, ysize, zsize, batch, realToComplex, grid1, grid2);
 
     // Perform a forward FFT, then verify the result is correct.
 
@@ -92,16 +103,17 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize) {
     grid2.download(result);
     fftpack_t plan;
     fftpack_init_3d(&plan, xsize, ysize, zsize);
-    fftpack_exec_3d(plan, FFTPACK_FORWARD, &reference[0], &reference[0]);
-    int outputZSize = (realToComplex ? zsize/2+1 : zsize);
-    for (int x = 0; x < xsize; x++)
-        for (int y = 0; y < ysize; y++)
-            for (int z = 0; z < outputZSize; z++) {
-                int index1 = x*ysize*zsize + y*zsize + z;
-                int index2 = x*ysize*outputZSize + y*outputZSize + z;
-                ASSERT_EQUAL_TOL(reference[index1].re, result[index2].x, 1e-3);
-                ASSERT_EQUAL_TOL(reference[index1].im, result[index2].y, 1e-3);
-            }
+    for (int j = 0; j < batch; j++) {
+        fftpack_exec_3d(plan, FFTPACK_FORWARD, &reference[j][0], &reference[j][0]);
+        for (int x = 0; x < xsize; x++)
+            for (int y = 0; y < ysize; y++)
+                for (int z = 0; z < outputZSize; z++) {
+                    int index1 = x*ysize*zsize + y*zsize + z;
+                    int index2 = ((j*xsize + x)*ysize + y)*outputZSize + z;
+                    ASSERT_EQUAL_TOL(reference[j][index1].re, result[index2].x, 1e-3);
+                    ASSERT_EQUAL_TOL(reference[j][index1].im, result[index2].y, 1e-3);
+                }
+    }
     fftpack_destroy(plan);
 
     // Perform a backward transform and see if we get the original values.
@@ -109,11 +121,28 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize) {
     fft.execFFT(false);
     grid1.download(result);
     double scale = 1.0/(xsize*ysize*zsize);
-    int valuesToCheck = (realToComplex ? original.size()/2 : original.size());
-    for (int i = 0; i < valuesToCheck; ++i) {
-        ASSERT_EQUAL_TOL(original[i].x, scale*result[i].x, 1e-4);
-        ASSERT_EQUAL_TOL(original[i].y, scale*result[i].y, 1e-4);
-    }
+    Real* realResult = (Real*) &result[0];
+    for (int j = 0; j < batch; j++)
+        for (int i = 0; i < gridSize; i++) {
+            int offset = j*gridSize;
+            if (realToComplex) {
+                ASSERT_EQUAL_TOL(realOriginal[offset+i], scale*realResult[offset+i], 1e-4);
+            }
+            else {
+                ASSERT_EQUAL_TOL(complexOriginal[offset+i].x, scale*result[offset+i].x, 1e-4);
+                ASSERT_EQUAL_TOL(complexOriginal[offset+i].y, scale*result[offset+i].y, 1e-4);
+            }
+
+        }
+}
+
+template <class FFT3D, typename Real, class Real2>
+void executeTests(int batch) {
+    testTransform<FFT3D, Real, Real2>(false, 28, 25, 30, batch);
+    testTransform<FFT3D, Real, Real2>(true, 28, 25, 25, batch);
+    testTransform<FFT3D, Real, Real2>(true, 25, 28, 25, batch);
+    testTransform<FFT3D, Real, Real2>(true, 25, 25, 28, batch);
+    testTransform<FFT3D, Real, Real2>(true, 21, 25, 27, batch);
 }
 
 int main(int argc, char* argv[]) {
@@ -121,18 +150,20 @@ int main(int argc, char* argv[]) {
         if (argc > 1)
             platform.setPropertyDefaultValue("CudaPrecision", string(argv[1]));
         if (platform.getPropertyDefaultValue("CudaPrecision") == "double") {
-            testTransform<double2>(false, 28, 25, 30);
-            testTransform<double2>(true, 28, 25, 25);
-            testTransform<double2>(true, 25, 28, 25);
-            testTransform<double2>(true, 25, 25, 28);
-            testTransform<double2>(true, 21, 25, 27);
+            executeTests<CudaCuFFT3D, double, double2>(1);
+            executeTests<CudaCuFFT3D, double, double2>(2);
+            executeTests<CudaCuFFT3D, double, double2>(3);
+            executeTests<CudaVkFFT3D, double, double2>(1);
+            executeTests<CudaVkFFT3D, double, double2>(2);
+            executeTests<CudaVkFFT3D, double, double2>(3);
         }
         else {
-            testTransform<float2>(false, 28, 25, 30);
-            testTransform<float2>(true, 28, 25, 25);
-            testTransform<float2>(true, 25, 28, 25);
-            testTransform<float2>(true, 25, 25, 28);
-            testTransform<float2>(true, 21, 25, 27);
+            executeTests<CudaCuFFT3D, float, float2>(1);
+            executeTests<CudaCuFFT3D, float, float2>(2);
+            executeTests<CudaCuFFT3D, float, float2>(3);
+            executeTests<CudaVkFFT3D, float, float2>(1);
+            executeTests<CudaVkFFT3D, float, float2>(2);
+            executeTests<CudaVkFFT3D, float, float2>(3);
         }
     }
     catch(const exception& e) {

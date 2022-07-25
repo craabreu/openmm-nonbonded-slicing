@@ -342,19 +342,10 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
 
-            if (usePmeStream)
-                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
-            else
-                pmeStream = cu.getCurrentStream();
-
-            if (useCudaFFT)
-                fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
-            else
-                fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
-
             // Prepare for doing PME on its own stream.
 
             if (usePmeStream) {
+                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
                 CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 int recipForceGroup = force.getReciprocalSpaceForceGroup();
@@ -363,7 +354,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                 cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                 cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
             }
+            else
+                pmeStream = cu.getCurrentStream();
 
+            if (useCudaFFT)
+                fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
+            else
+                fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             hasInitializedFFT = true;
 
             // Initialize the b-spline moduli.
