@@ -1,3 +1,4 @@
+include(FindPackageHandleStandardArgs)
 
 ### OPENCL_INCLUDE_DIR ###
 # Try OPENCL_DIR variable before looking elsewhere
