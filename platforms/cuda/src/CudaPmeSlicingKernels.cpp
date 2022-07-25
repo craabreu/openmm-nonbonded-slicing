@@ -180,10 +180,6 @@ CudaCalcSlicedPmeForceKernel::~CudaCalcSlicedPmeForceKernel() {
     if (pmeio != NULL)
         delete pmeio;
     if (hasInitializedFFT) {
-        if (useCudaFFT) {
-            cufftDestroy(fftForward);
-            cufftDestroy(fftBackward);
-        }
         if (usePmeStream) {
             cuStreamDestroy(pmeStream);
             cuEventDestroy(pmeSyncEvent);
@@ -226,10 +222,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
+    numSubsets = force.getNumSubsets();
     vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
+    vector<int> subsetVec(cu.getPaddedNumAtoms(), 0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
+        subsetVec[i] = force.getParticleSubset(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -257,10 +256,16 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Compute the PME parameters.
 
+    int cufftVersion;
+    cufftGetVersion(&cufftVersion);
+    useCudaFFT = force.getUseCudaFFT() && (cufftVersion >= 7050); // There was a critical bug in version 7.0
+
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
+
     gridSizeX = CudaFFT3D::findLegalDimension(gridSizeX);
     gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
+    int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -277,11 +282,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         map<string, string> pmeDefines;
         pmeDefines["PME_ORDER"] = cu.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cu.intToString(numParticles);
+        pmeDefines["NUM_SUBSETS"] = cu.intToString(numSubsets);
         pmeDefines["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
         pmeDefines["RECIP_EXP_FACTOR"] = cu.doubleToString(M_PI*M_PI/(alpha*alpha));
         pmeDefines["GRID_SIZE_X"] = cu.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cu.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cu.intToString(gridSizeZ);
+        pmeDefines["ROUNDED_Z_SIZE"] = cu.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cu.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cu.doubleToString(M_PI);
         if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
@@ -315,14 +322,14 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeInterpolateForceKernel = cu.getKernel(module, "gridInterpolateForce");
             pmeEvalEnergyKernel = cu.getKernel(module, "gridEvaluateEnergy");
             pmeFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
+            pmeCollapseGridKernel = cu.getKernel(module, "collapseGrid");
             cuFuncSetCacheConfig(pmeSpreadChargeKernel, CU_FUNC_CACHE_PREFER_SHARED);
             cuFuncSetCacheConfig(pmeInterpolateForceKernel, CU_FUNC_CACHE_PREFER_L1);
 
             // Create required data structures.
 
             int elementSize = (cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
-            int gridElements = gridSizeX*gridSizeY*roundedZSize;
+            int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
             pmeGrid1.initialize(cu, gridElements, 2*elementSize, "pmeGrid1");
             pmeGrid2.initialize(cu, gridElements, 2*elementSize, "pmeGrid2");
             cu.addAutoclearBuffer(pmeGrid2);
@@ -334,29 +341,11 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeEnergyBuffer.initialize(cu, cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
-            int cufftVersion;
-            cufftGetVersion(&cufftVersion);
-            useCudaFFT = (cufftVersion >= 7050); // There was a critical bug in version 7.0
-            if (useCudaFFT) {
-                cufftResult result = cufftPlan3d(&fftForward, gridSizeX, gridSizeY, gridSizeZ, cu.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C);
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
-                result = cufftPlan3d(&fftBackward, gridSizeX, gridSizeY, gridSizeZ, cu.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R);
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error initializing FFT: "+cu.intToString(result));
-            }
-            else {
-                fft = new CudaFFT3D(cu, gridSizeX, gridSizeY, gridSizeZ, true);
-            }
 
             // Prepare for doing PME on its own stream.
 
             if (usePmeStream) {
                 cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
-                if (useCudaFFT) {
-                    cufftSetStream(fftForward, pmeStream);
-                    cufftSetStream(fftBackward, pmeStream);
-                }
                 CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
                 int recipForceGroup = force.getReciprocalSpaceForceGroup();
@@ -365,6 +354,13 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                 cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                 cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
             }
+            else
+                pmeStream = cu.getCurrentStream();
+
+            if (useCudaFFT)
+                fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
+            else
+                fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             hasInitializedFFT = true;
 
             // Initialize the b-spline moduli.
@@ -474,6 +470,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
+    subsets.initialize<int>(cu, cu.getPaddedNumAtoms(), "subsets");
+    subsets.upload(subsetVec);
     map<string, string> replacements;
     replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
     if (usePosqCharges) {
@@ -678,7 +676,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
 
         // Execute the reciprocal space kernels.
 
-        void* gridIndexArgs[] = {&cu.getPosq().getDevicePointer(), &pmeAtomGridIndex.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
+        void* gridIndexArgs[] = {&cu.getPosq().getDevicePointer(), &subsets.getDevicePointer(), &pmeAtomGridIndex.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
         cu.executeKernel(pmeGridIndexKernel, gridIndexArgs, cu.getNumAtoms());
@@ -694,21 +692,10 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         void* finishSpreadArgs[] = {&pmeGrid2.getDevicePointer(), &pmeGrid1.getDevicePointer()};
         cu.executeKernel(pmeFinishSpreadChargeKernel, finishSpreadArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
+        fft->execFFT(true);
 
-        if (useCudaFFT) {
-            if (cu.getUseDoublePrecision()) {
-                cufftResult result = cufftExecD2Z(fftForward, (double*) pmeGrid1.getDevicePointer(), (double2*) pmeGrid2.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            } else {
-                cufftResult result = cufftExecR2C(fftForward, (float*) pmeGrid1.getDevicePointer(), (float2*) pmeGrid2.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            }
-        }
-        else {
-            fft->execFFT(pmeGrid1, pmeGrid2, true);
-        }
+        void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
+        cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
         if (includeEnergy) {
             void* computeEnergyArgs[] = {&pmeGrid2.getDevicePointer(), usePmeStream ? &pmeEnergyBuffer.getDevicePointer() : &cu.getEnergyBuffer().getDevicePointer(),
@@ -722,20 +709,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
         cu.executeKernel(pmeConvolutionKernel, convolutionArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
-        if (useCudaFFT) {
-            if (cu.getUseDoublePrecision()) {
-                cufftResult result = cufftExecZ2D(fftBackward, (double2*) pmeGrid2.getDevicePointer(), (double*) pmeGrid1.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            } else {
-                cufftResult result = cufftExecC2R(fftBackward, (float2*) pmeGrid2.getDevicePointer(), (float*)  pmeGrid1.getDevicePointer());
-                if (result != CUFFT_SUCCESS)
-                    throw OpenMMException("Error executing FFT: "+cu.intToString(result));
-            }
-        }
-        else {
-            fft->execFFT(pmeGrid2, pmeGrid1, false);
-        }
+        fft->execFFT(false);
 
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
@@ -784,10 +758,14 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     // Record the per-particle parameters.
     
     vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
+    vector<int> subsetVec(cu.getPaddedNumAtoms(), 0);
     const vector<int>& order = cu.getAtomIndex();
-    for (int i = 0; i < force.getNumParticles(); i++)
+    for (int i = 0; i < force.getNumParticles(); i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
+        subsetVec[i] = force.getParticleSubset(i);
+    }
     baseParticleCharges.upload(baseParticleChargeVec);
+    subsets.upload(subsetVec);
     
     // Record the exceptions.
     

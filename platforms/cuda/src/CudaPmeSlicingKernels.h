@@ -33,13 +33,14 @@
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
+#include "internal/CudaFFT3D.h"
+#include "internal/CudaCuFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaSort.h"
-#include "openmm/cuda/CudaFFT3D.h"
 #include <vector>
-#include <cufft.h>
 
 using namespace OpenMM;
 using namespace std;
@@ -110,6 +111,7 @@ private:
     ForceInfo* info;
     bool hasInitializedFFT;
     CudaArray charges;
+    CudaArray subsets;
     CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
     CudaArray exclusionChargeProds;
@@ -133,8 +135,6 @@ private:
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
-    cufftHandle fftForward;
-    cufftHandle fftBackward;
     CUfunction computeParamsKernel, computeExclusionParamsKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;
@@ -144,12 +144,13 @@ private:
     CUfunction pmeEvalEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
+    CUfunction pmeCollapseGridKernel;
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
-    int gridSizeX, gridSizeY, gridSizeZ;
+    int gridSizeX, gridSizeY, gridSizeZ, numSubsets;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };

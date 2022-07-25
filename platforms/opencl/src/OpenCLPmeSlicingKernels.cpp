@@ -238,10 +238,13 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
+    int numSubsets = force.getNumSubsets();
     vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
+    vector<int> subsetVec(cl.getPaddedNumAtoms(), 0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
+        subsetVec[i] = force.getParticleSubset(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -269,9 +272,11 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Compute the PME parameters.
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
-    gridSizeX = OpenCLFFT3D::findLegalDimension(gridSizeX);
-    gridSizeY = OpenCLFFT3D::findLegalDimension(gridSizeY);
-    gridSizeZ = OpenCLFFT3D::findLegalDimension(gridSizeZ);
+    gridSizeX = OpenCLVkFFT3D::findLegalDimension(gridSizeX);
+    gridSizeY = OpenCLVkFFT3D::findLegalDimension(gridSizeY);
+    gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
+    int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
+
     defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
     defines["USE_EWALD"] = "1";
@@ -283,11 +288,13 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
+        pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
         pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
         pmeDefines["RECIP_EXP_FACTOR"] = cl.doubleToString(M_PI*M_PI/(alpha*alpha));
         pmeDefines["GRID_SIZE_X"] = cl.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cl.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cl.intToString(gridSizeZ);
+        pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
@@ -315,8 +322,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             // Create required data structures.
 
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
-            int gridElements = gridSizeX*gridSizeY*roundedZSize;
+            int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
             pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
             pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
             if (cl.getSupports64BitGlobalAtomics())
@@ -333,7 +339,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
             cl.clearBuffer(pmeEnergyBuffer);
             sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-            fft = new OpenCLFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, true);
+            fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
             bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
             usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && cl.getSupports64BitGlobalAtomics() && isNvidia);
@@ -456,6 +462,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
+    subsets.initialize<int>(cl, cl.getPaddedNumAtoms(), "subsets");
+    subsets.upload(subsetVec);
     map<string, string> replacements;
     replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
     if (usePosqCharges) {
@@ -615,16 +623,18 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                                                    cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
+            pmeCollapseGridKernel = cl::Kernel(program, "collapseGrid");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
-            pmeGridIndexKernel.setArg<cl::Buffer>(1, pmeAtomGridIndex.getDeviceBuffer());
+            pmeGridIndexKernel.setArg<cl::Buffer>(1, subsets.getDeviceBuffer());
+            pmeGridIndexKernel.setArg<cl::Buffer>(2, pmeAtomGridIndex.getDeviceBuffer());
             if (!cl.getSupports64BitGlobalAtomics()) {
-                pmeGridIndexKernel.setArg<cl::Buffer>(10, pmeBsplineTheta.getDeviceBuffer());
-                pmeGridIndexKernel.setArg(11, OpenCLContext::ThreadBlockSize*PmeOrder*elementSize, NULL);
-                pmeGridIndexKernel.setArg<cl::Buffer>(12, charges.getDeviceBuffer());
+                pmeGridIndexKernel.setArg<cl::Buffer>(11, pmeBsplineTheta.getDeviceBuffer());
+                pmeGridIndexKernel.setArg(12, OpenCLContext::ThreadBlockSize*PmeOrder*elementSize, NULL);
+                pmeGridIndexKernel.setArg<cl::Buffer>(13, charges.getDeviceBuffer());
                 pmeAtomRangeKernel = cl::Kernel(program, "findAtomRangeForGrid");
                 pmeZIndexKernel = cl::Kernel(program, "recordZIndex");
                 pmeAtomRangeKernel.setArg<cl::Buffer>(0, pmeAtomGridIndex.getDeviceBuffer());
@@ -642,8 +652,10 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(10, pmeAtomGridIndex.getDeviceBuffer());
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(11, charges.getDeviceBuffer());
             }
-            else if (deviceIsCpu)
+            else if (deviceIsCpu) {
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(10, charges.getDeviceBuffer());
+                pmeSpreadChargeKernel.setArg<cl::Buffer>(12, subsets.getDeviceBuffer());
+            }
             else {
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(2, pmeAtomGridIndex.getDeviceBuffer());
                 pmeSpreadChargeKernel.setArg<cl::Buffer>(3, pmeAtomRange.getDeviceBuffer());
@@ -726,16 +738,16 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         
         // Execute the reciprocal space kernels.
 
-        setPeriodicBoxArgs(cl, pmeGridIndexKernel, 2);
+        setPeriodicBoxArgs(cl, pmeGridIndexKernel, 3);
         if (cl.getUseDoublePrecision()) {
-            pmeGridIndexKernel.setArg<mm_double4>(7, recipBoxVectors[0]);
-            pmeGridIndexKernel.setArg<mm_double4>(8, recipBoxVectors[1]);
-            pmeGridIndexKernel.setArg<mm_double4>(9, recipBoxVectors[2]);
+            pmeGridIndexKernel.setArg<mm_double4>(8, recipBoxVectors[0]);
+            pmeGridIndexKernel.setArg<mm_double4>(9, recipBoxVectors[1]);
+            pmeGridIndexKernel.setArg<mm_double4>(10, recipBoxVectors[2]);
         }
         else {
-            pmeGridIndexKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[0]);
-            pmeGridIndexKernel.setArg<mm_float4>(8, recipBoxVectorsFloat[1]);
-            pmeGridIndexKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[2]);
+            pmeGridIndexKernel.setArg<mm_float4>(8, recipBoxVectorsFloat[0]);
+            pmeGridIndexKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[1]);
+            pmeGridIndexKernel.setArg<mm_float4>(10, recipBoxVectorsFloat[2]);
         }
         cl.executeKernel(pmeGridIndexKernel, cl.getNumAtoms());
         if (deviceIsCpu && !cl.getSupports64BitGlobalAtomics()) {
@@ -780,7 +792,11 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                 cl.executeKernel(pmeSpreadChargeKernel, cl.getNumAtoms());
             }
         }
-        fft->execFFT(pmeGrid1, pmeGrid2, true);
+        fft->execFFT(true, cl.getQueue());
+
+        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
+        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
+
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         if (cl.getUseDoublePrecision()) {
             pmeConvolutionKernel.setArg<mm_double4>(4, recipBoxVectors[0]);
@@ -801,7 +817,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         if (includeEnergy)
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
         cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
-        fft->execFFT(pmeGrid2, pmeGrid1, false);
+        fft->execFFT(false, cl.getQueue());
         setPeriodicBoxArgs(cl, pmeInterpolateForceKernel, 3);
         if (cl.getUseDoublePrecision()) {
             pmeInterpolateForceKernel.setArg<mm_double4>(8, recipBoxVectors[0]);
@@ -856,9 +872,13 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     // Record the per-particle parameters.
 
     vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
-    for (int i = 0; i < force.getNumParticles(); i++)
+    vector<int> subsetVec(cl.getPaddedNumAtoms(), 0);
+    for (int i = 0; i < force.getNumParticles(); i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
+        subsetVec[i] = force.getParticleSubset(i);
+    }
     baseParticleCharges.upload(baseParticleChargeVec);
+    subsets.upload(subsetVec);
     
     // Record the exceptions.
     

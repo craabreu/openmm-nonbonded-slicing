@@ -8,7 +8,7 @@ from openmm import unit
 
 ONE_4PI_EPS0 = 138.935456
 
-TOL = 1.0E-5
+TOL = 1.0E-3
 
 cases = [
     ('Reference', ''),
