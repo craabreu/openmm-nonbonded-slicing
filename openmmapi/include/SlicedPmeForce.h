@@ -529,6 +529,22 @@ public:
      */
     void setSliceForceGroup(int subset1, int subset2, int group);
  	/**
+     * Get the coupling parameter applied to a particular nonbonded slice.
+     *
+     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     */
+    double getCouplingParameter(int subset1, int subset2) const;
+ 	/**
+     * Set the coupling parameter applied to a particular nonbonded slice, that is, to the
+     * interactions between particles of a subset with those of another (or the same) subset.
+     *
+     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
+     * @param lambda   the coupling parameter value (default = 1.0).
+     */
+    void setCouplingParameter(int subset1, int subset2, double lambda);
+ 	/**
      * Get whether CUDA Toolkit's cuFFT library is used to compute fast Fourier transform when
      * executing in the CUDA platform.
      */
@@ -567,6 +583,7 @@ private:
     std::vector<ExceptionOffsetInfo> exceptionOffsets;
     std::map<std::pair<int, int>, int> exceptionMap;
     std::vector<std::vector<int>> sliceForceGroup;
+    std::vector<std::vector<double>> couplingParameter;
 };
 
 /**

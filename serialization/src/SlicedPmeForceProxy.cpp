@@ -56,6 +56,12 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
             if (group >= 0)
                 sliceForceGroup.createChildNode("sliceForceGroup").setIntProperty("subset1", i).setIntProperty("subset2", j).setIntProperty("group", group);
         }
+    SerializationNode& couplingParameter = node.createChildNode("couplingParameters");
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++) {
+            double lambda = force.getCouplingParameter(i, j);
+            couplingParameter.createChildNode("couplingParameter").setIntProperty("subset1", i).setIntProperty("subset2", j).setDoubleProperty("lambda", lambda);
+        }
     node.setStringProperty("name", force.getName());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
     node.setDoubleProperty("ewaldTolerance", force.getEwaldErrorTolerance());
@@ -118,6 +124,9 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
         const SerializationNode& sliceForceGroups = node.getChildNode("sliceForceGroups");
         for (auto& sliceForceGroup : sliceForceGroups.getChildren())
             force->setSliceForceGroup(sliceForceGroup.getIntProperty("subset1"), sliceForceGroup.getIntProperty("subset2"), sliceForceGroup.getIntProperty("group"));
+        const SerializationNode& couplingParameters = node.getChildNode("couplingParameters");
+        for (auto& couplingParameter : couplingParameters.getChildren())
+            force->setCouplingParameter(couplingParameter.getIntProperty("subset1"), couplingParameter.getIntProperty("subset2"), couplingParameter.getDoubleProperty("lambda"));
         force->setName(node.getStringProperty("name", force->getName()));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldTolerance"));

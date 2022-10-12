@@ -54,9 +54,12 @@ SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets),
         cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFALT_USE_CUDA_FFT) {
-    vector<int> row(numSubsets, -1);
+    vector<int> groupRow(numSubsets, -1);
     for (int i = 0; i < numSubsets; i++)
-        sliceForceGroup.push_back(row);
+        sliceForceGroup.push_back(groupRow);
+    vector<double> lambdaRow(numSubsets, 1.0);
+    for (int i = 0; i < numSubsets; i++)
+        couplingParameter.push_back(lambdaRow);
 }
 
 SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets), useCudaFFT(DEFALT_USE_CUDA_FFT) {
@@ -373,4 +376,18 @@ void SlicedPmeForce::setSliceForceGroup(int subset1, int subset2, int group) {
     int i = std::min(subset1, subset2);
     int j = std::max(subset1, subset2);
     sliceForceGroup[i][j] = sliceForceGroup[j][i] = group;
+}
+
+double SlicedPmeForce::getCouplingParameter(int subset1, int subset2) const {
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    return couplingParameter[subset1][subset2];
+}
+
+void SlicedPmeForce::setCouplingParameter(int subset1, int subset2, double lambda) {
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    int i = std::min(subset1, subset2);
+    int j = std::max(subset1, subset2);
+    couplingParameter[i][j] = couplingParameter[j][i] = lambda;
 }

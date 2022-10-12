@@ -142,6 +142,8 @@ public:
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
     int getSliceForceGroup(int subset1, int subset2) const;
     void setSliceForceGroup(int subset1, int subset2, int group);
+    double getCouplingParameter(int subset1, int subset2) const;
+    void setCouplingParameter(int subset1, int subset2, double lambda);
     bool getUseCudaFFT() const;
     void setUseCuFFT(bool use);
 
