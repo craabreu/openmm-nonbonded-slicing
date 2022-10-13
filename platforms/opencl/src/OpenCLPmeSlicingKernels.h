@@ -102,6 +102,7 @@ private:
     class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
+    class AddEnergyPostComputation;
     OpenCLContext& cl;
     ForceInfo* info;
     bool hasInitializedKernel;
@@ -132,7 +133,7 @@ private:
     OpenCLVkFFT3D* fft;
     Kernel cpuPme;
     PmeIO* pmeio;
-    SyncQueuePostComputation* syncQueue;
+    AddEnergyPostComputation* addEnergy;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
@@ -151,6 +152,7 @@ private:
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
+    int numSubsets, numSlices;
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };

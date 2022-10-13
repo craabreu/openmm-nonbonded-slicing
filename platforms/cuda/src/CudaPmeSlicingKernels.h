@@ -107,6 +107,7 @@ private:
     class PmePostComputation;
     class SyncStreamPreComputation;
     class SyncStreamPostComputation;
+    class AddEnergyPostComputation;
     CudaContext& cu;
     ForceInfo* info;
     bool hasInitializedFFT;
@@ -150,7 +151,8 @@ private:
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
-    int gridSizeX, gridSizeY, gridSizeZ, numSubsets;
+    int gridSizeX, gridSizeY, gridSizeZ;
+    int numSubsets, numSlices;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 };

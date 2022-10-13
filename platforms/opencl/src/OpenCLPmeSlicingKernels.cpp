@@ -168,31 +168,43 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::SyncQueuePostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, OpenCLArray& pmeEnergyBuffer, int forceGroup) : cl(cl), event(event),
-            pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
-    }
-    void setKernel(cl::Kernel kernel) {
-        addEnergyKernel = kernel;
-        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(2, pmeEnergyBuffer.getSize());
-    }
+    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, int forceGroup) :
+        cl(cl), event(event), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             vector<cl::Event> events(1);
             events[0] = event;
             event = cl::Event();
             cl.getQueue().enqueueBarrierWithWaitList(&events);
-            if (includeEnergy)
-                cl.executeKernel(addEnergyKernel, pmeEnergyBuffer.getSize());
         }
         return 0.0;
     }
 private:
     OpenCLContext& cl;
     cl::Event& event;
+    int forceGroup;
+};
+
+class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
+public:
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, int bufferSize, int forceGroup) :
+        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    void setKernel(cl::Kernel kernel) {
+        addEnergyKernel = kernel;
+        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(2, bufferSize);
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if (includeEnergy && (groups&(1<<forceGroup)) != 0)
+            cl.executeKernel(addEnergyKernel, bufferSize);
+        return 0.0;
+    }
+private:
+    OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
+    int bufferSize;
     int forceGroup;
 };
 
@@ -238,7 +250,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
-    int numSubsets = force.getNumSubsets();
+    numSubsets = force.getNumSubsets();
+    numSlices = numSubsets*(numSubsets + 1)/2;
     vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
     vector<int> subsetVec(cl.getPaddedNumAtoms(), 0);
     vector<vector<int> > exclusionList(numParticles);
@@ -333,22 +346,24 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
             pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
             int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-            pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
+            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+            pmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "pmeEnergyBuffer");
             cl.clearBuffer(pmeEnergyBuffer);
             sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
             fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
             bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
             usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
+            int recipForceGroup = force.getReciprocalSpaceForceGroup();
+            if (recipForceGroup < 0)
+                recipForceGroup = force.getForceGroup();
             if (usePmeQueue) {
                 pmeDefines["USE_PME_STREAM"] = "1";
                 pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
-                int recipForceGroup = force.getReciprocalSpaceForceGroup();
-                if (recipForceGroup < 0)
-                    recipForceGroup = force.getForceGroup();
                 cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
-                cl.addPostComputation(syncQueue = new SyncQueuePostComputation(cl, pmeSyncEvent, pmeEnergyBuffer, recipForceGroup));
+                cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
             }
+            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, bufferSize, recipForceGroup));
 
             // Initialize the b-spline moduli.
 
@@ -637,7 +652,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<cl::Buffer>(2, pmeBsplineModuliY.getDeviceBuffer());
             pmeConvolutionKernel.setArg<cl::Buffer>(3, pmeBsplineModuliZ.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyBuffer.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
@@ -650,7 +665,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
             if (usePmeQueue)
-                syncQueue->setKernel(cl::Kernel(program, "addEnergy"));
+                addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
        }
     }
     
