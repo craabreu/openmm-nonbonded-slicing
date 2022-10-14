@@ -749,9 +749,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         cl.executeKernel(pmeFinishSpreadChargeKernel, numSubsets*gridSizeX*gridSizeY*gridSizeZ);
         fft->execFFT(true, cl.getQueue());
 
-        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
-
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         if (cl.getUseDoublePrecision()) {
             pmeConvolutionKernel.setArg<mm_double4>(4, recipBoxVectors[0]);
@@ -771,6 +768,10 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         }
         if (includeEnergy)
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
+
+        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
+        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
+
         cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
         fft->execFFT(false, cl.getQueue());
         setPeriodicBoxArgs(cl, pmeInterpolateForceKernel, 3);

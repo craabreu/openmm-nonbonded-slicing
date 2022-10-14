@@ -205,6 +205,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
                       real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+    const unsigned int odist = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
 
     mixed energy = 0;
@@ -230,11 +231,18 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
             kx = ((kx == 0) ? kx : GRID_SIZE_X-kx);
             ky = ((ky == 0) ? ky : GRID_SIZE_Y-ky);
             kz = GRID_SIZE_Z-kz;
-        } 
-        int indexInHalfComplexGrid = kz + ky*(GRID_SIZE_Z/2+1)+kx*(GRID_SIZE_Y*(GRID_SIZE_Z/2+1));
-        real2 grid = pmeGrid[indexInHalfComplexGrid];
+        }
+        int indexInHalfComplexGrid = kz+(ky+kx*GRID_SIZE_Y)*(GRID_SIZE_Z/2+1);
+        real2 grid[NUM_SUBSETS];
+        mixed energy_k = 0.0;
+        for (int j = 0; j < NUM_SUBSETS; j++) {
+            real2 jgrid = grid[j] = pmeGrid[j*odist + indexInHalfComplexGrid];
+            for (int k = 0; k < j ; k++)
+                energy_k += 2.0*(jgrid.x*grid[k].x + jgrid.y*grid[k].y);
+            energy_k += jgrid.x*jgrid.x + jgrid.y*jgrid.y;
+        }
         if (kx != 0 || ky != 0 || kz != 0)
-            energy += eterm*(grid.x*grid.x + grid.y*grid.y);
+            energy += eterm*energy_k;
     }
 #if defined(USE_PME_STREAM)
     energyBuffer[GLOBAL_ID] = 0.5f*energy;
