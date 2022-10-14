@@ -141,18 +141,19 @@ KERNEL void finishSpreadCharge(
     SYNC_THREADS;
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const unsigned int extendedSize = GRID_SIZE_X*GRID_SIZE_Y*ROUNDED_Z_SIZE;
+    const unsigned int totalSize = NUM_SUBSETS*gridSize;
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
     real scale = 1/(real) 0x100000000;
 #endif
-    // TODO: Optimize by including the inner loop in the GPU parallelization
-    for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
+    for (int i = GLOBAL_ID; i < totalSize; i += GLOBAL_SIZE) {
+        int j = i/gridSize;
+        int index = i - j*gridSize;
         int zindex = index%GRID_SIZE_Z;
         int loadIndex = zindexTable[zindex] + blockSize*(int) (index/GRID_SIZE_Z);
-        for (int j = 0; j < NUM_SUBSETS; j++)
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
-            grid2[j*gridSize+index] = scale*grid1[j*extendedSize+loadIndex];
+        grid2[j*gridSize+index] = scale*grid1[j*extendedSize+loadIndex];
 #else
-            grid2[j*gridSize+index] = grid1[j*extendedSize+loadIndex];
+        grid2[j*gridSize+index] = grid1[j*extendedSize+loadIndex];
 #endif
     }
 }

@@ -746,7 +746,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeSpreadChargeKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[2]);
         }
         cl.executeKernel(pmeSpreadChargeKernel, cl.getNumAtoms());
-        cl.executeKernel(pmeFinishSpreadChargeKernel, gridSizeX*gridSizeY*gridSizeZ);
+        cl.executeKernel(pmeFinishSpreadChargeKernel, numSubsets*gridSizeX*gridSizeY*gridSizeZ);
         fft->execFFT(true, cl.getQueue());
 
         pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
