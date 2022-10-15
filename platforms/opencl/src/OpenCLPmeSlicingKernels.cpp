@@ -193,7 +193,6 @@ public:
         addEnergyKernel = kernel;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(2, bufferSize);
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0)
@@ -289,6 +288,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeY = OpenCLVkFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
+    int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
 
     defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
@@ -302,12 +302,14 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
         pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
+        pmeDefines["NUM_SLICES"] = cl.intToString(numSlices);
         pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
         pmeDefines["RECIP_EXP_FACTOR"] = cl.doubleToString(M_PI*M_PI/(alpha*alpha));
         pmeDefines["GRID_SIZE_X"] = cl.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cl.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cl.intToString(gridSizeZ);
         pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
+        pmeDefines["BUFFER_SIZE"] = cl.intToString(bufferSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
@@ -346,8 +348,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
             pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
             int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
-            pmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "pmeEnergyBuffer");
+            pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
             cl.clearBuffer(pmeEnergyBuffer);
             sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
             fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);

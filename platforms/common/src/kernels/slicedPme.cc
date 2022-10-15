@@ -200,7 +200,7 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
     }
 }
 
-KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT energyBuffer,
+KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT pmeEnergyBuffer,
                       GLOBAL const real* RESTRICT pmeBsplineModuliX, GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
                       real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
@@ -208,7 +208,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     const unsigned int odist = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
 
-    mixed energy = 0;
+    mixed energy[NUM_SLICES] = { 0 };
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         // real indices
         int kx = index/(GRID_SIZE_Y*(GRID_SIZE_Z));
@@ -226,29 +226,25 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         real by = pmeBsplineModuliY[ky];
         real bz = pmeBsplineModuliZ[kz];
         real denom = m2*bx*by*bz;
-        real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
         if (kz >= (GRID_SIZE_Z/2+1)) {
             kx = ((kx == 0) ? kx : GRID_SIZE_X-kx);
             ky = ((ky == 0) ? ky : GRID_SIZE_Y-ky);
             kz = GRID_SIZE_Z-kz;
         }
+        int nonZero = kx != 0 || ky != 0 || kz != 0;
+        real eterm = nonZero ? recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom : 0.0;
         int indexInHalfComplexGrid = kz+(ky+kx*GRID_SIZE_Y)*(GRID_SIZE_Z/2+1);
         real2 grid[NUM_SUBSETS];
-        mixed energy_k = 0.0;
         for (int j = 0; j < NUM_SUBSETS; j++) {
-            real2 jgrid = grid[j] = pmeGrid[j*odist + indexInHalfComplexGrid];
-            for (int k = 0; k < j ; k++)
-                energy_k += 2.0*(jgrid.x*grid[k].x + jgrid.y*grid[k].y);
-            energy_k += jgrid.x*jgrid.x + jgrid.y*jgrid.y;
+            grid[j] = pmeGrid[j*odist + indexInHalfComplexGrid];
+            for (int i = 0; i < j ; i++)
+                energy[i+(j+1)*j/2] += 2.0*eterm*(grid[i].x*grid[j].x + grid[i].y*grid[j].y);
+            energy[(j+3)*j/2] += eterm*(grid[j].x*grid[j].x + grid[j].y*grid[j].y);
         }
-        if (kx != 0 || ky != 0 || kz != 0)
-            energy += eterm*energy_k;
     }
-#if defined(USE_PME_STREAM)
-    energyBuffer[GLOBAL_ID] = 0.5f*energy;
-#else
-    energyBuffer[GLOBAL_ID] += 0.5f*energy;
-#endif
+
+    for (int j = 0; j < NUM_SLICES; j++)
+        pmeEnergyBuffer[j*BUFFER_SIZE+GLOBAL_ID] = 0.5f*energy[j];
 }
 
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
@@ -352,7 +348,10 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
-    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
-        energyBuffer[i] += pmeEnergyBuffer[i];
+KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer) {
+    for (int j = 0; j < NUM_SLICES; j++) {
+        int offset = j*BUFFER_SIZE;
+        for (int i = GLOBAL_ID; i < BUFFER_SIZE; i += GLOBAL_SIZE)
+            energyBuffer[i] += pmeEnergyBuffer[offset+i];
+    }
 }

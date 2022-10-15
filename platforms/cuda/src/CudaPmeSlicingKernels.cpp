@@ -167,7 +167,7 @@ public:
         cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(bufferSize), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
-            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &bufferSize};
+            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer()};
             cu.executeKernel(addEnergyKernel, args, bufferSize);
         }
         return 0.0;
@@ -276,6 +276,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
+    int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
 
     defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
     defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -293,12 +294,14 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         pmeDefines["PME_ORDER"] = cu.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cu.intToString(numParticles);
         pmeDefines["NUM_SUBSETS"] = cu.intToString(numSubsets);
+        pmeDefines["NUM_SLICES"] = cu.intToString(numSlices);
         pmeDefines["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
         pmeDefines["RECIP_EXP_FACTOR"] = cu.doubleToString(M_PI*M_PI/(alpha*alpha));
         pmeDefines["GRID_SIZE_X"] = cu.intToString(gridSizeX);
         pmeDefines["GRID_SIZE_Y"] = cu.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cu.intToString(gridSizeZ);
         pmeDefines["ROUNDED_Z_SIZE"] = cu.intToString(roundedZSize);
+        pmeDefines["BUFFER_SIZE"] = cu.intToString(bufferSize);
         pmeDefines["EPSILON_FACTOR"] = cu.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cu.doubleToString(M_PI);
         if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
@@ -348,8 +351,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeBsplineModuliZ.initialize(cu, gridSizeZ, elementSize, "pmeBsplineModuliZ");
             pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
             int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-            int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
-            pmeEnergyBuffer.initialize(cu, bufferSize, energyElementSize, "pmeEnergyBuffer");
+            pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
 
