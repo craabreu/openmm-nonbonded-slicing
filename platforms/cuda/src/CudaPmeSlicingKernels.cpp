@@ -234,11 +234,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     numSubsets = force.getNumSubsets();
     numSlices = numSubsets*(numSubsets + 1)/2;
     vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
-    vector<int> subsetVec(cu.getPaddedNumAtoms(), 0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
-        subsetVec[i] = force.getParticleSubset(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -263,6 +261,19 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         paramsDefines["HAS_EXCEPTION_OFFSETS"] = "1";
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
+
+    // Initialize subsets and coupling parameters.
+
+    subsets.initialize<int>(cu, cu.getPaddedNumAtoms(), "subsets");
+    vector<int> subsetVec(cu.getPaddedNumAtoms());
+    for (int i = 0; i < numParticles; i++)
+        subsetVec[i] = force.getParticleSubset(i);
+    subsets.upload(subsetVec);
+
+    if (cu.getUseDoublePrecision())
+        uploadCouplingParameters<double>(force);
+    else
+        uploadCouplingParameters<float>(force);
 
     // Compute the PME parameters.
 
@@ -484,8 +495,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
-    subsets.initialize<int>(cu, cu.getPaddedNumAtoms(), "subsets");
-    subsets.upload(subsetVec);
     map<string, string> replacements;
     replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
     if (usePosqCharges) {
@@ -740,6 +749,19 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
     return energy;
 }
 
+template <typename real>
+void CudaCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
+    ContextSelector selector(cu);
+    int numSubsets = force.getNumSubsets();
+    if (!pmeLambda.isInitialized())
+        pmeLambda.initialize<real>(cu, numSubsets*numSubsets, "pmeLambda");
+    vector<real> pmeLambdaVec(numSubsets*numSubsets);
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = 0; j < numSubsets; j++)
+            pmeLambdaVec[j*numSubsets+i] = force.getCouplingParameter(i, j);
+    pmeLambda.upload(pmeLambdaVec);
+}
+
 void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
     // Make sure the new parameters are acceptable.
     
@@ -772,7 +794,7 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     // Record the per-particle parameters.
     
     vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
-    vector<int> subsetVec(cu.getPaddedNumAtoms(), 0);
+    vector<int> subsetVec(cu.getPaddedNumAtoms());
     const vector<int>& order = cu.getAtomIndex();
     for (int i = 0; i < force.getNumParticles(); i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
@@ -780,7 +802,14 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     }
     baseParticleCharges.upload(baseParticleChargeVec);
     subsets.upload(subsetVec);
-    
+
+    // Record coupling parameters.
+
+    if (cu.getUseDoublePrecision())
+        uploadCouplingParameters<double>(force);
+    else
+        uploadCouplingParameters<float>(force);
+
     // Record the exceptions.
     
     if (numExceptions > 0) {
@@ -797,7 +826,7 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     }
     
     // Compute other values.
-    
+
     ewaldSelfEnergy = 0.0;
     if (cu.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {

@@ -583,7 +583,7 @@ private:
     std::vector<ExceptionOffsetInfo> exceptionOffsets;
     std::map<std::pair<int, int>, int> exceptionMap;
     std::vector<std::vector<int>> sliceForceGroup;
-    std::vector<std::vector<double>> couplingParameter;
+    std::vector<double> couplingParameter;
 };
 
 /**

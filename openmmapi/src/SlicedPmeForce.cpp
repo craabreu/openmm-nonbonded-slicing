@@ -50,19 +50,17 @@ using std::vector;
 
 #define ASSERT_VALID_SUBSET(subset) {if (subset < 0 || subset >= numSubsets) throwException(__FILE__, __LINE__, "Subset out of range");};
 
-SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets),
-        cutoffDistance(1.0),
+SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets), cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFALT_USE_CUDA_FFT) {
     vector<int> groupRow(numSubsets, -1);
     for (int i = 0; i < numSubsets; i++)
         sliceForceGroup.push_back(groupRow);
-    vector<double> lambdaRow(numSubsets, 1.0);
-    for (int i = 0; i < numSubsets; i++)
-        couplingParameter.push_back(lambdaRow);
+    for (int j = 0; j < numSubsets*(numSubsets+1)/2; j++)
+        couplingParameter.push_back(1.0);
 }
 
-SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : numSubsets(numSubsets), useCudaFFT(DEFALT_USE_CUDA_FFT) {
+SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : SlicedPmeForce(numSubsets) {
     NonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (method == NonbondedForce::NoCutoff || method == NonbondedForce::CutoffNonPeriodic)
         throw OpenMMException("SlicedPmeForce: cannot instantiate from a non-periodic NonbondedForce");
@@ -381,7 +379,9 @@ void SlicedPmeForce::setSliceForceGroup(int subset1, int subset2, int group) {
 double SlicedPmeForce::getCouplingParameter(int subset1, int subset2) const {
     ASSERT_VALID_SUBSET(subset1);
     ASSERT_VALID_SUBSET(subset2);
-    return couplingParameter[subset1][subset2];
+    int i = std::min(subset1, subset2);
+    int j = std::max(subset1, subset2);
+    return couplingParameter[j*(j+1)/2+i];
 }
 
 void SlicedPmeForce::setCouplingParameter(int subset1, int subset2, double lambda) {
@@ -389,5 +389,5 @@ void SlicedPmeForce::setCouplingParameter(int subset1, int subset2, double lambd
     ASSERT_VALID_SUBSET(subset2);
     int i = std::min(subset1, subset2);
     int j = std::max(subset1, subset2);
-    couplingParameter[i][j] = couplingParameter[j][i] = lambda;
+    couplingParameter[j*(j+1)/2+i] = lambda;
 }

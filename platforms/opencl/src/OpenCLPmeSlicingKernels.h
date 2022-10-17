@@ -155,6 +155,10 @@ private:
     int numSubsets, numSlices;
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
+
+    OpenCLArray pmeLambda;
+    template <typename real>
+    void uploadCouplingParameters(const SlicedPmeForce& force);
 };
 
 } // namespace PmeSlicing

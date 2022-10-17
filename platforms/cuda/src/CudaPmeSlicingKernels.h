@@ -155,6 +155,10 @@ private:
     int numSubsets, numSlices;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
+
+    CudaArray pmeLambda;
+    template <typename real>
+    void uploadCouplingParameters(const SlicedPmeForce& force);
 };
 
 } // namespace PmeSlicing
