@@ -715,13 +715,13 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             cu.executeKernel(pmeEvalEnergyKernel, computeEnergyArgs, gridSizeX*gridSizeY*gridSizeZ);
         }
 
-        void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
-        cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
-
         void* convolutionArgs[] = {&pmeGrid2.getDevicePointer(), &pmeBsplineModuliX.getDevicePointer(),
                 &pmeBsplineModuliY.getDevicePointer(), &pmeBsplineModuliZ.getDevicePointer(),
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
-        cu.executeKernel(pmeConvolutionKernel, convolutionArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
+        cu.executeKernel(pmeConvolutionKernel, convolutionArgs, gridSizeX*gridSizeY*(gridSizeZ/2+1), 256);
+
+        void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
+        cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
 
         fft->execFFT(false);
 

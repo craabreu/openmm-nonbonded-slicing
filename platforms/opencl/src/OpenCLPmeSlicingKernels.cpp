@@ -773,7 +773,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
         cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
 
-        cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
+        cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*(gridSizeZ/2+1));
         fft->execFFT(false, cl.getQueue());
         setPeriodicBoxArgs(cl, pmeInterpolateForceKernel, 3);
         if (cl.getUseDoublePrecision()) {
