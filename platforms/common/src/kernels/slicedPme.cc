@@ -158,16 +158,6 @@ KERNEL void finishSpreadCharge(
     }
 }
 
-KERNEL void collapseGrid(GLOBAL real2* RESTRICT pmeGrid) {
-    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
-    for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
-        for (int j = 1; j < NUM_SUBSETS; j++) {
-            pmeGrid[index] += pmeGrid[j*gridSize+index];
-            pmeGrid[j*gridSize+index] = make_real2(0, 0);
-        }
-    }
-}
-
 KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const real* RESTRICT pmeBsplineModuliX,
         GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
@@ -200,7 +190,9 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 }
 
 KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT pmeEnergyBuffer,
-                      GLOBAL const real* RESTRICT pmeBsplineModuliX, GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
+                      GLOBAL const real* RESTRICT pmeBsplineModuliX,
+                      GLOBAL const real* RESTRICT pmeBsplineModuliY,
+                      GLOBAL const real* RESTRICT pmeBsplineModuliZ,
                       real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
@@ -244,16 +236,17 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     }
 
     for (int j = 0; j < NUM_SLICES; j++)
-        pmeEnergyBuffer[j*BUFFER_SIZE+GLOBAL_ID] = recipScaleFactor*energy[j];
+        pmeEnergyBuffer[GLOBAL_ID*NUM_SLICES+j] = recipScaleFactor*energy[j];
 }
 
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const int2* RESTRICT pmeAtomGridIndex,
-        GLOBAL const real* RESTRICT charges
+        GLOBAL const real* RESTRICT charges, GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT pmeLambda
         ) {
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const real scale = RECIP((real) (PME_ORDER-1));
     
     // Process the atoms in spatially sorted order.  This improves cache performance when loading
@@ -263,6 +256,7 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
         int atom = pmeAtomGridIndex[i].x;
         real3 force = make_real3(0);
         real4 pos = posq[atom];
+        int offset = subsets[atom]*NUM_SUBSETS;
         APPLY_PERIODIC_TO_POS(pos)
         real3 t = make_real3(pos.x*recipBoxVecX.x+pos.y*recipBoxVecY.x+pos.z*recipBoxVecZ.x,
                              pos.y*recipBoxVecY.y+pos.z*recipBoxVecZ.y,
@@ -316,7 +310,9 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
                     int zindex = gridIndex.z+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int index = ybase + zindex;
-                    real gridvalue = pmeGrid[index];
+                    real gridvalue = 0.0;
+                    for (int j = 0; j < NUM_SUBSETS; j++)
+                        gridvalue += pmeLambda[offset+j]*pmeGrid[j*gridSize+index];
                     force.x += ddx*dy*data[iz].z*gridvalue;
                     force.y += dx*ddy*data[iz].z*gridvalue;
                     force.z += dx*dy*ddata[iz].z*gridvalue;
@@ -348,10 +344,13 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer) {
-    for (int j = 0; j < NUM_SLICES; j++) {
-        int offset = j*BUFFER_SIZE;
-        for (int i = GLOBAL_ID; i < BUFFER_SIZE; i += GLOBAL_SIZE)
-            energyBuffer[i] += pmeEnergyBuffer[offset+i];
+KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer,
+                GLOBAL const real* RESTRICT pmeLambda) {
+    for (int index = GLOBAL_ID; index < BUFFER_SIZE; index += GLOBAL_SIZE) {
+        real energy = 0.0;
+        for (int j = 0; j < NUM_SUBSETS; j++)
+            for (int i = 0; i <= j; i++)
+                energy += pmeLambda[j*NUM_SUBSETS+i]*pmeEnergyBuffer[index*NUM_SLICES+j*(j+1)/2+i];
+        energyBuffer[index] += energy;
     }
 }

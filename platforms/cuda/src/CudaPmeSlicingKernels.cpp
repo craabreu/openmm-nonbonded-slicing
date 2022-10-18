@@ -163,11 +163,11 @@ private:
 
 class CudaCalcSlicedPmeForceKernel::AddEnergyPostComputation : public CudaContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, int bufferSize, int forceGroup) :
-        cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, CudaArray& pmeLambda, int bufferSize, int forceGroup) :
+        cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), pmeLambda(pmeLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
-            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer()};
+            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &pmeLambda.getDevicePointer()};
             cu.executeKernel(addEnergyKernel, args, bufferSize);
         }
         return 0.0;
@@ -176,6 +176,7 @@ private:
     CudaContext& cu;
     CUfunction addEnergyKernel;
     CudaArray& pmeEnergyBuffer;
+    CudaArray& pmeLambda;
     int bufferSize;
     int forceGroup;
 };
@@ -346,7 +347,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeInterpolateForceKernel = cu.getKernel(module, "gridInterpolateForce");
             pmeEvalEnergyKernel = cu.getKernel(module, "gridEvaluateEnergy");
             pmeFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
-            pmeCollapseGridKernel = cu.getKernel(module, "collapseGrid");
             cuFuncSetCacheConfig(pmeSpreadChargeKernel, CU_FUNC_CACHE_PREFER_SHARED);
             cuFuncSetCacheConfig(pmeInterpolateForceKernel, CU_FUNC_CACHE_PREFER_L1);
 
@@ -380,7 +380,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             }
             else
                 pmeStream = cu.getCurrentStream();
-            cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, bufferSize, recipForceGroup));
+            cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, pmeLambda, bufferSize, recipForceGroup));
 
             if (useCudaFFT)
                 fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
@@ -729,15 +729,12 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
         cu.executeKernel(pmeConvolutionKernel, convolutionArgs, gridSizeX*gridSizeY*(gridSizeZ/2+1), 256);
 
-        void* collapseGridArgs[] = {&pmeGrid2.getDevicePointer()};
-        cu.executeKernel(pmeCollapseGridKernel, collapseGridArgs, gridSizeX*gridSizeY*gridSizeZ, 256);
-
         fft->execFFT(false);
 
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                &charges.getDevicePointer()};
+                &charges.getDevicePointer(), &subsets.getDevicePointer(), &pmeLambda.getDevicePointer()};
         cu.executeKernel(pmeInterpolateForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
 
         if (usePmeStream) {

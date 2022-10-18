@@ -145,7 +145,6 @@ private:
     cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeEvalEnergyKernel;
     cl::Kernel pmeInterpolateForceKernel;
-    cl::Kernel pmeCollapseGridKernel;
     std::map<std::string, std::string> pmeDefines;
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;

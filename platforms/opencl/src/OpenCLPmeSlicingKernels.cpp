@@ -187,12 +187,13 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, int bufferSize, int forceGroup) :
-        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& pmeLambda, int bufferSize, int forceGroup) :
+        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), pmeLambda(pmeLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
     void setKernel(cl::Kernel kernel) {
         addEnergyKernel = kernel;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(2, pmeLambda.getDeviceBuffer());
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0)
@@ -203,6 +204,7 @@ private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
+    OpenCLArray& pmeLambda;
     int bufferSize;
     int forceGroup;
 };
@@ -375,7 +377,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
                 cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
                 cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
             }
-            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, bufferSize, recipForceGroup));
+            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, pmeLambda, bufferSize, recipForceGroup));
 
             // Initialize the b-spline moduli.
 
@@ -645,7 +647,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                                                    cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
-            pmeCollapseGridKernel = cl::Kernel(program, "collapseGrid");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
@@ -671,11 +672,12 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeInterpolateForceKernel.setArg<cl::Buffer>(2, pmeGrid1.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(11, pmeAtomGridIndex.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(12, charges.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(13, subsets.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(14, pmeLambda.getDeviceBuffer());
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            if (usePmeQueue)
-                addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
+            addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
        }
     }
     
@@ -778,9 +780,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         }
         if (includeEnergy)
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
-
-        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
 
         cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*(gridSizeZ/2+1));
         fft->execFFT(false, cl.getQueue());

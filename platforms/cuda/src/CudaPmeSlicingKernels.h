@@ -145,7 +145,6 @@ private:
     CUfunction pmeEvalEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    CUfunction pmeCollapseGridKernel;
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
