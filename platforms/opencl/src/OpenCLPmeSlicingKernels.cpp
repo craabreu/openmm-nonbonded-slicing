@@ -187,13 +187,13 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& pmeLambda, int bufferSize, int forceGroup) :
-        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), pmeLambda(pmeLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, int bufferSize, int forceGroup) :
+        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
     void setKernel(cl::Kernel kernel) {
         addEnergyKernel = kernel;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(2, pmeLambda.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0)
@@ -204,7 +204,7 @@ private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
-    OpenCLArray& pmeLambda;
+    OpenCLArray& sliceLambda;
     int bufferSize;
     int forceGroup;
 };
@@ -377,7 +377,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
                 cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
                 cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
             }
-            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, pmeLambda, bufferSize, recipForceGroup));
+            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
 
             // Initialize the b-spline moduli.
 
@@ -673,7 +673,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeInterpolateForceKernel.setArg<cl::Buffer>(11, pmeAtomGridIndex.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(12, charges.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(13, subsets.getDeviceBuffer());
-            pmeInterpolateForceKernel.setArg<cl::Buffer>(14, pmeLambda.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(14, pairLambda.getDeviceBuffer());
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
@@ -809,13 +809,21 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
 template <typename real>
 void OpenCLCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
     int numSubsets = force.getNumSubsets();
-    if (!pmeLambda.isInitialized())
-        pmeLambda.initialize<real>(cl, numSubsets*numSubsets, "pmeLambda");
-    vector<real> pmeLambdaVec(numSubsets*numSubsets);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = 0; j < numSubsets; j++)
-            pmeLambdaVec[j*numSubsets+i] = force.getCouplingParameter(i, j);
-    pmeLambda.upload(pmeLambdaVec);
+    int numPairs = numSubsets*numSubsets;
+    int numSlices = numSubsets*(numSubsets+1)/2;
+    if (!pairLambda.isInitialized())
+        pairLambda.initialize<real>(cl, numPairs, "pairLambda");
+    if (!sliceLambda.isInitialized())
+        sliceLambda.initialize<real>(cl, numSlices, "sliceLambda");
+    vector<real> pairLambdaVec(numPairs);
+    vector<real> sliceLambdaVec(numSlices);
+    for (int j = 0; j < numSubsets; j++)
+        for (int i = 0; i <= j; i++)
+            pairLambdaVec[j*numSubsets+i] =
+            pairLambdaVec[i*numSubsets+j] =
+            sliceLambdaVec[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
+    pairLambda.upload(pairLambdaVec);
+    sliceLambda.upload(sliceLambdaVec);
 }
 
 void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {

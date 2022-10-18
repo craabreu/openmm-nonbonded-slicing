@@ -155,7 +155,7 @@ private:
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    CudaArray pmeLambda;
+    CudaArray pairLambda, sliceLambda;
     template <typename real>
     void uploadCouplingParameters(const SlicedPmeForce& force);
 };

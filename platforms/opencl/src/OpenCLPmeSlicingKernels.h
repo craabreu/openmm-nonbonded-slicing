@@ -155,7 +155,7 @@ private:
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    OpenCLArray pmeLambda;
+    OpenCLArray pairLambda, sliceLambda;
     template <typename real>
     void uploadCouplingParameters(const SlicedPmeForce& force);
 };

@@ -163,11 +163,12 @@ private:
 
 class CudaCalcSlicedPmeForceKernel::AddEnergyPostComputation : public CudaContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, CudaArray& pmeLambda, int bufferSize, int forceGroup) :
-        cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), pmeLambda(pmeLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, CudaArray& sliceLambda, int bufferSize, int forceGroup) :
+        cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), bufferSize(bufferSize), forceGroup(forceGroup) {
+    }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
-            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &pmeLambda.getDevicePointer()};
+            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &sliceLambda.getDevicePointer()};
             cu.executeKernel(addEnergyKernel, args, bufferSize);
         }
         return 0.0;
@@ -176,7 +177,7 @@ private:
     CudaContext& cu;
     CUfunction addEnergyKernel;
     CudaArray& pmeEnergyBuffer;
-    CudaArray& pmeLambda;
+    CudaArray& sliceLambda;
     int bufferSize;
     int forceGroup;
 };
@@ -380,7 +381,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             }
             else
                 pmeStream = cu.getCurrentStream();
-            cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, pmeLambda, bufferSize, recipForceGroup));
+            cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
 
             if (useCudaFFT)
                 fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
@@ -734,7 +735,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                &charges.getDevicePointer(), &subsets.getDevicePointer(), &pmeLambda.getDevicePointer()};
+                &charges.getDevicePointer(), &subsets.getDevicePointer(), &pairLambda.getDevicePointer()};
         cu.executeKernel(pmeInterpolateForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
 
         if (usePmeStream) {
@@ -750,13 +751,21 @@ template <typename real>
 void CudaCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
     ContextSelector selector(cu);
     int numSubsets = force.getNumSubsets();
-    if (!pmeLambda.isInitialized())
-        pmeLambda.initialize<real>(cu, numSubsets*numSubsets, "pmeLambda");
-    vector<real> pmeLambdaVec(numSubsets*numSubsets);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = 0; j < numSubsets; j++)
-            pmeLambdaVec[j*numSubsets+i] = force.getCouplingParameter(i, j);
-    pmeLambda.upload(pmeLambdaVec);
+    int numPairs = numSubsets*numSubsets;
+    int numSlices = numSubsets*(numSubsets+1)/2;
+    if (!pairLambda.isInitialized())
+        pairLambda.initialize<real>(cu, numPairs, "pairLambda");
+    if (!sliceLambda.isInitialized())
+        sliceLambda.initialize<real>(cu, numSlices, "sliceLambda");
+    vector<real> pairLambdaVec(numPairs);
+    vector<real> sliceLambdaVec(numSlices);
+    for (int j = 0; j < numSubsets; j++)
+        for (int i = 0; i <= j; i++)
+            pairLambdaVec[j*numSubsets+i] =
+            pairLambdaVec[i*numSubsets+j] =
+            sliceLambdaVec[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
+    pairLambda.upload(pairLambdaVec);
+    sliceLambda.upload(sliceLambdaVec);
 }
 
 void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {

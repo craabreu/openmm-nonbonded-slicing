@@ -242,7 +242,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const int2* RESTRICT pmeAtomGridIndex,
-        GLOBAL const real* RESTRICT charges, GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT pmeLambda
+        GLOBAL const real* RESTRICT charges, GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT pairLambda
         ) {
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
@@ -312,7 +312,7 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
                     int index = ybase + zindex;
                     real gridvalue = 0.0;
                     for (int j = 0; j < NUM_SUBSETS; j++)
-                        gridvalue += pmeLambda[offset+j]*pmeGrid[j*gridSize+index];
+                        gridvalue += pairLambda[offset+j]*pmeGrid[j*gridSize+index];
                     force.x += ddx*dy*data[iz].z*gridvalue;
                     force.y += dx*ddy*data[iz].z*gridvalue;
                     force.z += dx*dy*ddata[iz].z*gridvalue;
@@ -345,12 +345,12 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
 }
 
 KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-                GLOBAL const real* RESTRICT pmeLambda) {
+                GLOBAL const real* RESTRICT sliceLambda) {
     for (int index = GLOBAL_ID; index < BUFFER_SIZE; index += GLOBAL_SIZE) {
+        int offset = index*NUM_SLICES;
         real energy = 0.0;
-        for (int j = 0; j < NUM_SUBSETS; j++)
-            for (int i = 0; i <= j; i++)
-                energy += pmeLambda[j*NUM_SUBSETS+i]*pmeEnergyBuffer[index*NUM_SLICES+j*(j+1)/2+i];
+        for (int j = 0; j < NUM_SLICES; j++)
+            energy += sliceLambda[j]*pmeEnergyBuffer[offset+j];
         energyBuffer[index] += energy;
     }
 }
