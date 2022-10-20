@@ -130,6 +130,7 @@ private:
     CudaArray pmeBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
+    CudaArray pairwiseEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
     PmeIO* pmeio;

@@ -345,8 +345,8 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
 }
 
 KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-                GLOBAL const real* RESTRICT sliceLambda) {
-    for (int index = GLOBAL_ID; index < BUFFER_SIZE; index += GLOBAL_SIZE) {
+                GLOBAL const real* RESTRICT sliceLambda, int bufferSize) {
+    for (int index = GLOBAL_ID; index < bufferSize; index += GLOBAL_SIZE) {
         int offset = index*NUM_SLICES;
         real energy = 0.0;
         for (int j = 0; j < NUM_SLICES; j++)

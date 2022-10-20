@@ -127,6 +127,7 @@ private:
     OpenCLArray pmeAtomRange;
     OpenCLArray pmeAtomGridIndex;
     OpenCLArray pmeEnergyBuffer;
+    OpenCLArray pairwiseEnergyBuffer;
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;

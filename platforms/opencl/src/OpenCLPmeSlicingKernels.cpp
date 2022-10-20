@@ -194,6 +194,7 @@ public:
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(3, bufferSize);
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0)
@@ -264,9 +265,6 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
     usePosqCharges = cl.requestPosqCharges();
-    map<string, string> defines;
-    defines["HAS_COULOMB"] = "1";
-    defines["HAS_LENNARD_JONES"] = "0";
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
@@ -301,12 +299,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeY = OpenCLVkFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
-    int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
 
-    defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
-    defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-    defines["USE_EWALD"] = "1";
-    defines["DO_LJPME"] = "0";
     if (cl.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
         paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
@@ -322,7 +315,6 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["GRID_SIZE_Y"] = cl.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cl.intToString(gridSizeZ);
         pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
-        pmeDefines["BUFFER_SIZE"] = cl.intToString(bufferSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
@@ -361,6 +353,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
             pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
             int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
             pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
             cl.clearBuffer(pmeEnergyBuffer);
             sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
@@ -484,12 +477,14 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
     // Add the interaction to the default nonbonded kernel.
     
-    string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
     map<string, string> replacements;
+    replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+    replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
     replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
+    replacements["NUM_SLICES"] = cl.intToString(numSlices);
     if (usePosqCharges) {
         replacements["CHARGE1"] = "posq1.w";
         replacements["CHARGE2"] = "posq2.w";
@@ -498,9 +493,22 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["CHARGE1"] = prefix+"charge1";
         replacements["CHARGE2"] = prefix+"charge2";
     }
+    replacements["SUBSET1"] = prefix+"subset1";
+    replacements["SUBSET2"] = prefix+"subset2";
+    replacements["LAMBDA"] = prefix+"lambda";
+    replacements["BUFFER"] = prefix+"buffer";
     if (!usePosqCharges)
-        cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDeviceBuffer()));
-    source = cl.replaceStrings(source, replacements);
+        cl.getNonbondedUtilities().addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+    cl.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+    cl.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+
+    int energyElementSize = cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
+    int bufferSize = max(cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize,
+                         cl.getNonbondedUtilities().getNumEnergyBuffers());
+    pairwiseEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+    cl.getNonbondedUtilities().addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+
+    string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
     if (force.getIncludeDirectSpace())
         cl.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
 

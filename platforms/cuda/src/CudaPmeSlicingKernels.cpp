@@ -168,7 +168,7 @@ public:
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
-            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &sliceLambda.getDevicePointer()};
+            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &sliceLambda.getDevicePointer(), &bufferSize};
             cu.executeKernel(addEnergyKernel, args, bufferSize);
         }
         return 0.0;
@@ -204,7 +204,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     int forceIndex;
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
-    string prefix = "nonbonded"+cu.intToString(forceIndex)+"_";
+    string prefix = "pme"+cu.intToString(forceIndex)+"_";
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -247,9 +247,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     }
     usePosqCharges = cu.requestPosqCharges();
 
-    map<string, string> defines;
-    defines["HAS_COULOMB"] = "1";
-    defines["HAS_LENNARD_JONES"] = "0";
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
@@ -289,12 +286,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     gridSizeY = CudaFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = CudaFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
-    int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
 
-    defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
-    defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-    defines["USE_EWALD"] = "1";
-    defines["DO_LJPME"] = "0";
     if (cu.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
         paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cu.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
@@ -314,7 +306,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         pmeDefines["GRID_SIZE_Y"] = cu.intToString(gridSizeY);
         pmeDefines["GRID_SIZE_Z"] = cu.intToString(gridSizeZ);
         pmeDefines["ROUNDED_Z_SIZE"] = cu.intToString(roundedZSize);
-        pmeDefines["BUFFER_SIZE"] = cu.intToString(bufferSize);
         pmeDefines["EPSILON_FACTOR"] = cu.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cu.doubleToString(M_PI);
         if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
@@ -363,6 +354,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeBsplineModuliZ.initialize(cu, gridSizeZ, elementSize, "pmeBsplineModuliZ");
             pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
             int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+            int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
             pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
@@ -492,12 +484,14 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Add the interaction to the default nonbonded kernel.
 
-    string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
     map<string, string> replacements;
+    replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
+    replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
     replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
+    replacements["NUM_SLICES"] = cu.intToString(numSlices);
     if (usePosqCharges) {
         replacements["CHARGE1"] = "posq1.w";
         replacements["CHARGE2"] = "posq2.w";
@@ -506,9 +500,22 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["CHARGE1"] = prefix+"charge1";
         replacements["CHARGE2"] = prefix+"charge2";
     }
+    replacements["SUBSET1"] = prefix+"subset1";
+    replacements["SUBSET2"] = prefix+"subset2";
+    replacements["LAMBDA"] = prefix+"lambda";
+    replacements["BUFFER"] = prefix+"buffer";
     if (!usePosqCharges)
-        cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDevicePointer()));
-    source = cu.replaceStrings(source, replacements);
+        cu.getNonbondedUtilities().addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+    cu.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+    cu.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+
+    int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
+    int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize,
+                         cu.getNonbondedUtilities().getNumEnergyBuffers());
+    pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+    cu.getNonbondedUtilities().addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+
+    string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
     if (force.getIncludeDirectSpace())
         cu.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
 
