@@ -40,6 +40,7 @@
 #include "openmm/common/ContextSelector.h"
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 
 #define CHECK_RESULT(result, prefix) \
     if (result != CUDA_SUCCESS) { \
@@ -483,14 +484,20 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Add the interaction to the default nonbonded kernel.
 
+    CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
+
+    map<string, string> replacements;
+    replacements["NUM_SLICES"] = cu.intToString(numSlices);
+    replacements["BUFFER"] = prefix+"buffer";
+    replacements["LAMBDA"] = prefix+"lambda";
+    nb->setKernelSource(cu.replaceStrings(CudaPmeSlicingKernelSources::nonbonded, replacements));
+
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
-    map<string, string> replacements;
     replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
     replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
     replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
-    replacements["NUM_SLICES"] = cu.intToString(numSlices);
     if (usePosqCharges) {
         replacements["CHARGE1"] = "posq1.w";
         replacements["CHARGE2"] = "posq2.w";
@@ -501,22 +508,19 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     }
     replacements["SUBSET1"] = prefix+"subset1";
     replacements["SUBSET2"] = prefix+"subset2";
-    replacements["LAMBDA"] = prefix+"lambda";
-    replacements["BUFFER"] = prefix+"buffer";
     if (!usePosqCharges)
-        cu.getNonbondedUtilities().addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
-    cu.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
-    cu.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+        nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+    nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+    nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
 
     int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
-    int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize,
-                         cu.getNonbondedUtilities().getNumEnergyBuffers());
+    int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
     pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
-    cu.getNonbondedUtilities().addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+    nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
 
     string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
     if (force.getIncludeDirectSpace())
-        cu.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
+        nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
 
     // Initialize the exceptions.
 

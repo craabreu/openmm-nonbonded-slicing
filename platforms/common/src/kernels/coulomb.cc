@@ -1,5 +1,4 @@
 {
-#define SLICE(i, j) (i > j ? i*(i+1)/2+j : j*(j+1)/2+i)
 unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
 const real alphaR = EWALD_ALPHA*r;
 const real expAlphaRSqr = EXP(-alphaR*alphaR);
@@ -14,11 +13,8 @@ const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2*invR;
     const real t = RECIP(1.0f+0.3275911f*alphaR);
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
-real tempForce = 0.0f;
-real potential = includeInteraction ? prefactor*erfcAlphaR : 0;
-tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-tempEnergy += potential;
+real tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
 int slice = SLICE(SUBSET1, SUBSET2);
-BUFFER[GLOBAL_ID*NUM_SLICES+slice] += potential;
+sliceEnergy[slice] += includeInteraction ? interactionScale*prefactor*erfcAlphaR : 0;
 dEdR += includeInteraction ? LAMBDA[slice]*tempForce*invR*invR : 0;
 }
