@@ -38,11 +38,15 @@
 #include "openmm/opencl/OpenCLArray.h"
 #include "openmm/opencl/OpenCLContext.h"
 #include "openmm/opencl/OpenCLSort.h"
-#include "openmm/reference/fftpack.h"
 #include "sfmt/SFMT.h"
 #include "openmm/System.h"
 #include <cmath>
+#include <complex>
 #include <set>
+#ifdef _MSC_VER
+  #define POCKETFFT_NO_VECTORS
+#endif
+#include "pocketfft_hdronly.h"
 
 using namespace PmeSlicing;
 using namespace OpenMM;
@@ -63,13 +67,13 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     int gridSize = xsize*ysize*zsize;
     int outputZSize = (realToComplex ? zsize/2+1 : zsize);
 
-    vector<vector<t_complex>> reference(batch);
+    vector<vector<complex<double>>> reference(batch);
     for (int j = 0; j < batch; j++) {
         reference[j].resize(gridSize);
         for (int i = 0; i < gridSize; i++) {
             Real x = (float) genrand_real2(sfmt);
             Real y = realToComplex ? 0 : (float) genrand_real2(sfmt);
-            reference[j][i] = t_complex(x, y);
+            reference[j][i] = complex<double>(x, y);
         }
     }
 
@@ -79,10 +83,10 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
         for (int i = 0; i < gridSize; i++) {
             int offset = j*gridSize;
             if (realToComplex)
-                realOriginal[offset+i] = reference[j][i].re;
+                realOriginal[offset+i] = reference[j][i].real();
             else {
-                complexOriginal[offset+i].x = reference[j][i].re;
-                complexOriginal[offset+i].y = reference[j][i].im;
+                complexOriginal[offset+i].x = reference[j][i].real();
+                complexOriginal[offset+i].y = reference[j][i].imag();
             }
         }
 
@@ -97,20 +101,23 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     fft.execFFT(true, context.getQueue());
     vector<Real2> result;
     grid2.download(result);
-    fftpack_t plan;
-    fftpack_init_3d(&plan, xsize, ysize, zsize);
+
+    vector<size_t> shape = {(size_t) xsize, (size_t) ysize, (size_t) zsize};
+    vector<size_t> axes = {0, 1, 2};
+    vector<ptrdiff_t> stride = {(ptrdiff_t) (ysize*zsize*sizeof(complex<double>)),
+                                (ptrdiff_t) (zsize*sizeof(complex<double>)),
+                                (ptrdiff_t) sizeof(complex<double>)};
     for (int j = 0; j < batch; j++) {
-        fftpack_exec_3d(plan, FFTPACK_FORWARD, &reference[j][0], &reference[j][0]);
+        pocketfft::c2c(shape, stride, stride, axes, true, reference[j].data(), reference[j].data(), 1.0);
         for (int x = 0; x < xsize; x++)
             for (int y = 0; y < ysize; y++)
                 for (int z = 0; z < outputZSize; z++) {
                     int index1 = x*ysize*zsize + y*zsize + z;
                     int index2 = ((j*xsize + x)*ysize + y)*outputZSize + z;
-                    ASSERT_EQUAL_TOL(reference[j][index1].re, result[index2].x, 1e-3);
-                    ASSERT_EQUAL_TOL(reference[j][index1].im, result[index2].y, 1e-3);
+                    ASSERT_EQUAL_TOL(reference[j][index1].real(), result[index2].x, 1e-3);
+                    ASSERT_EQUAL_TOL(reference[j][index1].imag(), result[index2].y, 1e-3);
                 }
     }
-    fftpack_destroy(plan);
 
     // Perform a backward transform and see if we get the original values.
 

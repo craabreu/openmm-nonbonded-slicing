@@ -315,7 +315,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         map<string, string> replacements;
         replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
         CUmodule module = cu.createModule(CudaPmeSlicingKernelSources::vectorOps+
-                                          CommonPmeSlicingKernelSources::realtofixedpoint+
                                           cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
         if (cu.getPlatformData().useCpuPme && usePosqCharges) {
             // Create the CPU PME kernel.

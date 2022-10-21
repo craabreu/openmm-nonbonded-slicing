@@ -327,8 +327,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             try {
                 cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), *cl.getPlatformData().context);
                 cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
-                cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::realtofixedpoint+
-                                                        CommonPmeSlicingKernelSources::slicedPme, pmeDefines);
+                cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPme, pmeDefines);
                 cl::Kernel addForcesKernel = cl::Kernel(program, "addForces");
                 pmeio = new PmeIO(cl, addForcesKernel);
                 cl.addPreComputation(new PmePreComputation(cl, cpuPme, *pmeio));
@@ -651,8 +650,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::realtofixedpoint+
-                                                   cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
+            cl::Program program = cl.createProgram(cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
