@@ -74,10 +74,6 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
     node.setIntProperty("nx", nx);
     node.setIntProperty("ny", ny);
     node.setIntProperty("nz", nz);
-    node.setDoubleProperty("ljAlpha", alpha);
-    node.setIntProperty("ljnx", nx);
-    node.setIntProperty("ljny", ny);
-    node.setIntProperty("ljnz", nz);
     node.setIntProperty("recipForceGroup", force.getReciprocalSpaceForceGroup());
     SerializationNode& globalParams = node.createChildNode("GlobalParameters");
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
@@ -136,10 +132,6 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
         int ny = node.getIntProperty("ny", 0);
         int nz = node.getIntProperty("nz", 0);
         force->setPMEParameters(alpha, nx, ny, nz);
-        alpha = node.getDoubleProperty("ljAlpha", 0.0);
-        nx = node.getIntProperty("ljnx", 0);
-        ny = node.getIntProperty("ljny", 0);
-        nz = node.getIntProperty("ljnz", 0);
         force->setReciprocalSpaceForceGroup(node.getIntProperty("recipForceGroup", -1));
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())

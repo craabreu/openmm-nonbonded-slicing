@@ -408,7 +408,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionChargeProds.getDevicePointer(), "float");
         replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
         replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-        replacements["DO_LJPME"] = "0";
         replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
         if (force.getIncludeDirectSpace())
             cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
