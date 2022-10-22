@@ -461,13 +461,13 @@ public:
     void setReciprocalSpaceForceGroup(int group);
     /**
      * Get whether to include direct space interactions when calculating forces and energies.  This is useful if you want
-     * to completely replace the direct space calculation, typically with a CustomSlicedPmeForce that computes it in a
+     * to completely replace the direct space calculation, typically with a CustomNonbondedForce that computes it in a
      * nonstandard way, while still using this object for the reciprocal space calculation.
      */
     bool getIncludeDirectSpace() const;
     /**
      * Set whether to include direct space interactions when calculating forces and energies.  This is useful if you want
-     * to completely replace the direct space calculation, typically with a CustomSlicedPmeForce that computes it in a
+     * to completely replace the direct space calculation, typically with a CustomNonbondedForce that computes it in a
      * nonstandard way, while still using this object for the reciprocal space calculation.
      */
     void setIncludeDirectSpace(bool include);

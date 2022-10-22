@@ -416,43 +416,38 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Add the interaction to the default nonbonded kernel.
 
-    CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
-
-    map<string, string> replacements;
-    replacements["NUM_SLICES"] = cu.intToString(numSlices);
-    replacements["BUFFER"] = prefix+"buffer";
-    replacements["LAMBDA"] = prefix+"lambda";
-    nb->setKernelSource(cu.replaceStrings(CudaPmeSlicingKernelSources::nonbonded, replacements));
-
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
-    replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
-    replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-    replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
-    if (usePosqCharges) {
-        replacements["CHARGE1"] = "posq1.w";
-        replacements["CHARGE2"] = "posq2.w";
-    }
-    else {
-        replacements["CHARGE1"] = prefix+"charge1";
-        replacements["CHARGE2"] = prefix+"charge2";
-    }
-    replacements["SUBSET1"] = prefix+"subset1";
-    replacements["SUBSET2"] = prefix+"subset2";
-    if (!usePosqCharges)
-        nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
-    nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
-    nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
 
-    int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
-    int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
-    pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
-    nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+    if (force.getIncludeDirectSpace()) {
+        CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
 
-    string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
-    if (force.getIncludeDirectSpace())
+        int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
+        int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
+        pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+
+        map<string, string> replacements;
+        replacements["NUM_SLICES"] = cu.intToString(numSlices);
+        replacements["BUFFER"] = prefix+"buffer";
+        replacements["LAMBDA"] = prefix+"lambda";
+        replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
+        replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
+        replacements["CHARGE1"] = usePosqCharges ? "posq1.w" : prefix+"charge1";
+        replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
+        replacements["SUBSET1"] = prefix+"subset1";
+        replacements["SUBSET2"] = prefix+"subset2";
+
+        nb->setKernelSource(cu.replaceStrings(CudaPmeSlicingKernelSources::nonbonded, replacements));
+        if (!usePosqCharges)
+            nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+        nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+        nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+        nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+        string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
+    }
 
     // Initialize the exceptions.
 

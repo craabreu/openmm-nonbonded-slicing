@@ -407,44 +407,38 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
     // Add the interaction to the default nonbonded kernel.
     
-    OpenCLNonbondedUtilities* nb = &cl.getNonbondedUtilities();
-
-    map<string, string> replacements;
-    replacements["NUM_SLICES"] = cl.intToString(numSlices);
-    replacements["BUFFER"] = prefix+"buffer";
-    replacements["LAMBDA"] = prefix+"lambda";
-    nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded, replacements));
-
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
-    replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
-    replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-    replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
-    if (usePosqCharges) {
-        replacements["CHARGE1"] = "posq1.w";
-        replacements["CHARGE2"] = "posq2.w";
-    }
-    else {
-        replacements["CHARGE1"] = prefix+"charge1";
-        replacements["CHARGE2"] = prefix+"charge2";
-    }
-    replacements["SUBSET1"] = prefix+"subset1";
-    replacements["SUBSET2"] = prefix+"subset2";
-    if (!usePosqCharges)
-        nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
-    nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
-    nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
 
-    int energyElementSize = cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
-    int bufferSize = max(cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize,
-                         nb->getNumEnergyBuffers());
-    pairwiseEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
-    nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+    if (force.getIncludeDirectSpace()) {
+        OpenCLNonbondedUtilities* nb = &cl.getNonbondedUtilities();
 
-    string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
-    if (force.getIncludeDirectSpace())
+        int energyElementSize = cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
+        int bufferSize = max(cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, nb->getNumEnergyBuffers());
+        pairwiseEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+
+        map<string, string> replacements;
+        replacements["NUM_SLICES"] = cl.intToString(numSlices);
+        replacements["BUFFER"] = prefix+"buffer";
+        replacements["LAMBDA"] = prefix+"lambda";
+        replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
+        replacements["CHARGE1"] = usePosqCharges ? "posq1.w" : prefix+"charge1";
+        replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
+        replacements["SUBSET1"] = prefix+"subset1";
+        replacements["SUBSET2"] = prefix+"subset2";
+
+        nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded, replacements));
+        if (!usePosqCharges)
+            nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+        nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+        nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+        nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+        string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
+    }
 
     // Initialize the exceptions.
 
@@ -547,7 +541,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
-    info = new ForceInfo(nb->getNumForceBuffers(), force);
+    info = new ForceInfo(cl.getNonbondedUtilities().getNumForceBuffers(), force);
     cl.addForce(info);
 }
 
