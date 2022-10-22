@@ -101,54 +101,6 @@ private:
     const SlicedPmeForce& force;
 };
 
-class OpenCLCalcSlicedPmeForceKernel::PmeIO : public CalcPmeReciprocalForceKernel::IO {
-public:
-    PmeIO(OpenCLContext& cl, cl::Kernel addForcesKernel) : cl(cl), addForcesKernel(addForcesKernel) {
-        forceTemp.initialize<mm_float4>(cl, cl.getNumAtoms(), "PmeForce");
-        addForcesKernel.setArg<cl::Buffer>(0, forceTemp.getDeviceBuffer());
-    }
-    float* getPosq() {
-        cl.getPosq().download(posq);
-        return (float*) &posq[0];
-    }
-    void setForce(float* force) {
-        forceTemp.upload(force);
-        addForcesKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
-        cl.executeKernel(addForcesKernel, cl.getNumAtoms());
-    }
-private:
-    OpenCLContext& cl;
-    vector<mm_float4> posq;
-    OpenCLArray forceTemp;
-    cl::Kernel addForcesKernel;
-};
-
-class OpenCLCalcSlicedPmeForceKernel::PmePreComputation : public OpenCLContext::ForcePreComputation {
-public:
-    PmePreComputation(OpenCLContext& cl, Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : cl(cl), pme(pme), io(io) {
-    }
-    void computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        Vec3 boxVectors[3] = {Vec3(cl.getPeriodicBoxSize().x, 0, 0), Vec3(0, cl.getPeriodicBoxSize().y, 0), Vec3(0, 0, cl.getPeriodicBoxSize().z)};
-        pme.getAs<CalcPmeReciprocalForceKernel>().beginComputation(io, boxVectors, includeEnergy);
-    }
-private:
-    OpenCLContext& cl;
-    Kernel pme;
-    CalcPmeReciprocalForceKernel::IO& io;
-};
-
-class OpenCLCalcSlicedPmeForceKernel::PmePostComputation : public OpenCLContext::ForcePostComputation {
-public:
-    PmePostComputation(Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : pme(pme), io(io) {
-    }
-    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        return pme.getAs<CalcPmeReciprocalForceKernel>().finishComputation(io);
-    }
-private:
-    Kernel pme;
-    CalcPmeReciprocalForceKernel::IO& io;
-};
-
 class OpenCLCalcSlicedPmeForceKernel::SyncQueuePreComputation : public OpenCLContext::ForcePreComputation {
 public:
     SyncQueuePreComputation(OpenCLContext& cl, cl::CommandQueue queue, int forceGroup) : cl(cl), queue(queue), forceGroup(forceGroup) {
@@ -215,8 +167,6 @@ OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
         delete sort;
     if (fft != NULL)
         delete fft;
-    if (pmeio != NULL)
-        delete pmeio;
 }
 
 void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
@@ -321,157 +271,138 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
         if (deviceIsCpu)
             pmeDefines["DEVICE_IS_CPU"] = "1";
-        if (cl.getPlatformData().useCpuPme && usePosqCharges) {
-            // Create the CPU PME kernel.
 
-            try {
-                cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), *cl.getPlatformData().context);
-                cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
-                cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPme, pmeDefines);
-                cl::Kernel addForcesKernel = cl::Kernel(program, "addForces");
-                pmeio = new PmeIO(cl, addForcesKernel);
-                cl.addPreComputation(new PmePreComputation(cl, cpuPme, *pmeio));
-                cl.addPostComputation(new PmePostComputation(cpuPme, *pmeio));
-            }
-            catch (OpenMMException& ex) {
-                // The CPU PME plugin isn't available.
-            }
+        // Create required data structures.
+
+        int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
+        int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
+        pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
+        pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
+        cl.addAutoclearBuffer(pmeGrid2);
+        pmeBsplineModuliX.initialize(cl, gridSizeX, elementSize, "pmeBsplineModuliX");
+        pmeBsplineModuliY.initialize(cl, gridSizeY, elementSize, "pmeBsplineModuliY");
+        pmeBsplineModuliZ.initialize(cl, gridSizeZ, elementSize, "pmeBsplineModuliZ");
+        pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*elementSize, "pmeBsplineTheta");
+        pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
+        pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
+        int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+        int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+        pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
+        cl.clearBuffer(pmeEnergyBuffer);
+        sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
+        fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
+        string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
+        bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
+        usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
+        int recipForceGroup = force.getReciprocalSpaceForceGroup();
+        if (recipForceGroup < 0)
+            recipForceGroup = force.getForceGroup();
+        if (usePmeQueue) {
+            pmeDefines["USE_PME_STREAM"] = "1";
+            pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
+            cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
+            cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
         }
-        if (pmeio == NULL) {
-            // Create required data structures.
+        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
 
-            int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
-            pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
-            pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
-            cl.addAutoclearBuffer(pmeGrid2);
-            pmeBsplineModuliX.initialize(cl, gridSizeX, elementSize, "pmeBsplineModuliX");
-            pmeBsplineModuliY.initialize(cl, gridSizeY, elementSize, "pmeBsplineModuliY");
-            pmeBsplineModuliZ.initialize(cl, gridSizeZ, elementSize, "pmeBsplineModuliZ");
-            pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*elementSize, "pmeBsplineTheta");
-            pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
-            pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
-            int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
-            pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
-            cl.clearBuffer(pmeEnergyBuffer);
-            sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-            fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
-            string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
-            bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
-            usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
-            int recipForceGroup = force.getReciprocalSpaceForceGroup();
-            if (recipForceGroup < 0)
-                recipForceGroup = force.getForceGroup();
-            if (usePmeQueue) {
-                pmeDefines["USE_PME_STREAM"] = "1";
-                pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
-                cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
-                cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
-            }
-            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
+        // Initialize the b-spline moduli.
 
-            // Initialize the b-spline moduli.
+        int xsize, ysize, zsize;
+        OpenCLArray *xmoduli, *ymoduli, *zmoduli;
 
-            int xsize, ysize, zsize;
-            OpenCLArray *xmoduli, *ymoduli, *zmoduli;
+        xsize = gridSizeX;
+        ysize = gridSizeY;
+        zsize = gridSizeZ;
+        xmoduli = &pmeBsplineModuliX;
+        ymoduli = &pmeBsplineModuliY;
+        zmoduli = &pmeBsplineModuliZ;
 
-            xsize = gridSizeX;
-            ysize = gridSizeY;
-            zsize = gridSizeZ;
-            xmoduli = &pmeBsplineModuliX;
-            ymoduli = &pmeBsplineModuliY;
-            zmoduli = &pmeBsplineModuliZ;
-
-            int maxSize = max(max(xsize, ysize), zsize);
-            vector<double> data(PmeOrder);
-            vector<double> ddata(PmeOrder);
-            vector<double> bsplines_data(maxSize);
-            data[PmeOrder-1] = 0.0;
-            data[1] = 0.0;
-            data[0] = 1.0;
-            for (int i = 3; i < PmeOrder; i++) {
-                double div = 1.0/(i-1.0);
-                data[i-1] = 0.0;
-                for (int j = 1; j < (i-1); j++)
-                    data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
-                data[0] = div*data[0];
-            }
-
-            // Differentiate.
-
-            ddata[0] = -data[0];
-            for (int i = 1; i < PmeOrder; i++)
-                ddata[i] = data[i-1]-data[i];
-            double div = 1.0/(PmeOrder-1);
-            data[PmeOrder-1] = 0.0;
-            for (int i = 1; i < (PmeOrder-1); i++)
-                data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+        int maxSize = max(max(xsize, ysize), zsize);
+        vector<double> data(PmeOrder);
+        vector<double> ddata(PmeOrder);
+        vector<double> bsplines_data(maxSize);
+        data[PmeOrder-1] = 0.0;
+        data[1] = 0.0;
+        data[0] = 1.0;
+        for (int i = 3; i < PmeOrder; i++) {
+            double div = 1.0/(i-1.0);
+            data[i-1] = 0.0;
+            for (int j = 1; j < (i-1); j++)
+                data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
             data[0] = div*data[0];
-            for (int i = 0; i < maxSize; i++)
-                bsplines_data[i] = 0.0;
-            for (int i = 1; i <= PmeOrder; i++)
-                bsplines_data[i] = data[i-1];
+        }
 
-            // Evaluate the actual bspline moduli for X/Y/Z.
+        // Differentiate.
 
-            for (int dim = 0; dim < 3; dim++) {
-                int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
-                vector<cl_double> moduli(ndata);
-                for (int i = 0; i < ndata; i++) {
-                    double sc = 0.0;
-                    double ss = 0.0;
-                    for (int j = 0; j < ndata; j++) {
-                        double arg = (2.0*M_PI*i*j)/ndata;
-                        sc += bsplines_data[j]*cos(arg);
-                        ss += bsplines_data[j]*sin(arg);
-                    }
-                    moduli[i] = sc*sc+ss*ss;
+        ddata[0] = -data[0];
+        for (int i = 1; i < PmeOrder; i++)
+            ddata[i] = data[i-1]-data[i];
+        double div = 1.0/(PmeOrder-1);
+        data[PmeOrder-1] = 0.0;
+        for (int i = 1; i < (PmeOrder-1); i++)
+            data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+        data[0] = div*data[0];
+        for (int i = 0; i < maxSize; i++)
+            bsplines_data[i] = 0.0;
+        for (int i = 1; i <= PmeOrder; i++)
+            bsplines_data[i] = data[i-1];
+
+        // Evaluate the actual bspline moduli for X/Y/Z.
+
+        for (int dim = 0; dim < 3; dim++) {
+            int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
+            vector<cl_double> moduli(ndata);
+            for (int i = 0; i < ndata; i++) {
+                double sc = 0.0;
+                double ss = 0.0;
+                for (int j = 0; j < ndata; j++) {
+                    double arg = (2.0*M_PI*i*j)/ndata;
+                    sc += bsplines_data[j]*cos(arg);
+                    ss += bsplines_data[j]*sin(arg);
                 }
-                for (int i = 0; i < ndata; i++)
-                {
-                    if (moduli[i] < 1.0e-7)
-                        moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
-                }
-                if (dim == 0)
-                    xmoduli->upload(moduli, true);
-                else if (dim == 1)
-                    ymoduli->upload(moduli, true);
-                else
-                    zmoduli->upload(moduli, true);
+                moduli[i] = sc*sc+ss*ss;
             }
+            for (int i = 0; i < ndata; i++)
+            {
+                if (moduli[i] < 1.0e-7)
+                    moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
+            }
+            if (dim == 0)
+                xmoduli->upload(moduli, true);
+            else if (dim == 1)
+                ymoduli->upload(moduli, true);
+            else
+                zmoduli->upload(moduli, true);
         }
     }
 
     // Add code to subtract off the reciprocal part of excluded interactions.
 
-    if (pmeio == NULL) {
-        int numContexts = cl.getPlatformData().contexts.size();
-        int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
-        int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
-        int numExclusions = endIndex-startIndex;
-        if (numExclusions > 0) {
-            paramsDefines["HAS_EXCLUSIONS"] = "1";
-            vector<vector<int> > atoms(numExclusions, vector<int>(2));
-            exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
-            exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
-            vector<mm_int2> exclusionAtomsVec(numExclusions);
-            for (int i = 0; i < numExclusions; i++) {
-                int j = i+startIndex;
-                exclusionAtomsVec[i] = mm_int2(exclusions[j].first, exclusions[j].second);
-                atoms[i][0] = exclusions[j].first;
-                atoms[i][1] = exclusions[j].second;
-            }
-            exclusionAtoms.upload(exclusionAtomsVec);
-            map<string, string> replacements;
-            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
-            replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
-            replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-            replacements["DO_LJPME"] = "0";
-            replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-            if (force.getIncludeDirectSpace())
-                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
+    int numContexts = cl.getPlatformData().contexts.size();
+    int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
+    int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
+    int numExclusions = endIndex-startIndex;
+    if (numExclusions > 0) {
+        paramsDefines["HAS_EXCLUSIONS"] = "1";
+        vector<vector<int> > atoms(numExclusions, vector<int>(2));
+        exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
+        exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
+        vector<mm_int2> exclusionAtomsVec(numExclusions);
+        for (int i = 0; i < numExclusions; i++) {
+            int j = i+startIndex;
+            exclusionAtomsVec[i] = mm_int2(exclusions[j].first, exclusions[j].second);
+            atoms[i][0] = exclusions[j].first;
+            atoms[i][1] = exclusions[j].second;
         }
+        exclusionAtoms.upload(exclusionAtomsVec);
+        map<string, string> replacements;
+        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
+        replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        replacements["DO_LJPME"] = "0";
+        replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        if (force.getIncludeDirectSpace())
+            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
     }
 
     // Add the interaction to the default nonbonded kernel.
@@ -517,9 +448,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
     // Initialize the exceptions.
 
-    int numContexts = cl.getPlatformData().contexts.size();
-    int startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
-    int endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
+    startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
+    endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
     if (numExceptions > 0) {
         paramsDefines["HAS_EXCEPTIONS"] = "1";

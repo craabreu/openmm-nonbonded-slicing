@@ -48,7 +48,7 @@ namespace PmeSlicing {
 class OpenCLCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
     OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) : CalcSlicedPmeForceKernel(name, platform),
-            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), pmeio(NULL), usePmeQueue(false) {
+            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
     }
     ~OpenCLCalcSlicedPmeForceKernel();
     /**
@@ -97,9 +97,6 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
     class AddEnergyPostComputation;
@@ -133,7 +130,6 @@ private:
     cl::Event pmeSyncEvent;
     OpenCLVkFFT3D* fft;
     Kernel cpuPme;
-    PmeIO* pmeio;
     AddEnergyPostComputation* addEnergy;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;

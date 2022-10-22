@@ -53,7 +53,7 @@ namespace PmeSlicing {
 class CudaCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
     CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) : CalcSlicedPmeForceKernel(name, platform),
-            cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {
+            cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
     }
     ~CudaCalcSlicedPmeForceKernel();
     /**
@@ -102,9 +102,6 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncStreamPreComputation;
     class SyncStreamPostComputation;
     class AddEnergyPostComputation;
@@ -133,7 +130,6 @@ private:
     CudaArray pairwiseEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
-    PmeIO* pmeio;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
