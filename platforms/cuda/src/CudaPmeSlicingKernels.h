@@ -110,8 +110,11 @@ private:
     bool hasInitializedFFT;
     CudaArray charges;
     CudaArray subsets;
+    CudaArray exceptionAtoms;
+    CudaArray exceptionSlices;
     CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
+    CudaArray exclusionSlices;
     CudaArray exclusionChargeProds;
     CudaArray baseParticleCharges;
     CudaArray baseExceptionChargeProds;
@@ -142,7 +145,7 @@ private:
     CUfunction pmeEvalEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    std::vector<std::pair<int, int> > exceptionAtoms;
+    std::vector<vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
@@ -155,6 +158,9 @@ private:
     CudaArray pairLambda, sliceLambda;
     template <typename real>
     void uploadCouplingParameters(const SlicedPmeForce& force);
+
+    int maxNumBonds;
+    CUfunction computeBondsKernel;
 };
 
 } // namespace PmeSlicing

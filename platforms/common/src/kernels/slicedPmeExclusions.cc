@@ -1,4 +1,5 @@
 const float exclusionChargeProds = PARAMS[index];
+// printf("i=%d j=%d qiqj=%f\n", atom1, atom2, exclusionChargeProds);
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if USE_PERIODIC
     APPLY_PERIODIC_TO_DELTA(delta)
