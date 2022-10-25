@@ -617,6 +617,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         recomputeParams = false;
     }
 
+    // Do exclusion and exception calculations.
+
     if (includeDirect && maxNumBonds > 0) {
         void* computeBondsArgs[] = {
             &cu.getPosq().getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &cu.getForce().getDevicePointer(),

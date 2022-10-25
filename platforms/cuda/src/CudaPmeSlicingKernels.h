@@ -145,7 +145,7 @@ private:
     CUfunction pmeEvalEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    std::vector<vector<int>> exceptionPairs;
+    std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;

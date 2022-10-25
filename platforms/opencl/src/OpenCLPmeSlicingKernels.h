@@ -105,8 +105,11 @@ private:
     bool hasInitializedKernel;
     OpenCLArray charges;
     OpenCLArray subsets;
+    OpenCLArray exceptionAtoms;
+    OpenCLArray exceptionSlices;
     OpenCLArray exceptionChargeProds;
     OpenCLArray exclusionAtoms;
+    OpenCLArray exclusionSlices;
     OpenCLArray exclusionChargeProds;
     OpenCLArray baseParticleCharges;
     OpenCLArray baseExceptionChargeProds;
@@ -143,7 +146,7 @@ private:
     cl::Kernel pmeEvalEnergyKernel;
     cl::Kernel pmeInterpolateForceKernel;
     std::map<std::string, std::string> pmeDefines;
-    std::vector<std::pair<int, int> > exceptionAtoms;
+    std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha;
@@ -155,6 +158,9 @@ private:
     OpenCLArray pairLambda, sliceLambda;
     template <typename real>
     void uploadCouplingParameters(const SlicedPmeForce& force);
+
+    int maxNumBonds;
+    cl::Kernel computeBondsKernel;
 };
 
 } // namespace PmeSlicing
