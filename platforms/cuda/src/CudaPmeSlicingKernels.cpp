@@ -605,7 +605,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         if (exclusionChargeProds.isInitialized()) {
             int numExclusions = exclusionChargeProds.getSize();
             vector<void*> exclusionChargeProdsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(),
-                    &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionChargeProds.getDevicePointer()};
+                    &numExclusions, &exclusionAtoms.getDevicePointer(), &subsets.getDevicePointer(),
+                    &exclusionSlices.getDevicePointer(), &exclusionChargeProds.getDevicePointer()};
             cu.executeKernel(computeExclusionParamsKernel, &exclusionChargeProdsArgs[0], numExclusions);
         }
         if (usePmeStream) {

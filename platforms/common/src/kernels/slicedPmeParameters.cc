@@ -57,14 +57,18 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
  * Compute parameters for subtracting the reciprocal part of excluded interactions.
  */
 KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
-        int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL float* RESTRICT exclusionChargeProds) {
-    for (int i = GLOBAL_ID; i < numExclusions; i += GLOBAL_SIZE) {
-        int2 atoms = exclusionAtoms[i];
+        int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL const int* RESTRICT subsets,
+        GLOBAL int* RESTRICT exclusionSlices, GLOBAL float* RESTRICT exclusionChargeProds) {
+    for (int index = GLOBAL_ID; index < numExclusions; index += GLOBAL_SIZE) {
+        int2 atoms = exclusionAtoms[index];
 #ifdef USE_POSQ_CHARGES
         real chargeProd = posq[atoms.x].w*posq[atoms.y].w;
 #else
         real chargeProd = charge[atoms.x]*charge[atoms.y];
 #endif
-        exclusionChargeProds[i] = (float) (ONE_4PI_EPS0*chargeProd);
+        exclusionChargeProds[index] = (float) (ONE_4PI_EPS0*chargeProd);
+        int i = subsets[atoms.x];
+        int j = subsets[atoms.y];
+        exclusionSlices[index] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
     }
 }

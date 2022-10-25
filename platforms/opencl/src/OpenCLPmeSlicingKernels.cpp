@@ -585,7 +585,9 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             computeExclusionParamsKernel.setArg<cl::Buffer>(1, charges.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl_int>(2, exclusionChargeProds.getSize());
             computeExclusionParamsKernel.setArg<cl::Buffer>(3, exclusionAtoms.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionChargeProds.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(4, subsets.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionSlices.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionChargeProds.getDeviceBuffer());
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
