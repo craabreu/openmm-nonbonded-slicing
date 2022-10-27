@@ -159,7 +159,7 @@ private:
     template <typename real>
     void uploadCouplingParameters(const SlicedPmeForce& force);
 
-    int maxNumBonds;
+    int numExclusions;
     cl::Kernel computeBondsKernel;
 };
 

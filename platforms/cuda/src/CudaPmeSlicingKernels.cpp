@@ -425,7 +425,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     int numContexts = cu.getPlatformData().contexts.size();
     int startIndex = cu.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cu.getContextIndex()+1)*force.getNumExceptions()/numContexts;
-    int numExclusions = endIndex-startIndex;
+    numExclusions = endIndex-startIndex;
     if (numExclusions > 0) {
         exclusionAtoms.initialize<int2>(cu, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cu, numExclusions, "exclusionSlices");
@@ -475,8 +475,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
 
-    maxNumBonds = max(numExclusions, numExceptions);
-    if (force.getIncludeDirectSpace() && maxNumBonds > 0) {
+    if (force.getIncludeDirectSpace() && numExclusions > 0) {
         map<string, string> bondDefines;
         bondDefines["NUM_EXCLUSIONS"] = cu.intToString(numExclusions);
         bondDefines["NUM_EXCEPTIONS"] = cu.intToString(numExceptions);
@@ -620,7 +619,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
 
     // Do exclusion and exception calculations.
 
-    if (includeDirect && maxNumBonds > 0) {
+    if (includeDirect && numExclusions > 0) {
         void* computeBondsArgs[] = {
             &cu.getPosq().getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &cu.getForce().getDevicePointer(),
             cu.getPeriodicBoxSizePointer(), cu.getInvPeriodicBoxSizePointer(),
@@ -629,7 +628,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             &exceptionAtoms.getDevicePointer(), &exceptionSlices.getDevicePointer(), &exceptionChargeProds.getDevicePointer(),
             &sliceLambda.getDevicePointer(), &pairwiseEnergyBuffer.getDevicePointer()
         };
-        cu.executeKernel(computeBondsKernel, computeBondsArgs, maxNumBonds);
+        cu.executeKernel(computeBondsKernel, computeBondsArgs, numExclusions);
     }
 
     // Do reciprocal space calculations.

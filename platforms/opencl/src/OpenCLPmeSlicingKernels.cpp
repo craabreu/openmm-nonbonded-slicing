@@ -416,7 +416,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     int numContexts = cl.getPlatformData().contexts.size();
     int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
-    int numExclusions = endIndex-startIndex;
+    numExclusions = endIndex-startIndex;
     if (numExclusions > 0) {
         exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cl, numExclusions, "exclusionSlices");
@@ -466,8 +466,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
 
-    maxNumBonds = max(numExclusions, numExceptions);
-    if (force.getIncludeDirectSpace() && maxNumBonds > 0) {
+    numExclusions = max(numExclusions, numExceptions);
+    if (force.getIncludeDirectSpace() && numExclusions > 0) {
         map<string, string> bondDefines;
         bondDefines["NUM_EXCLUSIONS"] = cl.intToString(numExclusions);
         bondDefines["NUM_EXCEPTIONS"] = cl.intToString(numExceptions);
@@ -663,7 +663,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     
     // Do exclusion and exception calculations.
 
-    if (includeDirect && maxNumBonds > 0) {
+    if (includeDirect && numExclusions > 0) {
         computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
         computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
         computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
@@ -676,7 +676,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
         computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
         computeBondsKernel.setArg<cl::Buffer>(15, pairwiseEnergyBuffer.getDeviceBuffer());
-       cl.executeKernel(computeBondsKernel, maxNumBonds);
+       cl.executeKernel(computeBondsKernel, numExclusions);
     }
 
     // Do reciprocal space calculations.
