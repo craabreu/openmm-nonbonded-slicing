@@ -573,12 +573,15 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         computeParamsKernel.setArg<cl::Buffer>(index++, charges.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleParamOffsets.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleOffsetIndices.getDeviceBuffer());
+        computeParamsKernel.setArg<cl::Buffer>(index++, subsets.getDeviceBuffer());
         if (exceptionChargeProds.isInitialized()) {
             computeParamsKernel.setArg<cl_int>(index++, exceptionChargeProds.getSize());
             computeParamsKernel.setArg<cl::Buffer>(index++, baseExceptionChargeProds.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionChargeProds.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParamOffsets.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionOffsetIndices.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionAtoms.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionSlices.getDeviceBuffer());
         }
         if (exclusionChargeProds.isInitialized()) {
             computeExclusionParamsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());

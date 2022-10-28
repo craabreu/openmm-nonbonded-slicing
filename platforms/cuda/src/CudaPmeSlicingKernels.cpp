@@ -590,7 +590,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         int numAtoms = cu.getPaddedNumAtoms();
         vector<void*> paramsArgs = {&cu.getEnergyBuffer().getDevicePointer(), &computeSelfEnergy, &globalParams.getDevicePointer(), &numAtoms,
                 &baseParticleCharges.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(),
-                &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer()};
+                &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer(),
+                &subsets.getDevicePointer()};
         int numExceptions;
         if (exceptionChargeProds.isInitialized()) {
             numExceptions = exceptionChargeProds.getSize();
@@ -599,6 +600,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             paramsArgs.push_back(&exceptionChargeProds.getDevicePointer());
             paramsArgs.push_back(&exceptionParamOffsets.getDevicePointer());
             paramsArgs.push_back(&exceptionOffsetIndices.getDevicePointer());
+            paramsArgs.push_back(&exceptionAtoms.getDevicePointer());
+            paramsArgs.push_back(&exceptionSlices.getDevicePointer());
         }
         cu.executeKernel(computeParamsKernel, &paramsArgs[0], cu.getPaddedNumAtoms());
         if (exclusionChargeProds.isInitialized()) {
