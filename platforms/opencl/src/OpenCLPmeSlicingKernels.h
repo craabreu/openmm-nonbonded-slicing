@@ -142,13 +142,15 @@ private:
     cl::Kernel pmeGridIndexKernel;
     cl::Kernel pmeSpreadChargeKernel;
     cl::Kernel pmeFinishSpreadChargeKernel;
-    cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeEvalEnergyKernel;
+    cl::Kernel pmeAddSelfEnergyKernel;
+    cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeInterpolateForceKernel;
     std::map<std::string, std::string> pmeDefines;
     std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
+    std::vector<double> sliceSelfEnergy;
     double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
     int numSubsets, numSlices;

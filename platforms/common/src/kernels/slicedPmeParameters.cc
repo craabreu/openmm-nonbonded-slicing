@@ -3,7 +3,7 @@
 /**
  * Compute the nonbonded parameters for particles and exceptions.
  */
-KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
+KERNEL void computeParameters(GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float* RESTRICT baseParticleCharges, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
         GLOBAL const int* RESTRICT subsets
@@ -13,7 +13,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         GLOBAL const int2* RESTRICT exceptionAtoms, GLOBAL int* RESTRICT exceptionSlices
 #endif
         ) {
-    mixed energy = 0;
 
     // Compute particle parameters.
     
@@ -30,11 +29,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         posq[i].w = q;
 #else
         charge[i] = q;
-#endif
-#ifdef HAS_OFFSETS
-    #ifdef INCLUDE_EWALD
-        energy -= EWALD_SELF_ENERGY_SCALE*q*q;
-    #endif
 #endif
     }
 
@@ -58,8 +52,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         exceptionSlices[i] = SLICE(subset1, subset2);
     }
 #endif
-    if (includeSelfEnergy)
-        energyBuffer[GLOBAL_ID] += energy;
 }
 
 /**

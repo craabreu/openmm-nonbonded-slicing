@@ -143,11 +143,13 @@ private:
     CUfunction pmeSpreadChargeKernel;
     CUfunction pmeFinishSpreadChargeKernel;
     CUfunction pmeEvalEnergyKernel;
+    CUfunction pmeAddSelfEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
     std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
+    std::vector<double> sliceSelfEnergy;
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;

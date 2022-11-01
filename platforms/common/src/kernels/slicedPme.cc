@@ -239,6 +239,25 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         pmeEnergyBuffer[GLOBAL_ID*NUM_SLICES+j] = recipScaleFactor*energy[j];
 }
 
+KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT pmeEnergyBuffer,
+                          GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
+                          GLOBAL const int* RESTRICT subsets) {
+
+    mixed sumSquareCharges[NUM_SLICES] = { 0 };
+    for (int atom = GLOBAL_ID; atom < NUM_ATOMS; atom += GLOBAL_SIZE) {
+#ifdef USE_POSQ_CHARGES
+        real q = posq[atom].w;
+#else
+        real q = charges[atom];
+#endif
+        int subset = subsets[atom];
+        int slice = subset*(subset+3)/2;
+        sumSquareCharges[slice] += q*q;
+    }
+    for (int slice = 0; slice < NUM_SLICES; slice++)
+        pmeEnergyBuffer[GLOBAL_ID*NUM_SLICES+slice] -= EWALD_SELF_ENERGY_SCALE*sumSquareCharges[slice];
+}
+
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const int2* RESTRICT pmeAtomGridIndex,

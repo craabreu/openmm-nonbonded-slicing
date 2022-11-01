@@ -217,6 +217,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     usePosqCharges = cl.requestPosqCharges();
     alpha = 0;
     ewaldSelfEnergy = 0.0;
+    sliceSelfEnergy.resize(numSlices, 0.0);
     map<string, string> paramsDefines;
     paramsDefines["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
@@ -252,9 +253,14 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
     if (cl.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
-        paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-        for (int i = 0; i < numParticles; i++)
-            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+        for (int i = 0; i < numParticles; i++) {
+            int j = subsetVec[i];
+            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        }
+        for (int slice = 0; slice < numSlices; slice++) {
+            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= sliceSelfEnergy[slice];
+        }
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
         pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
@@ -267,6 +273,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
+        pmeDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
+        pmeDefines["USE_POSQ_CHARGES"] = usePosqCharges ? "1" : "0";
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
         bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
         if (deviceIsCpu)
@@ -564,8 +572,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
         int index = 0;
-        computeParamsKernel.setArg<cl::Buffer>(index++, cl.getEnergyBuffer().getDeviceBuffer());
-        index++;
         computeParamsKernel.setArg<cl::Buffer>(index++, globalParams.getDeviceBuffer());
         computeParamsKernel.setArg<cl_int>(index++, cl.getPaddedNumAtoms());
         computeParamsKernel.setArg<cl::Buffer>(index++, baseParticleCharges.getDeviceBuffer());
@@ -602,6 +608,8 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
+            if (hasOffsets)
+                pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
@@ -620,6 +628,12 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
+            if (hasOffsets) {
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, charges.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
+            }
             pmeInterpolateForceKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(2, pmeGrid1.getDeviceBuffer());
@@ -650,7 +664,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     }
     double energy = (includeReciprocal ? ewaldSelfEnergy : 0.0);
     if (recomputeParams || hasOffsets) {
-        computeParamsKernel.setArg<cl_int>(1, includeEnergy && includeReciprocal);
         cl.executeKernel(computeParamsKernel, cl.getPaddedNumAtoms());
         if (exclusionChargeProds.isInitialized())
             cl.executeKernel(computeExclusionParamsKernel, exclusionChargeProds.getSize());
@@ -749,8 +762,11 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
             pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
         }
-        if (includeEnergy)
+        if (includeEnergy) {
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
+            if (recomputeParams || hasOffsets)
+                cl.executeKernel(pmeAddSelfEnergyKernel, cl.getNumAtoms());
+        }
 
         cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*(gridSizeZ/2+1));
         fft->execFFT(false, cl.getQueue());
@@ -861,9 +877,15 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     // Compute other values.
     
     ewaldSelfEnergy = 0.0;
+    sliceSelfEnergy.assign(numSlices, 0.0);
     if (cl.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {
-            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            int j = subsetVec[i];
+            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        }
+        for (int slice = 0; slice < numSlices; slice++) {
+            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= sliceSelfEnergy[slice];
         }
     }
     cl.invalidateMolecules(info);
