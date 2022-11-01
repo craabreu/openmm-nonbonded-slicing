@@ -48,7 +48,7 @@ namespace PmeSlicing {
 class OpenCLCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
     OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) : CalcSlicedPmeForceKernel(name, platform),
-            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), pmeio(NULL), usePmeQueue(false) {
+            hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
     }
     ~OpenCLCalcSlicedPmeForceKernel();
     /**
@@ -97,18 +97,19 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
+    class AddEnergyPostComputation;
     OpenCLContext& cl;
     ForceInfo* info;
     bool hasInitializedKernel;
     OpenCLArray charges;
     OpenCLArray subsets;
+    OpenCLArray exceptionAtoms;
+    OpenCLArray exceptionSlices;
     OpenCLArray exceptionChargeProds;
     OpenCLArray exclusionAtoms;
+    OpenCLArray exclusionSlices;
     OpenCLArray exclusionChargeProds;
     OpenCLArray baseParticleCharges;
     OpenCLArray baseExceptionChargeProds;
@@ -126,13 +127,13 @@ private:
     OpenCLArray pmeAtomRange;
     OpenCLArray pmeAtomGridIndex;
     OpenCLArray pmeEnergyBuffer;
+    OpenCLArray pairwiseEnergyBuffer;
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
     OpenCLVkFFT3D* fft;
     Kernel cpuPme;
-    PmeIO* pmeio;
-    SyncQueuePostComputation* syncQueue;
+    AddEnergyPostComputation* addEnergy;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
@@ -141,18 +142,27 @@ private:
     cl::Kernel pmeGridIndexKernel;
     cl::Kernel pmeSpreadChargeKernel;
     cl::Kernel pmeFinishSpreadChargeKernel;
-    cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeEvalEnergyKernel;
+    cl::Kernel pmeAddSelfEnergyKernel;
+    cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeInterpolateForceKernel;
-    cl::Kernel pmeCollapseGridKernel;
     std::map<std::string, std::string> pmeDefines;
-    std::vector<std::pair<int, int> > exceptionAtoms;
+    std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
+    std::vector<double> sliceSelfEnergy;
     double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
+    int numSubsets, numSlices;
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
+
+    OpenCLArray pairLambda, sliceLambda;
+    template <typename real>
+    void uploadCouplingParameters(const SlicedPmeForce& force);
+
+    int numExclusions;
+    cl::Kernel computeBondsKernel;
 };
 
 } // namespace PmeSlicing

@@ -53,7 +53,7 @@ namespace PmeSlicing {
 class CudaCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
     CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) : CalcSlicedPmeForceKernel(name, platform),
-            cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {
+            cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
     }
     ~CudaCalcSlicedPmeForceKernel();
     /**
@@ -102,18 +102,19 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncStreamPreComputation;
     class SyncStreamPostComputation;
+    class AddEnergyPostComputation;
     CudaContext& cu;
     ForceInfo* info;
     bool hasInitializedFFT;
     CudaArray charges;
     CudaArray subsets;
+    CudaArray exceptionAtoms;
+    CudaArray exceptionSlices;
     CudaArray exceptionChargeProds;
     CudaArray exclusionAtoms;
+    CudaArray exclusionSlices;
     CudaArray exclusionChargeProds;
     CudaArray baseParticleCharges;
     CudaArray baseExceptionChargeProds;
@@ -129,9 +130,9 @@ private:
     CudaArray pmeBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
+    CudaArray pairwiseEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
-    PmeIO* pmeio;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
@@ -142,17 +143,26 @@ private:
     CUfunction pmeSpreadChargeKernel;
     CUfunction pmeFinishSpreadChargeKernel;
     CUfunction pmeEvalEnergyKernel;
+    CUfunction pmeAddSelfEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    CUfunction pmeCollapseGridKernel;
-    std::vector<std::pair<int, int> > exceptionAtoms;
+    std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
+    std::vector<double> sliceSelfEnergy;
     double ewaldSelfEnergy, alpha;
     int interpolateForceThreads;
-    int gridSizeX, gridSizeY, gridSizeZ, numSubsets;
+    int gridSizeX, gridSizeY, gridSizeZ;
+    int numSubsets, numSlices;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
+
+    CudaArray pairLambda, sliceLambda;
+    template <typename real>
+    void uploadCouplingParameters(const SlicedPmeForce& force);
+
+    int numExclusions;
+    CUfunction computeBondsKernel;
 };
 
 } // namespace PmeSlicing

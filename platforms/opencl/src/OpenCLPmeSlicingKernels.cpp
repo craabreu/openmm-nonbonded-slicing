@@ -101,54 +101,6 @@ private:
     const SlicedPmeForce& force;
 };
 
-class OpenCLCalcSlicedPmeForceKernel::PmeIO : public CalcPmeReciprocalForceKernel::IO {
-public:
-    PmeIO(OpenCLContext& cl, cl::Kernel addForcesKernel) : cl(cl), addForcesKernel(addForcesKernel) {
-        forceTemp.initialize<mm_float4>(cl, cl.getNumAtoms(), "PmeForce");
-        addForcesKernel.setArg<cl::Buffer>(0, forceTemp.getDeviceBuffer());
-    }
-    float* getPosq() {
-        cl.getPosq().download(posq);
-        return (float*) &posq[0];
-    }
-    void setForce(float* force) {
-        forceTemp.upload(force);
-        addForcesKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
-        cl.executeKernel(addForcesKernel, cl.getNumAtoms());
-    }
-private:
-    OpenCLContext& cl;
-    vector<mm_float4> posq;
-    OpenCLArray forceTemp;
-    cl::Kernel addForcesKernel;
-};
-
-class OpenCLCalcSlicedPmeForceKernel::PmePreComputation : public OpenCLContext::ForcePreComputation {
-public:
-    PmePreComputation(OpenCLContext& cl, Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : cl(cl), pme(pme), io(io) {
-    }
-    void computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        Vec3 boxVectors[3] = {Vec3(cl.getPeriodicBoxSize().x, 0, 0), Vec3(0, cl.getPeriodicBoxSize().y, 0), Vec3(0, 0, cl.getPeriodicBoxSize().z)};
-        pme.getAs<CalcPmeReciprocalForceKernel>().beginComputation(io, boxVectors, includeEnergy);
-    }
-private:
-    OpenCLContext& cl;
-    Kernel pme;
-    CalcPmeReciprocalForceKernel::IO& io;
-};
-
-class OpenCLCalcSlicedPmeForceKernel::PmePostComputation : public OpenCLContext::ForcePostComputation {
-public:
-    PmePostComputation(Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : pme(pme), io(io) {
-    }
-    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        return pme.getAs<CalcPmeReciprocalForceKernel>().finishComputation(io);
-    }
-private:
-    Kernel pme;
-    CalcPmeReciprocalForceKernel::IO& io;
-};
-
 class OpenCLCalcSlicedPmeForceKernel::SyncQueuePreComputation : public OpenCLContext::ForcePreComputation {
 public:
     SyncQueuePreComputation(OpenCLContext& cl, cl::CommandQueue queue, int forceGroup) : cl(cl), queue(queue), forceGroup(forceGroup) {
@@ -168,31 +120,45 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::SyncQueuePostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, OpenCLArray& pmeEnergyBuffer, int forceGroup) : cl(cl), event(event),
-            pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
-    }
-    void setKernel(cl::Kernel kernel) {
-        addEnergyKernel = kernel;
-        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(2, pmeEnergyBuffer.getSize());
-    }
+    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, int forceGroup) :
+        cl(cl), event(event), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             vector<cl::Event> events(1);
             events[0] = event;
             event = cl::Event();
             cl.getQueue().enqueueBarrierWithWaitList(&events);
-            if (includeEnergy)
-                cl.executeKernel(addEnergyKernel, pmeEnergyBuffer.getSize());
         }
         return 0.0;
     }
 private:
     OpenCLContext& cl;
     cl::Event& event;
+    int forceGroup;
+};
+
+class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
+public:
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, int bufferSize, int forceGroup) :
+        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    void setKernel(cl::Kernel kernel) {
+        addEnergyKernel = kernel;
+        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(3, bufferSize);
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if (includeEnergy && (groups&(1<<forceGroup)) != 0)
+            cl.executeKernel(addEnergyKernel, bufferSize);
+        return 0.0;
+    }
+private:
+    OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
+    OpenCLArray& sliceLambda;
+    int bufferSize;
     int forceGroup;
 };
 
@@ -201,8 +167,6 @@ OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
         delete sort;
     if (fft != NULL)
         delete fft;
-    if (pmeio != NULL)
-        delete pmeio;
 }
 
 void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
@@ -238,13 +202,12 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Initialize nonbonded interactions.
 
     int numParticles = force.getNumParticles();
-    int numSubsets = force.getNumSubsets();
+    numSubsets = force.getNumSubsets();
+    numSlices = numSubsets*(numSubsets + 1)/2;
     vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
-    vector<int> subsetVec(cl.getPaddedNumAtoms(), 0);
     vector<vector<int> > exclusionList(numParticles);
     for (int i = 0; i < numParticles; i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
-        subsetVec[i] = force.getParticleSubset(i);
         exclusionList[i].push_back(i);
     }
     for (auto exclusion : exclusions) {
@@ -252,11 +215,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
     usePosqCharges = cl.requestPosqCharges();
-    map<string, string> defines;
-    defines["HAS_COULOMB"] = "1";
-    defines["HAS_LENNARD_JONES"] = "0";
     alpha = 0;
     ewaldSelfEnergy = 0.0;
+    sliceSelfEnergy.resize(numSlices, 0.0);
     map<string, string> paramsDefines;
     paramsDefines["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
@@ -269,6 +230,19 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
 
+    // Initialize subsets and coupling parameters.
+
+    subsets.initialize<int>(cl, cl.getPaddedNumAtoms(), "subsets");
+    vector<int> subsetVec(cl.getPaddedNumAtoms());
+    for (int i = 0; i < numParticles; i++)
+        subsetVec[i] = force.getParticleSubset(i);
+    subsets.upload(subsetVec);
+
+    if (cl.getUseDoublePrecision())
+        uploadCouplingParameters<double>(force);
+    else
+        uploadCouplingParameters<float>(force);
+
     // Compute the PME parameters.
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
@@ -277,18 +251,20 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
 
-    defines["EWALD_ALPHA"] = cl.doubleToString(alpha);
-    defines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-    defines["USE_EWALD"] = "1";
-    defines["DO_LJPME"] = "0";
     if (cl.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
-        paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-        for (int i = 0; i < numParticles; i++)
-            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+        for (int i = 0; i < numParticles; i++) {
+            int j = subsetVec[i];
+            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        }
+        for (int slice = 0; slice < numSlices; slice++) {
+            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= sliceSelfEnergy[slice];
+        }
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
         pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
+        pmeDefines["NUM_SLICES"] = cl.intToString(numSlices);
         pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
         pmeDefines["RECIP_EXP_FACTOR"] = cl.doubleToString(M_PI*M_PI/(alpha*alpha));
         pmeDefines["GRID_SIZE_X"] = cl.intToString(gridSizeX);
@@ -297,212 +273,221 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["ROUNDED_Z_SIZE"] = cl.intToString(roundedZSize);
         pmeDefines["EPSILON_FACTOR"] = cl.doubleToString(sqrt(ONE_4PI_EPS0));
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
+        pmeDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
+        pmeDefines["USE_POSQ_CHARGES"] = usePosqCharges ? "1" : "0";
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
         bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
         if (deviceIsCpu)
             pmeDefines["DEVICE_IS_CPU"] = "1";
-        if (cl.getPlatformData().useCpuPme && usePosqCharges) {
-            // Create the CPU PME kernel.
 
-            try {
-                cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), *cl.getPlatformData().context);
-                cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
-                cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPme, pmeDefines);
-                cl::Kernel addForcesKernel = cl::Kernel(program, "addForces");
-                pmeio = new PmeIO(cl, addForcesKernel);
-                cl.addPreComputation(new PmePreComputation(cl, cpuPme, *pmeio));
-                cl.addPostComputation(new PmePostComputation(cpuPme, *pmeio));
-            }
-            catch (OpenMMException& ex) {
-                // The CPU PME plugin isn't available.
-            }
+        // Create required data structures.
+
+        int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
+        int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
+        pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
+        pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
+        cl.addAutoclearBuffer(pmeGrid2);
+        pmeBsplineModuliX.initialize(cl, gridSizeX, elementSize, "pmeBsplineModuliX");
+        pmeBsplineModuliY.initialize(cl, gridSizeY, elementSize, "pmeBsplineModuliY");
+        pmeBsplineModuliZ.initialize(cl, gridSizeZ, elementSize, "pmeBsplineModuliZ");
+        pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*elementSize, "pmeBsplineTheta");
+        pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
+        pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
+        int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+        int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+        pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
+        cl.clearBuffer(pmeEnergyBuffer);
+        sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
+        fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
+        string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
+        bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
+        usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
+        int recipForceGroup = force.getReciprocalSpaceForceGroup();
+        if (recipForceGroup < 0)
+            recipForceGroup = force.getForceGroup();
+        if (usePmeQueue) {
+            pmeDefines["USE_PME_STREAM"] = "1";
+            pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
+            cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
+            cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
         }
-        if (pmeio == NULL) {
-            // Create required data structures.
+        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
 
-            int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-            int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
-            pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
-            pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
-            cl.addAutoclearBuffer(pmeGrid2);
-            pmeBsplineModuliX.initialize(cl, gridSizeX, elementSize, "pmeBsplineModuliX");
-            pmeBsplineModuliY.initialize(cl, gridSizeY, elementSize, "pmeBsplineModuliY");
-            pmeBsplineModuliZ.initialize(cl, gridSizeZ, elementSize, "pmeBsplineModuliZ");
-            pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*elementSize, "pmeBsplineTheta");
-            pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
-            pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
-            int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-            pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
-            cl.clearBuffer(pmeEnergyBuffer);
-            sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-            fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
-            string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
-            bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
-            usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
-            if (usePmeQueue) {
-                pmeDefines["USE_PME_STREAM"] = "1";
-                pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
-                int recipForceGroup = force.getReciprocalSpaceForceGroup();
-                if (recipForceGroup < 0)
-                    recipForceGroup = force.getForceGroup();
-                cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
-                cl.addPostComputation(syncQueue = new SyncQueuePostComputation(cl, pmeSyncEvent, pmeEnergyBuffer, recipForceGroup));
-            }
+        // Initialize the b-spline moduli.
 
-            // Initialize the b-spline moduli.
+        int xsize, ysize, zsize;
+        OpenCLArray *xmoduli, *ymoduli, *zmoduli;
 
-            int xsize, ysize, zsize;
-            OpenCLArray *xmoduli, *ymoduli, *zmoduli;
+        xsize = gridSizeX;
+        ysize = gridSizeY;
+        zsize = gridSizeZ;
+        xmoduli = &pmeBsplineModuliX;
+        ymoduli = &pmeBsplineModuliY;
+        zmoduli = &pmeBsplineModuliZ;
 
-            xsize = gridSizeX;
-            ysize = gridSizeY;
-            zsize = gridSizeZ;
-            xmoduli = &pmeBsplineModuliX;
-            ymoduli = &pmeBsplineModuliY;
-            zmoduli = &pmeBsplineModuliZ;
-
-            int maxSize = max(max(xsize, ysize), zsize);
-            vector<double> data(PmeOrder);
-            vector<double> ddata(PmeOrder);
-            vector<double> bsplines_data(maxSize);
-            data[PmeOrder-1] = 0.0;
-            data[1] = 0.0;
-            data[0] = 1.0;
-            for (int i = 3; i < PmeOrder; i++) {
-                double div = 1.0/(i-1.0);
-                data[i-1] = 0.0;
-                for (int j = 1; j < (i-1); j++)
-                    data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
-                data[0] = div*data[0];
-            }
-
-            // Differentiate.
-
-            ddata[0] = -data[0];
-            for (int i = 1; i < PmeOrder; i++)
-                ddata[i] = data[i-1]-data[i];
-            double div = 1.0/(PmeOrder-1);
-            data[PmeOrder-1] = 0.0;
-            for (int i = 1; i < (PmeOrder-1); i++)
-                data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+        int maxSize = max(max(xsize, ysize), zsize);
+        vector<double> data(PmeOrder);
+        vector<double> ddata(PmeOrder);
+        vector<double> bsplines_data(maxSize);
+        data[PmeOrder-1] = 0.0;
+        data[1] = 0.0;
+        data[0] = 1.0;
+        for (int i = 3; i < PmeOrder; i++) {
+            double div = 1.0/(i-1.0);
+            data[i-1] = 0.0;
+            for (int j = 1; j < (i-1); j++)
+                data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
             data[0] = div*data[0];
-            for (int i = 0; i < maxSize; i++)
-                bsplines_data[i] = 0.0;
-            for (int i = 1; i <= PmeOrder; i++)
-                bsplines_data[i] = data[i-1];
-
-            // Evaluate the actual bspline moduli for X/Y/Z.
-
-            for (int dim = 0; dim < 3; dim++) {
-                int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
-                vector<cl_double> moduli(ndata);
-                for (int i = 0; i < ndata; i++) {
-                    double sc = 0.0;
-                    double ss = 0.0;
-                    for (int j = 0; j < ndata; j++) {
-                        double arg = (2.0*M_PI*i*j)/ndata;
-                        sc += bsplines_data[j]*cos(arg);
-                        ss += bsplines_data[j]*sin(arg);
-                    }
-                    moduli[i] = sc*sc+ss*ss;
-                }
-                for (int i = 0; i < ndata; i++)
-                {
-                    if (moduli[i] < 1.0e-7)
-                        moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
-                }
-                if (dim == 0)
-                    xmoduli->upload(moduli, true);
-                else if (dim == 1)
-                    ymoduli->upload(moduli, true);
-                else
-                    zmoduli->upload(moduli, true);
-            }
         }
-    }
 
-    // Add code to subtract off the reciprocal part of excluded interactions.
+        // Differentiate.
 
-    if (pmeio == NULL) {
-        int numContexts = cl.getPlatformData().contexts.size();
-        int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
-        int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
-        int numExclusions = endIndex-startIndex;
-        if (numExclusions > 0) {
-            paramsDefines["HAS_EXCLUSIONS"] = "1";
-            vector<vector<int> > atoms(numExclusions, vector<int>(2));
-            exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
-            exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
-            vector<mm_int2> exclusionAtomsVec(numExclusions);
-            for (int i = 0; i < numExclusions; i++) {
-                int j = i+startIndex;
-                exclusionAtomsVec[i] = mm_int2(exclusions[j].first, exclusions[j].second);
-                atoms[i][0] = exclusions[j].first;
-                atoms[i][1] = exclusions[j].second;
+        ddata[0] = -data[0];
+        for (int i = 1; i < PmeOrder; i++)
+            ddata[i] = data[i-1]-data[i];
+        double div = 1.0/(PmeOrder-1);
+        data[PmeOrder-1] = 0.0;
+        for (int i = 1; i < (PmeOrder-1); i++)
+            data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+        data[0] = div*data[0];
+        for (int i = 0; i < maxSize; i++)
+            bsplines_data[i] = 0.0;
+        for (int i = 1; i <= PmeOrder; i++)
+            bsplines_data[i] = data[i-1];
+
+        // Evaluate the actual bspline moduli for X/Y/Z.
+
+        for (int dim = 0; dim < 3; dim++) {
+            int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
+            vector<cl_double> moduli(ndata);
+            for (int i = 0; i < ndata; i++) {
+                double sc = 0.0;
+                double ss = 0.0;
+                for (int j = 0; j < ndata; j++) {
+                    double arg = (2.0*M_PI*i*j)/ndata;
+                    sc += bsplines_data[j]*cos(arg);
+                    ss += bsplines_data[j]*sin(arg);
+                }
+                moduli[i] = sc*sc+ss*ss;
             }
-            exclusionAtoms.upload(exclusionAtomsVec);
-            map<string, string> replacements;
-            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
-            replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
-            replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-            replacements["DO_LJPME"] = "0";
-            replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-            if (force.getIncludeDirectSpace())
-                cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
+            for (int i = 0; i < ndata; i++)
+            {
+                if (moduli[i] < 1.0e-7)
+                    moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
+            }
+            if (dim == 0)
+                xmoduli->upload(moduli, true);
+            else if (dim == 1)
+                ymoduli->upload(moduli, true);
+            else
+                zmoduli->upload(moduli, true);
         }
     }
 
     // Add the interaction to the default nonbonded kernel.
     
-    string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
-    subsets.initialize<int>(cl, cl.getPaddedNumAtoms(), "subsets");
-    subsets.upload(subsetVec);
-    map<string, string> replacements;
-    replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
-    if (usePosqCharges) {
-        replacements["CHARGE1"] = "posq1.w";
-        replacements["CHARGE2"] = "posq2.w";
+
+    if (force.getIncludeDirectSpace()) {
+        OpenCLNonbondedUtilities* nb = &cl.getNonbondedUtilities();
+
+        int energyElementSize = cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
+        int bufferSize = max(cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, nb->getNumEnergyBuffers());
+        pairwiseEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+
+        map<string, string> replacements;
+        replacements["NUM_SLICES"] = cl.intToString(numSlices);
+        replacements["BUFFER"] = prefix+"buffer";
+        replacements["LAMBDA"] = prefix+"lambda";
+        replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        replacements["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
+        replacements["CHARGE1"] = usePosqCharges ? "posq1.w" : prefix+"charge1";
+        replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
+        replacements["SUBSET1"] = prefix+"subset1";
+        replacements["SUBSET2"] = prefix+"subset2";
+
+        nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded, replacements));
+        if (!usePosqCharges)
+            nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
+        nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+        nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+        nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+        string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
+        nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
     }
-    else {
-        replacements["CHARGE1"] = prefix+"charge1";
-        replacements["CHARGE2"] = prefix+"charge2";
+
+    // Add code to subtract off the reciprocal part of excluded interactions.
+
+    int numContexts = cl.getPlatformData().contexts.size();
+    int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
+    int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
+    numExclusions = endIndex-startIndex;
+    if (numExclusions > 0) {
+        exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
+        exclusionSlices.initialize<int>(cl, numExclusions, "exclusionSlices");
+        exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
+        vector<mm_int2> exclusionAtomsVec(numExclusions);
+        vector<int> exclusionSlicesVec(numExclusions);
+       for (int k = 0; k < numExclusions; k++) {
+            int atom1 = exclusions[k+startIndex].first;
+            int atom2 = exclusions[k+startIndex].second;
+            exclusionAtomsVec[k] = mm_int2(atom1, atom2);
+            int i = subsetVec[atom1];
+            int j = subsetVec[atom2];
+            exclusionSlicesVec[k] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        }
+        exclusionAtoms.upload(exclusionAtomsVec);
+        exclusionSlices.upload(exclusionSlicesVec);
     }
-    if (!usePosqCharges)
-        cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"charge", "real", 1, charges.getElementSize(), charges.getDeviceBuffer()));
-    source = cl.replaceStrings(source, replacements);
-    if (force.getIncludeDirectSpace())
-        cl.getNonbondedUtilities().addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
 
     // Initialize the exceptions.
 
-    int numContexts = cl.getPlatformData().contexts.size();
-    int startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
-    int endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
+    startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
+    endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
     if (numExceptions > 0) {
         paramsDefines["HAS_EXCEPTIONS"] = "1";
-        exceptionAtoms.resize(numExceptions);
-        vector<vector<int> > atoms(numExceptions, vector<int>(2));
+        exceptionPairs.resize(numExceptions);
+        exceptionAtoms.initialize<mm_int2>(cl, numExceptions, "exceptionAtoms");
+        exceptionSlices.initialize<int>(cl, numExceptions, "exceptionSlices");
         exceptionChargeProds.initialize<float>(cl, numExceptions, "exceptionChargeProds");
         baseExceptionChargeProds.initialize<float>(cl, numExceptions, "baseExceptionChargeProds");
+        vector<mm_int2> exceptionAtomsVec(numExceptions);
+        vector<int> exceptionSlicesVec(numExceptions);
         vector<float> baseExceptionChargeProdsVec(numExceptions);
-        for (int i = 0; i < numExceptions; i++) {
+        for (int k = 0; k < numExceptions; k++) {
             double chargeProd;
-            force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd);
-            baseExceptionChargeProdsVec[i] = chargeProd;
-            exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
+            int atom1, atom2;
+            force.getExceptionParameters(exceptions[startIndex+k], atom1, atom2, chargeProd);
+            exceptionPairs[k] = (vector<int>) {atom1, atom2};
+            baseExceptionChargeProdsVec[k] = chargeProd;
+            exceptionAtomsVec[k] = mm_int2(atom1, atom2);
+            int i = subsetVec[atom1];
+            int j = subsetVec[atom2];
+            exceptionSlicesVec[k] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         }
+        exceptionAtoms.upload(exceptionAtomsVec);
+        exceptionSlices.upload(exceptionSlicesVec);
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
-        map<string, string> replacements;
-        replacements["APPLY_PERIODIC"] = (force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
-        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
-        if (force.getIncludeDirectSpace())
-            cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
-    
+
+    numExclusions = max(numExclusions, numExceptions);
+    if (force.getIncludeDirectSpace() && numExclusions > 0) {
+        map<string, string> bondDefines;
+        bondDefines["NUM_EXCLUSIONS"] = cl.intToString(numExclusions);
+        bondDefines["NUM_EXCEPTIONS"] = cl.intToString(numExceptions);
+        bondDefines["NUM_SLICES"] = cl.intToString(numSlices);
+        bondDefines["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        bondDefines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        bondDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
+        cl::Program bondProgram = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
+        computeBondsKernel = cl::Kernel(bondProgram, "computeBonds");
+    }
+
     // Initialize parameter offsets.
 
     vector<vector<mm_float2> > particleOffsetVec(force.getNumParticles());
@@ -587,8 +572,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
         int index = 0;
-        computeParamsKernel.setArg<cl::Buffer>(index++, cl.getEnergyBuffer().getDeviceBuffer());
-        index++;
         computeParamsKernel.setArg<cl::Buffer>(index++, globalParams.getDeviceBuffer());
         computeParamsKernel.setArg<cl_int>(index++, cl.getPaddedNumAtoms());
         computeParamsKernel.setArg<cl::Buffer>(index++, baseParticleCharges.getDeviceBuffer());
@@ -596,19 +579,24 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         computeParamsKernel.setArg<cl::Buffer>(index++, charges.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleParamOffsets.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleOffsetIndices.getDeviceBuffer());
+        computeParamsKernel.setArg<cl::Buffer>(index++, subsets.getDeviceBuffer());
         if (exceptionChargeProds.isInitialized()) {
             computeParamsKernel.setArg<cl_int>(index++, exceptionChargeProds.getSize());
             computeParamsKernel.setArg<cl::Buffer>(index++, baseExceptionChargeProds.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionChargeProds.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParamOffsets.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionOffsetIndices.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionAtoms.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionSlices.getDeviceBuffer());
         }
         if (exclusionChargeProds.isInitialized()) {
             computeExclusionParamsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(1, charges.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl_int>(2, exclusionChargeProds.getSize());
             computeExclusionParamsKernel.setArg<cl::Buffer>(3, exclusionAtoms.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionChargeProds.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(4, subsets.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionSlices.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionChargeProds.getDeviceBuffer());
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
@@ -618,9 +606,10 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             cl::Program program = cl.createProgram(cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
-            pmeCollapseGridKernel = cl::Kernel(program, "collapseGrid");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
+            if (hasOffsets)
+                pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
@@ -635,20 +624,27 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<cl::Buffer>(2, pmeBsplineModuliY.getDeviceBuffer());
             pmeConvolutionKernel.setArg<cl::Buffer>(3, pmeBsplineModuliZ.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyBuffer.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
+            if (hasOffsets) {
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, charges.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
+            }
             pmeInterpolateForceKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(2, pmeGrid1.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(11, pmeAtomGridIndex.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(12, charges.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(13, subsets.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(14, pairLambda.getDeviceBuffer());
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            if (usePmeQueue)
-                syncQueue->setKernel(cl::Kernel(program, "addEnergy"));
+            addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
        }
     }
     
@@ -668,7 +664,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     }
     double energy = (includeReciprocal ? ewaldSelfEnergy : 0.0);
     if (recomputeParams || hasOffsets) {
-        computeParamsKernel.setArg<cl_int>(1, includeEnergy && includeReciprocal);
         cl.executeKernel(computeParamsKernel, cl.getPaddedNumAtoms());
         if (exclusionChargeProds.isInitialized())
             cl.executeKernel(computeExclusionParamsKernel, exclusionChargeProds.getSize());
@@ -682,6 +677,24 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         recomputeParams = false;
     }
     
+    // Do exclusion and exception calculations.
+
+    if (includeDirect && numExclusions > 0) {
+        computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
+        setPeriodicBoxArgs(cl, computeBondsKernel, 3);
+        computeBondsKernel.setArg<cl::Buffer>(8, exclusionAtoms.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(9, exclusionSlices.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(10, exclusionChargeProds.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(11, exceptionAtoms.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(12, exceptionSlices.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
+        computeBondsKernel.setArg<cl::Buffer>(15, pairwiseEnergyBuffer.getDeviceBuffer());
+       cl.executeKernel(computeBondsKernel, numExclusions);
+    }
+
     // Do reciprocal space calculations.
     
     if (pmeGrid1.isInitialized() && includeReciprocal) {
@@ -729,11 +742,8 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeSpreadChargeKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[2]);
         }
         cl.executeKernel(pmeSpreadChargeKernel, cl.getNumAtoms());
-        cl.executeKernel(pmeFinishSpreadChargeKernel, gridSizeX*gridSizeY*gridSizeZ);
+        cl.executeKernel(pmeFinishSpreadChargeKernel, numSubsets*gridSizeX*gridSizeY*gridSizeZ);
         fft->execFFT(true, cl.getQueue());
-
-        pmeCollapseGridKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-        cl.executeKernel(pmeCollapseGridKernel, gridSizeX*gridSizeY*gridSizeZ);
 
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         if (cl.getUseDoublePrecision()) {
@@ -752,9 +762,13 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
             pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
         }
-        if (includeEnergy)
+        if (includeEnergy) {
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
-        cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
+            if (recomputeParams || hasOffsets)
+                cl.executeKernel(pmeAddSelfEnergyKernel, cl.getNumAtoms());
+        }
+
+        cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*(gridSizeZ/2+1));
         fft->execFFT(false, cl.getQueue());
         setPeriodicBoxArgs(cl, pmeInterpolateForceKernel, 3);
         if (cl.getUseDoublePrecision()) {
@@ -777,6 +791,26 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         }
     }
     return energy;
+}
+
+template <typename real>
+void OpenCLCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
+    int numSubsets = force.getNumSubsets();
+    int numPairs = numSubsets*numSubsets;
+    int numSlices = numSubsets*(numSubsets+1)/2;
+    if (!pairLambda.isInitialized())
+        pairLambda.initialize<real>(cl, numPairs, "pairLambda");
+    if (!sliceLambda.isInitialized())
+        sliceLambda.initialize<real>(cl, numSlices, "sliceLambda");
+    vector<real> pairLambdaVec(numPairs);
+    vector<real> sliceLambdaVec(numSlices);
+    for (int j = 0; j < numSubsets; j++)
+        for (int i = 0; i <= j; i++)
+            pairLambdaVec[j*numSubsets+i] =
+            pairLambdaVec[i*numSubsets+j] =
+            sliceLambdaVec[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
+    pairLambda.upload(pairLambdaVec);
+    sliceLambda.upload(sliceLambdaVec);
 }
 
 void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
@@ -804,13 +838,13 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     int startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
     int endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
-    if (numExceptions != exceptionAtoms.size())
+    if (numExceptions != exceptionPairs.size())
         throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
 
     // Record the per-particle parameters.
 
     vector<float> baseParticleChargeVec(cl.getPaddedNumAtoms(), 0.0);
-    vector<int> subsetVec(cl.getPaddedNumAtoms(), 0);
+    vector<int> subsetVec(cl.getPaddedNumAtoms());
     for (int i = 0; i < force.getNumParticles(); i++) {
         baseParticleChargeVec[i] = force.getParticleCharge(i);
         subsetVec[i] = force.getParticleSubset(i);
@@ -818,6 +852,13 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     baseParticleCharges.upload(baseParticleChargeVec);
     subsets.upload(subsetVec);
     
+    // Record coupling parameters.
+
+    if (cl.getUseDoublePrecision())
+        uploadCouplingParameters<double>(force);
+    else
+        uploadCouplingParameters<float>(force);
+
     // Record the exceptions.
     
     if (numExceptions > 0) {
@@ -826,7 +867,7 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
             int particle1, particle2;
             double chargeProd;
             force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd);
-            if (make_pair(particle1, particle2) != exceptionAtoms[i])
+            if (exceptionPairs[i][0] != particle1 || exceptionPairs[i][1] != particle2)
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
             baseExceptionChargeProdsVec[i] = chargeProd;
         }
@@ -836,9 +877,15 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     // Compute other values.
     
     ewaldSelfEnergy = 0.0;
+    sliceSelfEnergy.assign(numSlices, 0.0);
     if (cl.getContextIndex() == 0) {
         for (int i = 0; i < force.getNumParticles(); i++) {
-            ewaldSelfEnergy -= baseParticleChargeVec[i]*baseParticleChargeVec[i]*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            int j = subsetVec[i];
+            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        }
+        for (int slice = 0; slice < numSlices; slice++) {
+            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= sliceSelfEnergy[slice];
         }
     }
     cl.invalidateMolecules(info);

@@ -1,15 +1,18 @@
+# define SLICE(i, j) (i > j ? i*(i+1)/2+j : j*(j+1)/2+i)
+
 /**
  * Compute the nonbonded parameters for particles and exceptions.
  */
-KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
+KERNEL void computeParameters(GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float* RESTRICT baseParticleCharges, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
-        GLOBAL float2* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices
+        GLOBAL float2* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
+        GLOBAL const int* RESTRICT subsets
 #ifdef HAS_EXCEPTIONS
         , int numExceptions, GLOBAL const float* RESTRICT baseExceptionChargeProds, GLOBAL float* RESTRICT exceptionChargeProds,
-        GLOBAL float2* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
+        GLOBAL float2* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices,
+        GLOBAL const int2* RESTRICT exceptionAtoms, GLOBAL int* RESTRICT exceptionSlices
 #endif
         ) {
-    mixed energy = 0;
 
     // Compute particle parameters.
     
@@ -27,11 +30,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 #else
         charge[i] = q;
 #endif
-#ifdef HAS_OFFSETS
-    #ifdef INCLUDE_EWALD
-        energy -= EWALD_SELF_ENERGY_SCALE*q*q;
-    #endif
-#endif
     }
 
     // Compute exception parameters.
@@ -47,17 +45,21 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         }
 #endif
         exceptionChargeProds[i] = (float) (ONE_4PI_EPS0*chargeProd);
+
+        int2 atoms = exceptionAtoms[i];
+        int subset1 = subsets[atoms.x];
+        int subset2 = subsets[atoms.y];
+        exceptionSlices[i] = SLICE(subset1, subset2);
     }
 #endif
-    if (includeSelfEnergy)
-        energyBuffer[GLOBAL_ID] += energy;
 }
 
 /**
  * Compute parameters for subtracting the reciprocal part of excluded interactions.
  */
 KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
-        int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL float* RESTRICT exclusionChargeProds) {
+        int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL const int* RESTRICT subsets,
+        GLOBAL int* RESTRICT exclusionSlices, GLOBAL float* RESTRICT exclusionChargeProds) {
     for (int i = GLOBAL_ID; i < numExclusions; i += GLOBAL_SIZE) {
         int2 atoms = exclusionAtoms[i];
 #ifdef USE_POSQ_CHARGES
@@ -66,5 +68,8 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
         real chargeProd = charge[atoms.x]*charge[atoms.y];
 #endif
         exclusionChargeProds[i] = (float) (ONE_4PI_EPS0*chargeProd);
+        int subset1 = subsets[atoms.x];
+        int subset2 = subsets[atoms.y];
+        exclusionSlices[i] = SLICE(subset1, subset2);
     }
 }
