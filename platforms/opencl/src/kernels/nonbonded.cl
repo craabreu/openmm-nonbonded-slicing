@@ -1,5 +1,4 @@
 #define WARPS_PER_GROUP (FORCE_WORK_GROUP_SIZE/TILE_SIZE)
-#define SLICE(i, j) (i > j ? i*(i+1)/2+j : j*(j+1)/2+i)
 
 typedef struct {
     real x, y, z;
@@ -30,7 +29,6 @@ __kernel void computeNonbonded(
     const unsigned int tbx = get_local_id(0) - tgx;
     const unsigned int localAtomIndex = get_local_id(0);
     mixed energy = 0;
-    mixed sliceEnergy[NUM_SLICES] = { 0 };
     INIT_DERIVATIVES
     __local AtomData localData[FORCE_WORK_GROUP_SIZE];
 
@@ -409,13 +407,7 @@ __kernel void computeNonbonded(
         pos++;
     }
 #ifdef INCLUDE_ENERGY
-    int thread = get_global_id(0);
-    int offset = thread*NUM_SLICES;
-    for (int slice = 0; slice < NUM_SLICES; slice++) {
-        BUFFER[offset+slice] += sliceEnergy[slice];
-        energy += LAMBDA[slice]*sliceEnergy[slice];
-    }
-    energyBuffer[thread] += energy;
+    energyBuffer[get_global_id(0)] += energy;
 #endif
     SAVE_DERIVATIVES
 }
