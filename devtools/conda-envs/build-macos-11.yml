@@ -7,7 +7,7 @@ dependencies:
   - khronos-opencl-icd-loader
   - make
   - openmm >=7.7
-  - pip
+  - pip >=22.2
   - pocl
   - pytest
   - python
