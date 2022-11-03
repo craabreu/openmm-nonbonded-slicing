@@ -1,7 +1,7 @@
 KERNEL void computeBonds(GLOBAL const real4* RESTRICT posq, GLOBAL mixed* RESTRICT energyBuffer, GLOBAL mm_ulong* RESTRICT forceBuffer,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
-        GLOBAL const uint2* RESTRICT exclusionAtoms, GLOBAL const uint* RESTRICT exclusionSlices, GLOBAL const float* RESTRICT exclusionChargeProds,
-        GLOBAL const uint2* RESTRICT exceptionAtoms, GLOBAL const uint* RESTRICT exceptionSlices, GLOBAL const float* RESTRICT exceptionChargeProds,
+        GLOBAL const uint2* RESTRICT exclusionAtoms, GLOBAL const int* RESTRICT exclusionSlices, GLOBAL const float* RESTRICT exclusionChargeProds,
+        GLOBAL const uint2* RESTRICT exceptionAtoms, GLOBAL const int* RESTRICT exceptionSlices, GLOBAL const float* RESTRICT exceptionChargeProds,
         GLOBAL const real* RESTRICT sliceLambda, GLOBAL mixed* RESTRICT pairwiseEnergyBuffer) {
 
     mixed energy[NUM_SLICES] = {0};
@@ -9,7 +9,7 @@ KERNEL void computeBonds(GLOBAL const real4* RESTRICT posq, GLOBAL mixed* RESTRI
 #if NUM_EXCLUSIONS > 0
     for (int index = GLOBAL_ID; index < NUM_EXCLUSIONS; index += GLOBAL_SIZE) {
         uint2 atoms = exclusionAtoms[index];
-        uint slice = exclusionSlices[index];
+        int slice = exclusionSlices[index];
         const float chargeProd = exclusionChargeProds[index];
         real4 pos1 = posq[atoms.x];
         real4 pos2 = posq[atoms.y];
@@ -52,7 +52,7 @@ KERNEL void computeBonds(GLOBAL const real4* RESTRICT posq, GLOBAL mixed* RESTRI
 #if NUM_EXCEPTIONS > 0
     for (int index = GLOBAL_ID; index < NUM_EXCEPTIONS; index += GLOBAL_SIZE) {
         uint2 atoms = exceptionAtoms[index];
-        uint slice = exceptionSlices[index];
+        int slice = exceptionSlices[index];
         const float chargeProd = exceptionChargeProds[index];
         real4 pos1 = posq[atoms.x];
         real4 pos2 = posq[atoms.y];
