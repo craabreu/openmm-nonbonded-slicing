@@ -11,5 +11,5 @@ dependencies:
   - pocl
   - pytest
   - python
-  - swig
+  - swig =4.0
   - numpy

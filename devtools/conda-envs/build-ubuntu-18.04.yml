@@ -13,6 +13,6 @@ dependencies:
   - pocl
   - pytest
   - python
-  - swig
+  - swig =4.0
   - sysroot_linux-64 2.17
   - numpy
