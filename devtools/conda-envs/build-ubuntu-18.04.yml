@@ -7,10 +7,9 @@ dependencies:
   - gxx_linux-64 @GCC_VERSION@
   - make
   - nvcc_linux-64 @NVCC_VERSION@
-  - ocl-icd
+  - ocl-icd-system
   - openmm >=7.7
   - pip >=22.2
-  - pocl
   - pytest
   - python
   - swig =4.0
