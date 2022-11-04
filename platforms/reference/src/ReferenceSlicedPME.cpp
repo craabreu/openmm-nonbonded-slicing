@@ -34,19 +34,19 @@
 #include <stdlib.h>
 #include <complex>
 
-#include "ReferenceSlicedPME.h"
-#include "SimTKOpenMMRealType.h"
+#include "internal/ReferenceSlicedPME.h"
+#include "openmm/reference/SimTKOpenMMRealType.h"
 
 #ifdef _MSC_VER
   #define POCKETFFT_NO_VECTORS
 #endif
-#include "pocketfft_hdronly.h"
+#include "internal/pocketfft_hdronly.h"
 
 using namespace std;
 
 typedef int    ivec[3];
 
-namespace OpenMM {
+namespace PmeSlicing {
 
 struct pme
 {
