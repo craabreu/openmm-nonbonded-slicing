@@ -39,6 +39,8 @@
 #include <array>
 #include <map>
 
+using namespace std;
+
 namespace PmeSlicing {
 
 /**
@@ -46,7 +48,7 @@ namespace PmeSlicing {
  */
 class ReferenceCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    ReferenceCalcSlicedPmeForceKernel(std::string name, const OpenMM::Platform& platform) : CalcSlicedPmeForceKernel(name, platform) {
+    ReferenceCalcSlicedPmeForceKernel(string name, const OpenMM::Platform& platform) : CalcSlicedPmeForceKernel(name, platform) {
     }
     ~ReferenceCalcSlicedPmeForceKernel();
     /**
@@ -84,16 +86,26 @@ public:
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 private:
     void computeParameters(OpenMM::ContextImpl& context);
-    int numParticles, num14;
-    std::vector<std::vector<int> >bonded14IndexArray;
-    std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
-    std::vector<double> particleCharges, exceptionCharges;
-    std::map<std::pair<std::string, int>, double> particleParamOffsets, exceptionParamOffsets;
+    int numParticles;
+    vector<double> particleParamArray;
+    vector<double> particleCharges;
+    map<pair<string, int>, double> particleParamOffsets;
+    int total14;
+    vector<int> num14;
+    vector<vector<int>> nb14s;
+    vector<vector<vector<int>>> bonded14IndexArray;
+    vector<vector<vector<double>>> bonded14ParamArray;
+    vector<vector<double>> exceptionChargeProds;
+    map<int, vector<pair<string, double>>> exceptionParamOffsets;
     double nonbondedCutoff, ewaldAlpha;
     int gridSize[3];
     bool exceptionsArePeriodic;
-    std::vector<std::set<int> > exclusions;
+    vector<set<int> > exclusions;
     OpenMM::NeighborList* neighborList;
+
+    int numSubsets, numSlices;
+    vector<int> subsets;
+    vector<double> sliceLambda;
 };
 
 } // namespace PmeSlicing

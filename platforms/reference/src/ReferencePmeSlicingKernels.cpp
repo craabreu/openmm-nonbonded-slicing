@@ -40,9 +40,11 @@
 #include "openmm/reference/ReferenceBondForce.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <cstring>
+#include <numeric>
+#include <iostream>
 
-#include "openmm/reference/ReferenceLJCoulombIxn.h"
-#include "openmm/reference/ReferenceLJCoulomb14.h"
+#include "internal/ReferenceCoulombIxn.h"
+#include "internal/ReferenceCoulomb14.h"
 
 using namespace PmeSlicing;
 using namespace OpenMM;
@@ -69,63 +71,88 @@ ReferenceCalcSlicedPmeForceKernel::~ReferenceCalcSlicedPmeForceKernel() {
 }
 
 void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
+    numParticles = force.getNumParticles();
+    numSubsets = force.getNumSubsets();
+    numSlices = numSubsets*(numSubsets+1)/2;
+    subsets.resize(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        subsets[i] = force.getParticleSubset(i);
+    sliceLambda.resize(numSlices);
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            sliceLambda[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
 
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
+        force.getExceptionParameterOffset(index, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
-    numParticles = force.getNumParticles();
     exclusions.resize(numParticles);
-    vector<int> nb14s;
-    map<int, int> nb14Index;
-    for (int i = 0; i < force.getNumExceptions(); i++) {
+    nb14s.resize(numSlices);
+    for (int index = 0; index < force.getNumExceptions(); index++) {
         int particle1, particle2;
         double chargeProd;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd);
+        force.getExceptionParameters(index, particle1, particle2, chargeProd);
         exclusions[particle1].insert(particle2);
         exclusions[particle2].insert(particle1);
-        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end()) {
-            nb14Index[i] = nb14s.size();
-            nb14s.push_back(i);
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(index) != exceptionsWithOffsets.end()) {
+            int s1 = subsets[particle1];
+            int s2 = subsets[particle2];
+            int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+            nb14s[slice].push_back(index);
         }
     }
 
     // Build the arrays.
 
-    num14 = nb14s.size();
-    bonded14IndexArray.resize(num14, vector<int>(2));
-    bonded14ParamArray.resize(num14, vector<double>(3));
-    particleParamArray.resize(numParticles, vector<double>(3));
+    particleParamArray.resize(numParticles);
     particleCharges.resize(numParticles);
-    exceptionCharges.resize(num14);
     for (int i = 0; i < numParticles; ++i)
        particleCharges[i] = force.getParticleCharge(i);
-    for (int i = 0; i < num14; ++i) {
-        int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, exceptionCharges[i]);
-        bonded14IndexArray[i][0] = particle1;
-        bonded14IndexArray[i][1] = particle2;
-    }
-    for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
+
+    for (int index = 0; index < force.getNumParticleParameterOffsets(); index++) {
         string param;
         int particle;
         double charge;
-        force.getParticleParameterOffset(i, param, particle, charge);
+        force.getParticleParameterOffset(index, param, particle, charge);
         particleParamOffsets[make_pair(param, particle)] = charge;
     }
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+
+    num14.resize(numSlices);
+    for (int slice = 0; slice < numSlices; slice++)
+        num14[slice] = nb14s[slice].size();
+    total14 = accumulate(num14.begin(), num14.end(), 0);
+
+    bonded14IndexArray.resize(numSlices);
+    bonded14ParamArray.resize(numSlices);
+    exceptionChargeProds.resize(numSlices);
+    for (int slice = 0; slice < numSlices; slice++) {
+        int n = num14[slice];
+        bonded14IndexArray[slice].resize(n, vector<int>(2));
+        bonded14ParamArray[slice].resize(n, vector<double>(1));
+        exceptionChargeProds[slice].resize(n);
+        for (int i = 0; i < n; ++i)
+            force.getExceptionParameters(
+                nb14s[slice][i],
+                bonded14IndexArray[slice][i][0],
+                bonded14IndexArray[slice][i][1],
+                exceptionChargeProds[slice][i]
+            );
+    }
+
+    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
-        exceptionParamOffsets[make_pair(param, nb14Index[exception])] = charge;
+        force.getExceptionParameterOffset(index, param, exception, charge);
+        exceptionParamOffsets[exception].push_back(make_pair(param,charge));
     }
+
     nonbondedCutoff = force.getCutoffDistance();
     neighborList = new NeighborList();
     double alpha;
@@ -138,27 +165,40 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     computeParameters(context);
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
-    double energy = 0;
-    ReferenceLJCoulombIxn clj;
+    vector<double> sliceEnergies(numSlices, 0.0);
+
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
-    clj.setUseCutoff(nonbondedCutoff, *neighborList, 1.0);
+
+    ReferenceCoulombIxn coulomb;
+    coulomb.setCutoff(nonbondedCutoff, *neighborList);
     Vec3* boxVectors = extractBoxVectors(context);
     double minAllowedSize = 1.999999*nonbondedCutoff;
     if (boxVectors[0][0] < minAllowedSize || boxVectors[1][1] < minAllowedSize || boxVectors[2][2] < minAllowedSize)
         throw OpenMMException("The periodic box size has decreased to less than twice the nonbonded cutoff.");
-    clj.setPeriodic(boxVectors);
-    clj.setPeriodicExceptions(exceptionsArePeriodic);
-    clj.setUsePME(ewaldAlpha, gridSize);
-    clj.calculatePairIxn(numParticles, posData, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
+    coulomb.setPeriodic(boxVectors);
+    coulomb.setPeriodicExceptions(exceptionsArePeriodic);
+    coulomb.setPME(ewaldAlpha, gridSize);
+    coulomb.calculateEwaldIxn(numParticles, posData,
+                              numSubsets, subsets, sliceLambda,
+                              particleParamArray, exclusions,
+                              forceData, sliceEnergies,
+                              includeDirect, includeReciprocal);
+
     if (includeDirect) {
         ReferenceBondForce refBondForce;
-        ReferenceLJCoulomb14 nonbonded14;
+        ReferenceCoulomb14 nonbonded14;
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
         }
-        refBondForce.calculateForce(num14, bonded14IndexArray, posData, bonded14ParamArray, forceData, includeEnergy ? &energy : NULL, nonbonded14);
+        for (int slice = 0; slice < numSlices; slice++)
+            refBondForce.calculateForce(num14[slice], bonded14IndexArray[slice], posData, bonded14ParamArray[slice],
+                                        forceData, includeEnergy ? &sliceEnergies[slice] : NULL, nonbonded14);
     }
+
+    double energy = 0;
+    for (int slice = 0; slice < numSlices; slice++)
+        energy += sliceLambda[slice]*sliceEnergies[slice];
     return energy;
 }
 
@@ -166,36 +206,55 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
 
+    // Get particle substes.
+    for (int i = 0; i < numParticles; i++)
+        subsets[i] = force.getParticleSubset(i);
+
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
+        force.getExceptionParameterOffset(index, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
-    vector<int> nb14s;
-    for (int i = 0; i < force.getNumExceptions(); i++) {
+    for (int slice = 0; slice < numSlices; slice++)
+        nb14s[slice].clear();
+    for (int index = 0; index < force.getNumExceptions(); index++) {
         int particle1, particle2;
         double chargeProd;
-        force.getExceptionParameters(i, particle1, particle2, chargeProd);
-        if (chargeProd != 0.0 || exceptionsWithOffsets.find(i) != exceptionsWithOffsets.end())
-            nb14s.push_back(i);
+        force.getExceptionParameters(index, particle1, particle2, chargeProd);
+        if (chargeProd != 0.0 || exceptionsWithOffsets.find(index) != exceptionsWithOffsets.end()) {
+            int s1 = subsets[particle1];
+            int s2 = subsets[particle2];
+            int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+            nb14s[slice].push_back(index);
+        }
     }
-    if (nb14s.size() != num14)
+    for (int slice = 0; slice < numSlices; slice++)
+        num14[slice] = nb14s[slice].size(); 
+    if (accumulate(num14.begin(), num14.end(), 0) != total14)
         throw OpenMMException("updateParametersInContext: The number of non-excluded exceptions has changed");
 
     // Record the values.
 
     for (int i = 0; i < numParticles; ++i)
         particleCharges[i] = force.getParticleCharge(i);
-    for (int i = 0; i < num14; ++i) {
-        int particle1, particle2;
-        force.getExceptionParameters(nb14s[i], particle1, particle2, exceptionCharges[i]);
-        bonded14IndexArray[i][0] = particle1;
-        bonded14IndexArray[i][1] = particle2;
+
+    for (int slice = 0; slice < numSlices; slice++) {
+        int n = num14[slice];
+        bonded14IndexArray[slice].resize(n, vector<int>(2));
+        bonded14ParamArray[slice].resize(n, vector<double>(1));
+        exceptionChargeProds[slice].resize(n);
+        for (int i = 0; i < n; ++i)
+            force.getExceptionParameters(
+                nb14s[slice][i],
+                bonded14IndexArray[slice][i][0],
+                bonded14IndexArray[slice][i][1],
+                exceptionChargeProds[slice][i]
+            );
     }
 }
 
@@ -209,33 +268,21 @@ void ReferenceCalcSlicedPmeForceKernel::getPMEParameters(double& alpha, int& nx,
 void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) {
     // Compute particle parameters.
 
-    vector<double> charges(numParticles);
     for (int i = 0; i < numParticles; i++)
-        charges[i] = particleCharges[i];
+        particleParamArray[i] = particleCharges[i];
     for (auto& offset : particleParamOffsets) {
         double value = context.getParameter(offset.first.first);
         int index = offset.first.second;
-        charges[index] += value*offset.second;
-    }
-    for (int i = 0; i < numParticles; i++) {
-        particleParamArray[i][0] = 0.5;
-        particleParamArray[i][1] = 0.0;
-        particleParamArray[i][2] = charges[i];
+        particleParamArray[index] += value*offset.second;
     }
 
     // Compute exception parameters.
 
-    charges.resize(num14);
-    for (int i = 0; i < num14; i++)
-        charges[i] = exceptionCharges[i];
-    for (auto& offset : exceptionParamOffsets) {
-        double value = context.getParameter(offset.first.first);
-        int index = offset.first.second;
-        charges[index] += value*offset.second;
-    }
-    for (int i = 0; i < num14; i++) {
-        bonded14ParamArray[i][0] = 1.0;
-        bonded14ParamArray[i][1] = 0.0;
-        bonded14ParamArray[i][2] = charges[i];
-    }
+    for (int slice = 0; slice < numSlices; slice++)
+        for (int i = 0; i < num14[slice]; i++) {
+            double chargeProd = exceptionChargeProds[slice][i];
+            for (auto offset : exceptionParamOffsets[nb14s[slice][i]])
+                chargeProd += context.getParameter(offset.first)*offset.second;
+            bonded14ParamArray[slice][i][0] = chargeProd;
+        }
 }

@@ -46,7 +46,7 @@
 #ifdef _MSC_VER
   #define POCKETFFT_NO_VECTORS
 #endif
-#include "pocketfft_hdronly.h"
+#include "internal/pocketfft_hdronly.h"
 
 using namespace PmeSlicing;
 using namespace OpenMM;
