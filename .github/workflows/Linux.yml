@@ -103,4 +103,4 @@ jobs:
         shell: bash -l {0}
         run: |
           cd build/python/tests
-          pytest --verbose -k 'not Cuda' Test*
+          pytest --verbose -k 'not (Cuda or OpenCL)' Test*
