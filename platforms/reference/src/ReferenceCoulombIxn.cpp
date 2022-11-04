@@ -1,25 +1,25 @@
 
 /* Portions copyright (c) 2006-2020 Stanford University and Simbios.
- * Contributors: Pande Group
+*Contributors: Pande Group
  *
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject
- * to the following conditions:
+*Permission is hereby granted, free of charge, to any person obtaining
+*a copy of this software and associated documentation files (the
+*"Software"), to deal in the Software without restriction, including
+*without limitation the rights to use, copy, modify, merge, publish,
+*distribute, sublicense, and/or sell copies of the Software, and to
+*permit persons to whom the Software is furnished to do so, subject
+*to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Software.
+*The above copyright notice and this permission notice shall be included
+*in all copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+*OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+*MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+*IN NO EVENT SHALL THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE
+*LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+*OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+*WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include <string.h>
@@ -122,145 +122,147 @@ void ReferenceCoulombIxn::setPeriodicExceptions(bool periodic) {
    Calculate Ewald ixn
 
    @param numberOfAtoms    number of atoms
-   @param atomCoordinates  atom coordinates
-   @param atomCharges      atom charges
+   @param coords  atom coordinates
+   @param charges      atom charges
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
    @param totalEnergy      total energy
+         @param sliceEnergies    slice energies
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, std::vector<int> subsets,
-                                              vector<double>& atomCharges, vector<set<int> >& exclusions,
-                                              vector<Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const {
-    typedef std::complex<double> d_complex;
-
-    static const double epsilon     =  1.0;
-
-    double SQRT_PI                  = sqrt(PI_M);
-    double TWO_PI                   = 2.0 * PI_M;
-
-    double totalSelfEwaldEnergy     = 0.0;
-    double realSpaceEwaldEnergy     = 0.0;
-    double recipEnergy              = 0.0;
-    double totalRecipEnergy         = 0.0;
+void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coords, std::vector<int> subsets, std::vector<double> sliceLambda,
+                                            vector<double>& charges, vector<set<int> >& exclusions,
+                                            vector<Vec3>& forces, double* totalEnergy, vector<double> sliceEnergies, bool includeDirect, bool includeReciprocal) const {
+    const double SQRT_PI = sqrt(PI_M);
+    const double TWO_PI = 2.0*PI_M;
 
     // **************************************************************************************
     // SELF ENERGY
     // **************************************************************************************
 
     if (includeReciprocal) {
-        for (int atomID = 0; atomID < numberOfAtoms; atomID++) {
-            double selfEwaldEnergy = ONE_4PI_EPS0*atomCharges[atomID]*atomCharges[atomID] * alphaEwald/SQRT_PI;
-            totalSelfEwaldEnergy -= selfEwaldEnergy;
+
+        double totalSelfEwaldEnergy = 0.0;
+        double recipEnergy = 0.0;
+        double totalRecipEnergy = 0.0;
+
+        for (int i = 0; i < numberOfAtoms; i++) {
+            double selfEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[i]*alphaEwald/SQRT_PI;
+            int si = subsets[i];
+            int slice = si*(si+3)/2;
+            sliceEnergies[slice] -= selfEwaldEnergy;
+            totalSelfEwaldEnergy -= sliceLambda[slice]*selfEwaldEnergy;
         }
-    }
 
-    if (totalEnergy) {
-        *totalEnergy += totalSelfEwaldEnergy;
-    }
+        if (totalEnergy)
+            *totalEnergy += totalSelfEwaldEnergy;
 
-    // **************************************************************************************
-    // RECIPROCAL SPACE EWALD ENERGY AND FORCES
-    // **************************************************************************************
-    // PME
+        // **************************************************************************************
+        // RECIPROCAL SPACE EWALD ENERGY AND FORCES
+        // **************************************************************************************
 
-    if (includeReciprocal) {
-        pme_t          pmedata; /* abstract handle for PME data */
-        pme_init(&pmedata,alphaEwald,numberOfAtoms,meshDim,5,1);
-        pme_exec(pmedata,atomCoordinates,forces,atomCharges,periodicBoxVectors,&recipEnergy);
+        pme_t pmedata; /* abstract handle for PME data */
+        pme_init(&pmedata, alphaEwald, numberOfAtoms, meshDim, 5, 1);
+        pme_exec(pmedata, coords, forces, charges, periodicBoxVectors, &recipEnergy);
+        pme_destroy(pmedata);
+
         if (totalEnergy)
             *totalEnergy += recipEnergy;
-        pme_destroy(pmedata);
     }
 
     // **************************************************************************************
     // SHORT-RANGE ENERGY AND FORCES
     // **************************************************************************************
 
-    if (!includeDirect)
-        return;
-    double totalRealSpaceEwaldEnergy = 0.0f;
+    if (includeDirect) {
+        double totalRealSpaceEwaldEnergy = 0.0;
 
+        for (auto& pair : *neighborList) {
+            int i = pair.first;
+            int j = pair.second;
 
-    for (auto& pair : *neighborList) {
-        int ii = pair.first;
-        int jj = pair.second;
+            int si = subsets[i];
+            int sj = subsets[j];
+            int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
 
-        double deltaR[2][ReferenceForce::LastDeltaRIndex];
-        ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
-        double r         = deltaR[0][ReferenceForce::RIndex];
-        double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-        double alphaR = alphaEwald * r;
+            double deltaR[2][ReferenceForce::LastDeltaRIndex];
+            ReferenceForce::getDeltaRPeriodic(coords[j], coords[i], periodicBoxVectors, deltaR[0]);
+            double r = deltaR[0][ReferenceForce::RIndex];
+            double inverseR = 1.0/deltaR[0][ReferenceForce::RIndex];
+            double alphaR = alphaEwald*r;
 
+            double dEdR = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*inverseR*inverseR;
+            dEdR *= sliceLambda[slice]*(erfc(alphaR) + 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
 
-        double dEdR = ONE_4PI_EPS0 * atomCharges[ii] * atomCharges[jj] * inverseR * inverseR * inverseR;
-        dEdR = dEdR * (erfc(alphaR) + 2 * alphaR * exp (- alphaR * alphaR) / SQRT_PI);
+            // accumulate forces
 
-        // accumulate forces
-
-        for (int kk = 0; kk < 3; kk++) {
-            double force  = dEdR*deltaR[0][kk];
-            forces[ii][kk]   += force;
-            forces[jj][kk]   -= force;
-        }
-
-        // accumulate energies
-
-        realSpaceEwaldEnergy        = ONE_4PI_EPS0*atomCharges[ii]*atomCharges[jj]*inverseR*erfc(alphaR);
-
-        totalRealSpaceEwaldEnergy  += realSpaceEwaldEnergy;
-
-    }
-
-    if (totalEnergy)
-        *totalEnergy += totalRealSpaceEwaldEnergy;
-
-    // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
-
-    double totalExclusionEnergy = 0.0f;
-    const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
-    for (int i = 0; i < numberOfAtoms; i++)
-        for (int exclusion : exclusions[i]) {
-            if (exclusion > i) {
-                int ii = i;
-                int jj = exclusion;
-
-                double deltaR[2][ReferenceForce::LastDeltaRIndex];
-                if (periodicExceptions)
-                    ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
-                else
-                    ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
-                double r         = deltaR[0][ReferenceForce::RIndex];
-                double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-                double alphaR    = alphaEwald * r;
-                if (erf(alphaR) > 1e-6) {
-                    double dEdR = ONE_4PI_EPS0 * atomCharges[ii] * atomCharges[jj] * inverseR * inverseR * inverseR;
-                    dEdR = dEdR * (erf(alphaR) - 2 * alphaR * exp (- alphaR * alphaR) / SQRT_PI);
-
-                    // accumulate forces
-
-                    for (int kk = 0; kk < 3; kk++) {
-                        double force = dEdR*deltaR[0][kk];
-                        forces[ii][kk] -= force;
-                        forces[jj][kk] += force;
-                    }
-
-                    // accumulate energies
-
-                    realSpaceEwaldEnergy = ONE_4PI_EPS0*atomCharges[ii]*atomCharges[jj]*inverseR*erf(alphaR);
-                }
-                else {
-                    realSpaceEwaldEnergy = alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomCharges[ii]*atomCharges[jj];
-                }
-
-                totalExclusionEnergy += realSpaceEwaldEnergy;
+            for (int k = 0; k < 3; k++) {
+                double force = dEdR*deltaR[0][k];
+                forces[i][k] += force;
+                forces[j][k] -= force;
             }
+
+            // accumulate energies
+
+            double realSpaceEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erfc(alphaR);
+
+            sliceEnergies[slice] += realSpaceEwaldEnergy;
+
+            totalRealSpaceEwaldEnergy += sliceLambda[slice]*realSpaceEwaldEnergy;
         }
 
-    if (totalEnergy)
-        *totalEnergy -= totalExclusionEnergy;
+        if (totalEnergy)
+            *totalEnergy += totalRealSpaceEwaldEnergy;
+
+        // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
+
+        double totalExclusionEnergy = 0.0;
+        const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
+        for (int i = 0; i < numberOfAtoms; i++)
+            for (int j : exclusions[i]) {
+                if (j > i) {
+                    int si = subsets[i];
+                    int sj = subsets[j];
+                    int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
+
+                    double deltaR[2][ReferenceForce::LastDeltaRIndex];
+                    if (periodicExceptions)
+                        ReferenceForce::getDeltaRPeriodic(coords[j], coords[i], periodicBoxVectors, deltaR[0]);
+                    else
+                        ReferenceForce::getDeltaR(coords[j], coords[i], deltaR[0]);
+                    double r = deltaR[0][ReferenceForce::RIndex];
+                    double inverseR = 1.0/(deltaR[0][ReferenceForce::RIndex]);
+                    double alphaR = alphaEwald*r;
+                    double realSpaceEwaldEnergy;
+                    if (erf(alphaR) > 1e-6) {
+                        double dEdR = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*inverseR*inverseR;
+                        dEdR *= sliceLambda[slice]*(erf(alphaR) - 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
+
+                        // accumulate forces
+
+                        for (int k = 0; k < 3; k++) {
+                            double force = dEdR*deltaR[0][k];
+                            forces[i][k] -= force;
+                            forces[j][k] += force;
+                        }
+
+                        // accumulate energies
+
+                        realSpaceEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erf(alphaR);
+                    }
+                    else
+                        realSpaceEwaldEnergy = alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*charges[i]*charges[j];
+
+                    sliceEnergies[slice] += realSpaceEwaldEnergy;
+                    totalExclusionEnergy += sliceLambda[slice]*realSpaceEwaldEnergy;
+                }
+            }
+
+        if (totalEnergy)
+            *totalEnergy -= totalExclusionEnergy;
+    }
 }

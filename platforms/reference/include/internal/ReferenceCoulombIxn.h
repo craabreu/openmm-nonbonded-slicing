@@ -28,6 +28,8 @@
 #include "openmm/reference/ReferencePairIxn.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 
+using namespace std;
+
 namespace PmeSlicing {
 
 class ReferenceCoulombIxn {
@@ -112,14 +114,15 @@ class ReferenceCoulombIxn {
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
          @param totalEnergy      total energy
+         @param sliceEnergies    slice energies
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
             
          --------------------------------------------------------------------------------------- */
           
-      void calculateEwaldIxn(int numberOfAtoms, std::vector<OpenMM::Vec3>& atomCoordinates, std::vector<int> subsets,
-                             std::vector<double>& atomCharges, std::vector<std::set<int> >& exclusions,
-                             std::vector<OpenMM::Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const;
+      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int> subsets, vector<double> sliceLambda,
+                             vector<double>& atomCharges, vector<set<int> >& exclusions,
+                             vector<OpenMM::Vec3>& forces, double* totalEnergy, vector<double> sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 };
 
 } // namespace PmeSlicing
