@@ -84,12 +84,17 @@ public:
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 private:
     void computeParameters(OpenMM::ContextImpl& context);
-    int numParticles, num14;
-    std::vector<std::vector<int> >bonded14IndexArray;
+    int numParticles;
     std::vector<double> particleParamArray;
-    std::vector<std::vector<double> > bonded14ParamArray;
-    std::vector<double> particleCharges, exceptionCharges;
-    std::map<std::pair<std::string, int>, double> particleParamOffsets, exceptionParamOffsets;
+    std::vector<double> particleCharges;
+    std::map<std::pair<std::string, int>, double> particleParamOffsets;
+    int total14;
+    std::vector<int> num14;
+    std::vector<std::vector<int>> nb14s;
+    std::vector<std::vector<std::vector<int>>> bonded14IndexArray;
+    std::vector<std::vector<std::vector<double>>> bonded14ParamArray;
+    std::vector<double> exceptionChargeProds;
+    std::map<std::pair<std::string, int>, double> exceptionParamOffsets;
     double nonbondedCutoff, ewaldAlpha;
     int gridSize[3];
     bool exceptionsArePeriodic;
