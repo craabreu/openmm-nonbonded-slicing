@@ -127,16 +127,17 @@ void ReferenceCoulombIxn::setPeriodicExceptions(bool periodic) {
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
-   @param totalEnergy      total energy
-         @param sliceEnergies    slice energies
+   @param sliceEnergies    slice energies
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coords, std::vector<int> subsets, std::vector<double> sliceLambda,
+void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coords,
+                                            int numSubsets, std::vector<int> subsets, std::vector<double> sliceLambda,
                                             vector<double>& charges, vector<set<int> >& exclusions,
-                                            vector<Vec3>& forces, double* totalEnergy, vector<double> sliceEnergies, bool includeDirect, bool includeReciprocal) const {
+                                            vector<Vec3>& forces, vector<double>& sliceEnergies,
+                                            bool includeDirect, bool includeReciprocal) const {
     const double SQRT_PI = sqrt(PI_M);
     const double TWO_PI = 2.0*PI_M;
 
@@ -146,32 +147,22 @@ void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coo
 
     if (includeReciprocal) {
 
-        double totalSelfEwaldEnergy = 0.0;
-        double recipEnergy = 0.0;
-        double totalRecipEnergy = 0.0;
-
         for (int i = 0; i < numberOfAtoms; i++) {
             double selfEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[i]*alphaEwald/SQRT_PI;
             int si = subsets[i];
             int slice = si*(si+3)/2;
             sliceEnergies[slice] -= selfEwaldEnergy;
-            totalSelfEwaldEnergy -= sliceLambda[slice]*selfEwaldEnergy;
         }
-
-        if (totalEnergy)
-            *totalEnergy += totalSelfEwaldEnergy;
 
         // **************************************************************************************
         // RECIPROCAL SPACE EWALD ENERGY AND FORCES
         // **************************************************************************************
 
+        int numSlices = sliceEnergies.size();
         pme_t pmedata; /* abstract handle for PME data */
-        pme_init(&pmedata, alphaEwald, numberOfAtoms, meshDim, 5, 1);
-        pme_exec(pmedata, coords, forces, charges, periodicBoxVectors, &recipEnergy);
+        pme_init(&pmedata, alphaEwald, numberOfAtoms, numSubsets, meshDim, 5, 1);
+        pme_exec(pmedata, coords, subsets, sliceLambda, forces, charges, periodicBoxVectors, sliceEnergies);
         pme_destroy(pmedata);
-
-        if (totalEnergy)
-            *totalEnergy += recipEnergy;
     }
 
     // **************************************************************************************
@@ -179,8 +170,6 @@ void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coo
     // **************************************************************************************
 
     if (includeDirect) {
-        double totalRealSpaceEwaldEnergy = 0.0;
-
         for (auto& pair : *neighborList) {
             int i = pair.first;
             int j = pair.second;
@@ -208,15 +197,8 @@ void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coo
 
             // accumulate energies
 
-            double realSpaceEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erfc(alphaR);
-
-            sliceEnergies[slice] += realSpaceEwaldEnergy;
-
-            totalRealSpaceEwaldEnergy += sliceLambda[slice]*realSpaceEwaldEnergy;
+            sliceEnergies[slice] += ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erfc(alphaR);
         }
-
-        if (totalEnergy)
-            *totalEnergy += totalRealSpaceEwaldEnergy;
 
         // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
 
@@ -252,17 +234,11 @@ void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coo
 
                         // accumulate energies
 
-                        realSpaceEwaldEnergy = ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erf(alphaR);
+                        sliceEnergies[slice] -= ONE_4PI_EPS0*charges[i]*charges[j]*inverseR*erf(alphaR);
                     }
                     else
-                        realSpaceEwaldEnergy = alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*charges[i]*charges[j];
-
-                    sliceEnergies[slice] += realSpaceEwaldEnergy;
-                    totalExclusionEnergy += sliceLambda[slice]*realSpaceEwaldEnergy;
+                        sliceEnergies[slice] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*charges[i]*charges[j];
                 }
             }
-
-        if (totalEnergy)
-            *totalEnergy -= totalExclusionEnergy;
     }
 }

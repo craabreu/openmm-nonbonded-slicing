@@ -113,16 +113,17 @@ class ReferenceCoulombIxn {
          @param exclusions       atom exclusion indices
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
-         @param totalEnergy      total energy
          @param sliceEnergies    slice energies
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
             
          --------------------------------------------------------------------------------------- */
           
-      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int> subsets, vector<double> sliceLambda,
+      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates,
+                             int numSubsets, vector<int> subsets, vector<double> sliceLambda,
                              vector<double>& atomCharges, vector<set<int> >& exclusions,
-                             vector<OpenMM::Vec3>& forces, double* totalEnergy, vector<double> sliceEnergies, bool includeDirect, bool includeReciprocal) const;
+                             vector<OpenMM::Vec3>& forces, vector<double>& sliceEnergies,
+                             bool includeDirect, bool includeReciprocal) const;
 };
 
 } // namespace PmeSlicing

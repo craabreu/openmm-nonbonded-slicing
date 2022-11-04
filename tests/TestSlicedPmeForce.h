@@ -350,7 +350,10 @@ void testLargeSystem(Platform& platform) {
         positions[2*k] = Vec3(x+dx, y+dy, z+dz);
         positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
     }
-    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded);
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 2);
+    for (int i = 0; i < numParticles/2; i++)
+        slicedNonbonded->setParticleSubset(i, 1);
+
     slicedNonbonded->setForceGroup(1);
 
     system.addForce(nonbonded);

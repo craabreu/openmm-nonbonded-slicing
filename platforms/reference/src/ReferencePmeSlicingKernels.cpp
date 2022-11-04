@@ -166,9 +166,10 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
     vector<double> sliceEnergies(numSlices, 0.0);
-    double energy = 0;
-    ReferenceCoulombIxn coulomb;
+
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
+
+    ReferenceCoulombIxn coulomb;
     coulomb.setCutoff(nonbondedCutoff, *neighborList);
     Vec3* boxVectors = extractBoxVectors(context);
     double minAllowedSize = 1.999999*nonbondedCutoff;
@@ -177,8 +178,12 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     coulomb.setPeriodic(boxVectors);
     coulomb.setPeriodicExceptions(exceptionsArePeriodic);
     coulomb.setPME(ewaldAlpha, gridSize);
-    coulomb.calculateEwaldIxn(numParticles, posData, subsets, sliceLambda, particleParamArray, exclusions,
-                              forceData, includeEnergy ? &energy : NULL, sliceEnergies, includeDirect, includeReciprocal);
+    coulomb.calculateEwaldIxn(numParticles, posData,
+                              numSubsets, subsets, sliceLambda,
+                              particleParamArray, exclusions,
+                              forceData, sliceEnergies,
+                              includeDirect, includeReciprocal);
+
     if (includeDirect) {
         ReferenceBondForce refBondForce;
         ReferenceCoulomb14 nonbonded14;
@@ -186,12 +191,14 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
         }
-        for (int slice = 0; slice < numSlices; slice++) {
+        for (int slice = 0; slice < numSlices; slice++)
             refBondForce.calculateForce(num14[slice], bonded14IndexArray[slice], posData, bonded14ParamArray[slice],
                                         forceData, includeEnergy ? &sliceEnergies[slice] : NULL, nonbonded14);
-            energy += sliceLambda[slice]*sliceEnergies[slice];
-        }
     }
+
+    double energy = 0;
+    for (int slice = 0; slice < numSlices; slice++)
+        energy += sliceLambda[slice]*sliceEnergies[slice];
     return energy;
 }
 
