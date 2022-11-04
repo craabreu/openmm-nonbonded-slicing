@@ -88,12 +88,8 @@ void ReferenceCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>
         ReferenceForce::getDeltaR(atomCoordinates[atomBIndex], atomCoordinates[atomAIndex], deltaR[0]);  
 
     double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-    double sig2      = inverseR*parameters[0];
-           sig2     *= sig2;
-    double sig6      = sig2*sig2*sig2;
 
-    double dEdR      = parameters[1]*(12.0*sig6 - 6.0)*sig6;
-           dEdR     += ONE_4PI_EPS0*parameters[2]*inverseR;
+    double dEdR      = ONE_4PI_EPS0*parameters[0]*inverseR;
            dEdR     *= inverseR*inverseR;
 
     // accumulate forces
@@ -107,5 +103,5 @@ void ReferenceCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>
     // accumulate energies
 
     if (totalEnergy != NULL)
-        *totalEnergy += parameters[1]*(sig6 - 1.0)*sig6 + (ONE_4PI_EPS0*parameters[2]*inverseR);
+        *totalEnergy += (ONE_4PI_EPS0*parameters[0]*inverseR);
 }

@@ -70,6 +70,13 @@ ReferenceCalcSlicedPmeForceKernel::~ReferenceCalcSlicedPmeForceKernel() {
 
 void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
 
+    numParticles = force.getNumParticles();
+    numSubsets = force.getNumSubsets();
+    numSlices = numSubsets*(numSubsets+1)/2;
+    subsets.resize(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        subsets[i] = force.getParticleSubset(i);
+
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
@@ -80,7 +87,6 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
         force.getExceptionParameterOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
-    numParticles = force.getNumParticles();
     exclusions.resize(numParticles);
     vector<int> nb14s;
     map<int, int> nb14Index;
@@ -100,8 +106,8 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
 
     num14 = nb14s.size();
     bonded14IndexArray.resize(num14, vector<int>(2));
-    bonded14ParamArray.resize(num14, vector<double>(3));
-    particleParamArray.resize(numParticles, vector<double>(3));
+    bonded14ParamArray.resize(num14, vector<double>(1));
+    particleParamArray.resize(numParticles);
     particleCharges.resize(numParticles);
     exceptionCharges.resize(num14);
     for (int i = 0; i < numParticles; ++i)
@@ -139,17 +145,17 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
     double energy = 0;
-    ReferenceCoulombIxn clj;
+    ReferenceCoulombIxn coulomb;
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
-    clj.setUseCutoff(nonbondedCutoff, *neighborList, 1.0);
+    coulomb.setCutoff(nonbondedCutoff, *neighborList);
     Vec3* boxVectors = extractBoxVectors(context);
     double minAllowedSize = 1.999999*nonbondedCutoff;
     if (boxVectors[0][0] < minAllowedSize || boxVectors[1][1] < minAllowedSize || boxVectors[2][2] < minAllowedSize)
         throw OpenMMException("The periodic box size has decreased to less than twice the nonbonded cutoff.");
-    clj.setPeriodic(boxVectors);
-    clj.setPeriodicExceptions(exceptionsArePeriodic);
-    clj.setUsePME(ewaldAlpha, gridSize);
-    clj.calculatePairIxn(numParticles, posData, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
+    coulomb.setPeriodic(boxVectors);
+    coulomb.setPeriodicExceptions(exceptionsArePeriodic);
+    coulomb.setPME(ewaldAlpha, gridSize);
+    coulomb.calculateEwaldIxn(numParticles, posData, subsets, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
     if (includeDirect) {
         ReferenceBondForce refBondForce;
         ReferenceCoulomb14 nonbonded14;
@@ -217,11 +223,8 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
         int index = offset.first.second;
         charges[index] += value*offset.second;
     }
-    for (int i = 0; i < numParticles; i++) {
-        particleParamArray[i][0] = 0.5;
-        particleParamArray[i][1] = 0.0;
-        particleParamArray[i][2] = charges[i];
-    }
+    for (int i = 0; i < numParticles; i++)
+        particleParamArray[i] = charges[i];
 
     // Compute exception parameters.
 
@@ -233,9 +236,6 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
         int index = offset.first.second;
         charges[index] += value*offset.second;
     }
-    for (int i = 0; i < num14; i++) {
-        bonded14ParamArray[i][0] = 1.0;
-        bonded14ParamArray[i][1] = 0.0;
-        bonded14ParamArray[i][2] = charges[i];
-    }
+    for (int i = 0; i < num14; i++)
+        bonded14ParamArray[i][0] = charges[i];
 }

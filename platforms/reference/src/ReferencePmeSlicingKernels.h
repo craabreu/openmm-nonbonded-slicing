@@ -86,7 +86,8 @@ private:
     void computeParameters(OpenMM::ContextImpl& context);
     int numParticles, num14;
     std::vector<std::vector<int> >bonded14IndexArray;
-    std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
+    std::vector<double> particleParamArray;
+    std::vector<std::vector<double> > bonded14ParamArray;
     std::vector<double> particleCharges, exceptionCharges;
     std::map<std::pair<std::string, int>, double> particleParamOffsets, exceptionParamOffsets;
     double nonbondedCutoff, ewaldAlpha;
@@ -94,6 +95,9 @@ private:
     bool exceptionsArePeriodic;
     std::vector<std::set<int> > exclusions;
     OpenMM::NeighborList* neighborList;
+
+    int numSubsets, numSlices;
+    std::vector<int> subsets;
 };
 
 } // namespace PmeSlicing
