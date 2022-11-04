@@ -41,8 +41,8 @@
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <cstring>
 
-#include "openmm/reference/ReferenceLJCoulombIxn.h"
-#include "openmm/reference/ReferenceLJCoulomb14.h"
+#include "internal/ReferenceCoulombIxn.h"
+#include "internal/ReferenceCoulomb14.h"
 
 using namespace PmeSlicing;
 using namespace OpenMM;
@@ -139,7 +139,7 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
     double energy = 0;
-    ReferenceLJCoulombIxn clj;
+    ReferenceCoulombIxn clj;
     computeNeighborListVoxelHash(*neighborList, numParticles, posData, exclusions, extractBoxVectors(context), true, nonbondedCutoff, 0.0);
     clj.setUseCutoff(nonbondedCutoff, *neighborList, 1.0);
     Vec3* boxVectors = extractBoxVectors(context);
@@ -152,7 +152,7 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
     clj.calculatePairIxn(numParticles, posData, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
     if (includeDirect) {
         ReferenceBondForce refBondForce;
-        ReferenceLJCoulomb14 nonbonded14;
+        ReferenceCoulomb14 nonbonded14;
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
