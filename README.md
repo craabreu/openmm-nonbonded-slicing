@@ -5,15 +5,21 @@ WIP: OpenMM PME Slicing Plugin
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project is an [OpenMM] plugin that implements a variant of the smooth Particle Mesh Ewald
-(PME) method in which Coulomb interactions can be divided into slices depending on which pairs of
-particles are involved.
-After distributing all particles among non-intersecting subsets, two indices I and J will
-distinguish each slice, defined as the sum of Coulomb interactions between every particle in
-subset I and every particle in subset J.
+This [OpenMM] plugin implements a variant of the Smooth Particle Mesh Ewald (PME) method, which
+slices the total Coulomb potential (based on particle pair classification) and applies a
+different coupling constant to each slice.
 
-This plugin aims at filling a gap in [OpenMM]: the lack of an `addInteractionGroup` method
-for the [NonbondedForce] class, like the one that exists for [CustomNonbondedForce].
+By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
+becomes
+$$
+U = \sum_{I=1}^n \sum_{J=I}^n \lambda_{I,J} U_{I,J}
+$$
+where $U_{I,J}$ is the sum of all interactions involving a particle in subset $I$ and a particle
+in subset $J$.
+
+**Note**: In [OpenMM], cutoff pairwise potentials (e.g. Lennard-Jones) can undergo similar slicing
+by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
+alternatives for the Coulomb potential.
 
 Building the Plugin
 ===================
