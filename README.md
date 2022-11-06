@@ -11,11 +11,11 @@ different coupling constant to each slice.
 
 By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
 becomes
-$$
-U = \sum_{I=1}^n \sum_{J=I}^n \lambda_{I,J} U_{I,J}
-$$
-where $U_{I,J}$ is the sum of all interactions involving a particle in subset $I$ and a particle
-in subset $J$.
+
+![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=0}^{n-1}&space;\lambda_{I,J}&space;U_{I,J})
+
+where $\lambda_{I,J}$ is a coupling constant and $U_{I,J}$ is the sum of all pair interactions
+involving a particle in subset I and a particle in subset J.
 
 **Note**: In [OpenMM], cutoff pairwise potentials (e.g. Lennard-Jones) can undergo similar slicing
 by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
