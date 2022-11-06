@@ -1,7 +1,7 @@
 name: build
 channels:
-  - conda-forge
   - conda-forge/label/openmm_rc
+  - conda-forge
 dependencies:
   - cmake
   - cudatoolkit @CUDATOOLKIT_VERSION@
@@ -9,7 +9,7 @@ dependencies:
   - make
   - nvcc_linux-64 @NVCC_VERSION@
   - ocl-icd-system
-  - openmm >=8
+  - openmm 8.*
   - pip >=22.2
   - pytest
   - python
