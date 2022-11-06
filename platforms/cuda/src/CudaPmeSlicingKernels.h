@@ -52,7 +52,9 @@ namespace PmeSlicing {
  */
 class CudaCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system);
+    CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
+        CalcSlicedPmeForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
+    };
     ~CudaCalcSlicedPmeForceKernel();
     /**
      * Initialize the kernel.
@@ -161,8 +163,6 @@ private:
 
     int numExclusions;
     CUfunction computeBondsKernel;
-    string realToFixedPoint;
-    string nonbondedSource;
 };
 
 } // namespace PmeSlicing

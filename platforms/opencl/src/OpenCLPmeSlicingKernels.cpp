@@ -38,9 +38,6 @@
 #include "openmm/opencl/OpenCLBondedUtilities.h"
 #include "openmm/opencl/OpenCLForceInfo.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
-#if __has_include("openmm/cuda/CudaKernelSources.h")
-#include "openmm/opencl/OpenCLKernelSources.h"
-#endif
 #include <cstring>
 #include <map>
 #include <algorithm>
@@ -165,28 +162,6 @@ private:
     int forceGroup;
 };
 
-OpenCLCalcSlicedPmeForceKernel::OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
-        CalcSlicedPmeForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
-#if __has_include("openmm/cuda/CudaKernelSources.h")
-    realToFixedPoint = "";
-    nonbondedSource = OpenCLKernelSources::nonbonded;
-#else
-    realToFixedPoint = "inline long realToFixedPoint(real x) {\n"
-                       "return (long) (x * 0x100000000);\n"
-                       "}\n";
-    nonbondedSource = OpenCLPmeSlicingKernelSources::nonbonded;
-#endif
-    nonbondedSource.insert(0, "#define SLICE(i,j) (i > j ? i*(i+1)/2+j : j*(j+1)/2+i)\n");
-    nonbondedSource.insert(nonbondedSource.find("INIT_DERIVATIVES"),
-                           "mixed sliceEnergy[NUM_SLICES] = {0};\n");
-    nonbondedSource.insert(nonbondedSource.find("energyBuffer[get_global_id(0)]"),
-                           "int offset = get_global_id(0)*NUM_SLICES;\n"
-                           "for (int slice = 0; slice < NUM_SLICES; slice++) {\n"
-                           "    BUFFER[offset+slice] += sliceEnergy[slice];\n"
-                           "    energy += LAMBDA[slice]*sliceEnergy[slice];\n"
-                           "}\n");
-}
-
 OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
     if (sort != NULL)
         delete sort;
@@ -276,6 +251,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
 
+    bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
+
     if (cl.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
         for (int i = 0; i < numParticles; i++) {
@@ -301,7 +278,6 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
         pmeDefines["USE_POSQ_CHARGES"] = usePosqCharges ? "1" : "0";
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
-        bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
         if (deviceIsCpu)
             pmeDefines["DEVICE_IS_CPU"] = "1";
 
@@ -434,7 +410,10 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
 
-        nb->setKernelSource(realToFixedPoint+cl.replaceStrings(nonbondedSource, replacements));
+        if (deviceIsCpu)
+            nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded_cpu, replacements));
+        else
+            nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded, replacements));
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
@@ -509,7 +488,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         bondDefines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
         bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
         bondDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
-        cl::Program bondProgram = cl.createProgram(realToFixedPoint+CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
+        cl::Program bondProgram = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
         computeBondsKernel = cl::Kernel(bondProgram, "computeBonds");
     }
 
@@ -585,7 +564,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     
     // Initialize the kernel for updating parameters.
     
-    cl::Program program = cl.createProgram(realToFixedPoint+CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
+    cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
     info = new ForceInfo(cl.getNonbondedUtilities().getNumForceBuffers(), force);
@@ -628,7 +607,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            cl::Program program = cl.createProgram(realToFixedPoint+cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
+            cl::Program program = cl.createProgram(cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");

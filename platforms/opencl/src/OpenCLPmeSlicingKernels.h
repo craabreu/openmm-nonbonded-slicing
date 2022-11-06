@@ -47,7 +47,9 @@ namespace PmeSlicing {
  */
 class OpenCLCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system);
+    OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
+        CalcSlicedPmeForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
+    };
     ~OpenCLCalcSlicedPmeForceKernel();
     /**
      * Initialize the kernel.
@@ -161,8 +163,6 @@ private:
 
     int numExclusions;
     cl::Kernel computeBondsKernel;
-    std::string realToFixedPoint;
-    std::string nonbondedSource;
 };
 
 } // namespace PmeSlicing

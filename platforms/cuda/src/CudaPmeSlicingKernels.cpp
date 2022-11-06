@@ -38,9 +38,6 @@
 #include "openmm/cuda/CudaForceInfo.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "openmm/common/ContextSelector.h"
-#if __has_include("openmm/cuda/CudaKernelSources.h")
-#include "openmm/cuda/CudaKernelSources.h"
-#endif
 #include <cstring>
 #include <algorithm>
 #include <iostream>
@@ -137,28 +134,6 @@ private:
     int bufferSize;
     int forceGroup;
 };
-
-CudaCalcSlicedPmeForceKernel::CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
-        CalcSlicedPmeForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
-#if __has_include("openmm/cuda/CudaKernelSources.h")
-    realToFixedPoint = "";
-    nonbondedSource = CudaKernelSources::nonbonded;
-#else
-    realToFixedPoint = "__device__ inline long long realToFixedPoint(real x) {\n"
-                        "    return static_cast<long long>(x * 0x100000000);\n"
-                        "}\n";
-    nonbondedSource = CudaPmeSlicingKernelSources::nonbonded;
-#endif
-    nonbondedSource.insert(0, "#define SLICE(i,j) (i > j ? i*(i+1)/2+j : j*(j+1)/2+i)\n");
-    nonbondedSource.insert(nonbondedSource.find("INIT_DERIVATIVES"),
-                           "mixed sliceEnergy[NUM_SLICES] = {0};\n");
-    nonbondedSource.insert(nonbondedSource.find("energyBuffer[blockIdx.x*blockDim.x+threadIdx.x]"),
-                           "int offset = (blockIdx.x*blockDim.x+threadIdx.x)*NUM_SLICES;\n"
-                           "for (int slice = 0; slice < NUM_SLICES; slice++) {\n"
-                           "    BUFFER[offset+slice] += sliceEnergy[slice];\n"
-                           "    energy += LAMBDA[slice]*sliceEnergy[slice];\n"
-                           "}\n");
-}
 
 CudaCalcSlicedPmeForceKernel::~CudaCalcSlicedPmeForceKernel() {
     ContextSelector selector(cu);
@@ -298,7 +273,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeDefines["USE_PME_STREAM"] = "1";
         map<string, string> replacements;
         replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-        CUmodule module = cu.createModule(realToFixedPoint+CudaPmeSlicingKernelSources::vectorOps+
+        CUmodule module = cu.createModule(CudaPmeSlicingKernelSources::vectorOps+
                                           cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
 
         pmeGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");
@@ -444,7 +419,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
-        nb->setKernelSource(realToFixedPoint+cu.replaceStrings(nonbondedSource, replacements));
+        nb->setKernelSource(cu.replaceStrings(CudaPmeSlicingKernelSources::nonbonded, replacements));
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
@@ -518,7 +493,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         bondDefines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
         bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
         bondDefines["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
-        CUmodule bondModule = cu.createModule(realToFixedPoint+CudaPmeSlicingKernelSources::vectorOps+
+        CUmodule bondModule = cu.createModule(CudaPmeSlicingKernelSources::vectorOps+
                                               CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
         computeBondsKernel = cu.getKernel(bondModule, "computeBonds");
     }
@@ -595,7 +570,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     
     // Initialize the kernel for updating parameters.
 
-    CUmodule module = cu.createModule(realToFixedPoint+CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
+    CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
     computeParamsKernel = cu.getKernel(module, "computeParameters");
     computeExclusionParamsKernel = cu.getKernel(module, "computeExclusionParameters");
     info = new ForceInfo(force);
