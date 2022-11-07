@@ -49,14 +49,22 @@ using namespace std;
 
 const double TOL = 1e-3;
 
+#define assertEnergy(state0, state1) { \
+    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
+}
+
+#define assertForces(state0, state1) { \
+    const vector<Vec3>& forces0 = state0.getForces(); \
+    const vector<Vec3>& forces1 = state1.getForces(); \
+    for (int i = 0; i < forces0.size(); i++) \
+        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL); \
+}
+
 #define assertForcesAndEnergy(context) { \
     State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \
     State state1 = context.getState(State::Forces | State::Energy, false, 1<<1); \
-    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
-    const vector<Vec3>& forces0 = state0.getForces(); \
-    const vector<Vec3>& forces1 = state1.getForces(); \
-    for (int i = 0; i < context.getSystem().getNumParticles(); i++) \
-        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL); \
+    assertEnergy(state0, state1); \
+    assertForces(state0, state1); \
 }
 
 void testInstantiateFromNonbondedForce(Platform& platform) {
@@ -329,6 +337,7 @@ void testLargeSystem(Platform& platform) {
 
     NonbondedForce* nonbonded = new NonbondedForce();
     nonbonded->setNonbondedMethod(NonbondedForce::PME);
+    nonbonded->setCutoffDistance(cutoff);
     vector<Vec3> positions(numParticles);
 
     int M = static_cast<int>(std::pow(numMolecules, 1.0/3.0));
@@ -556,6 +565,81 @@ void testDirectAndReciprocal(Platform& platform) {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
+void testNonbondedCouplingParameters(Platform& platform) {
+    const int numMolecules = 600;
+    const int numParticles = numMolecules*2;
+    const double cutoff = 3.5;
+    const double L = 20.0;
+    const double tol = 2e-3;
+    System system1, system2;
+    for (int i = 0; i < numParticles; i++) {
+        system1.addParticle(1.0);
+        system2.addParticle(1.0);
+    }
+    system1.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    system2.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+
+    NonbondedForce* nonbonded = new NonbondedForce();
+    nonbonded->setNonbondedMethod(NonbondedForce::PME);
+    nonbonded->setCutoffDistance(cutoff);
+    vector<Vec3> positions(numParticles);
+
+    int M = static_cast<int>(std::pow(numMolecules, 1.0/3.0));
+    if (M*M*M < numMolecules) M++;
+    double sqrt3 = std::sqrt(3);
+    for (int k = 0; k < numMolecules; k++) {
+        int iz = k/(M*M);
+        int iy = (k - iz*M*M)/M;
+        int ix = k - M*(iy + iz*M);
+        double x = (ix + 0.5)*L/M;
+        double y = (iy + 0.5)*L/M;
+        double z = (iz + 0.5)*L/M;
+        double dx = (0.5 - ix%2)/2;
+        double dy = (0.5 - iy%2)/2;
+        double dz = (0.5 - iz%2)/2;
+        nonbonded->addParticle(1.0, 1.0, 0.0);
+        nonbonded->addParticle(-1.0, 1.0, 0.0);
+        positions[2*k] = Vec3(x+dx, y+dy, z+dz);
+        positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
+    }
+
+    double lambda = 0.5;
+
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 2);
+    for (int k = 0; k < numMolecules; k++)
+        slicedNonbonded->setParticleSubset(2*k+1, 1);
+    slicedNonbonded->setCouplingParameter(0, 1, lambda);
+    slicedNonbonded->setCouplingParameter(1, 1, lambda*lambda);
+
+    for (int k = 0; k < numMolecules; k++)
+        nonbonded->setParticleParameters(2*k+1, -lambda, 1.0, 0.0);
+
+    system1.addForce(nonbonded);
+    system2.addForce(slicedNonbonded);
+
+    nonbonded->setReciprocalSpaceForceGroup(1);
+    VerletIntegrator integrator1(0.01);
+    Context context1(system1, integrator1, platform);
+    context1.setPositions(positions);
+
+    slicedNonbonded->setReciprocalSpaceForceGroup(1);
+    VerletIntegrator integrator2(0.01);
+    Context context2(system2, integrator2, platform);
+    context2.setPositions(positions);
+
+    // Direct space:
+    State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
+    State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+
+    // Reciprocal space:
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+}
+
 void runPlatformTests();
 
 extern "C" OPENMM_EXPORT void registerPmeSlicingReferenceKernelFactories();
@@ -574,6 +658,7 @@ int main(int argc, char* argv[]) {
         testParameterOffsets(platform);
         testEwaldExceptions(platform);
         testDirectAndReciprocal(platform);
+        testNonbondedCouplingParameters(platform);
         runPlatformTests();
     }
     catch(const exception& e) {
