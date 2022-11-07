@@ -5,19 +5,18 @@ WIP: OpenMM PME Slicing Plugin
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This [OpenMM] plugin implements a variant of the Smooth Particle Mesh Ewald (PME) method, which
-slices the total Coulomb potential (based on particle pair classification) and applies a
-different coupling constant to each slice.
+This [OpenMM] plugin implements a variant of the smooth Particle Mesh Ewald (PME) method that
+slices the total Coulomb potential and applies a different coupling constant to each slice.
 
 By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
 becomes
 
 ![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=0}^{n-1}&space;\lambda_{I,J}&space;U_{I,J})
 
-where $\lambda_{I,J}$ is a coupling constant and $U_{I,J}$ is the sum of all pair interactions
+where $\lambda_{I,J}$ is a coupling constant and $U_{I,J}$ is the sum over every pair interaction
 involving a particle in subset I and a particle in subset J.
 
-**Note**: In [OpenMM], cutoff pairwise potentials (e.g. Lennard-Jones) can undergo similar slicing
+**Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
 by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
 alternatives for the Coulomb potential.
 
@@ -74,7 +73,7 @@ Test Cases
 
 To run the C++ test cases, build the "test" target, for example by typing `make test`.
 
-To run the Python test cases, build the "PythonTest" target, for example by typing `make PythonTest`.
+To run the Python test cases, build the "PythonTest" target by typing `make PythonTest`.
 
 
 [CMake]:                http://www.cmake.org
