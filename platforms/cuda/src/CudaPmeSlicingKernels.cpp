@@ -200,7 +200,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     alpha = 0;
     ewaldSelfEnergy = 0.0;
-    sliceSelfEnergy.resize(numSlices, 0.0);
+    subsetSelfEnergy.resize(numSubsets, 0.0);
     map<string, string> paramsDefines;
     paramsDefines["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
@@ -241,13 +241,11 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     if (cu.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
-        for (int i = 0; i < numParticles; i++) {
-            int j = subsetVec[i];
-            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
-        }
-        for (int slice = 0; slice < numSlices; slice++) {
-            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= sliceSelfEnergy[slice];
+        for (int i = 0; i < numParticles; i++)
+            subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        for (int j = 0; j < numSubsets; j++) {
+            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= force.getCouplingParameter(j ,j)*subsetSelfEnergy[j];
         }
         char deviceName[100];
         cuDeviceGetName(deviceName, 100, cu.getDevice());
@@ -302,6 +300,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
         pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
         cu.clearBuffer(pmeEnergyBuffer);
+        // cu.addAutoclearBuffer(pmeEnergyBuffer);
         sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
 
         // Prepare for doing PME on its own stream or not.
@@ -407,6 +406,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
         int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
         pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+        // cu.clearBuffer(pairwiseEnergyBuffer);
+        // cu.addAutoclearBuffer(pairwiseEnergyBuffer);
 
         map<string, string> replacements;
         replacements["NUM_SLICES"] = cu.intToString(numSlices);
@@ -580,6 +581,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
     // Update particle and exception parameters.
 
+    double energy = 0.0;
+
     ContextSelector selector(cu);
     bool paramChanged = false;
     for (int i = 0; i < paramNames.size(); i++) {
@@ -593,8 +596,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         recomputeParams = true;
         globalParams.upload(paramValues, true);
     }
-    double energy = (includeReciprocal ? ewaldSelfEnergy : 0.0);
-    if (recomputeParams || hasOffsets) {
+    if (recomputeParams) {
         int numAtoms = cu.getPaddedNumAtoms();
         vector<void*> paramsArgs = {&globalParams.getDevicePointer(), &numAtoms,
                 &baseParticleCharges.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(),
@@ -623,8 +625,6 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             cuEventRecord(paramsSyncEvent, cu.getCurrentStream());
             cuStreamWaitEvent(pmeStream, paramsSyncEvent, 0);
         }
-        if (hasOffsets)
-            energy = 0.0; // The Ewald self energy was computed in the kernel.
         recomputeParams = false;
     }
 
@@ -700,11 +700,13 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                     recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
             cu.executeKernel(pmeEvalEnergyKernel, computeEnergyArgs, gridSizeX*gridSizeY*gridSizeZ);
 
-            if (recomputeParams || hasOffsets) {
+            if (hasOffsets) {
                 vector<void*> addSelfEnergyArgs = {&pmeEnergyBuffer.getDevicePointer(), &cu.getPosq().getDevicePointer(),
                                                    &charges.getDevicePointer(), &subsets.getDevicePointer()};
                 cu.executeKernel(pmeAddSelfEnergyKernel, &addSelfEnergyArgs[0], cu.getPaddedNumAtoms());
             }
+            else
+                energy = ewaldSelfEnergy;
         }
 
         void* convolutionArgs[] = {&pmeGrid2.getDevicePointer(), &pmeBsplineModuliX.getDevicePointer(),
@@ -816,15 +818,13 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     // Compute other values.
 
     ewaldSelfEnergy = 0.0;
-    sliceSelfEnergy.assign(numSlices, 0.0);
+    subsetSelfEnergy.assign(numSubsets, 0.0);
     if (cu.getContextIndex() == 0) {
-        for (int i = 0; i < force.getNumParticles(); i++) {
-            int j = subsetVec[i];
-            sliceSelfEnergy[j*(j+3)/2] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
-        }
-        for (int slice = 0; slice < numSlices; slice++) {
-            sliceSelfEnergy[slice] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= sliceSelfEnergy[slice];
+        for (int i = 0; i < cu.getNumAtoms(); i++)
+            subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
+        for (int j = 0; j < numSubsets; j++) {
+            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy -= force.getCouplingParameter(j ,j)*subsetSelfEnergy[j];
         }
     }
     cu.invalidateMolecules();

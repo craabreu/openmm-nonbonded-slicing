@@ -150,7 +150,7 @@ private:
     std::vector<std::vector<int>> exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    std::vector<double> sliceSelfEnergy;
+    std::vector<double> subsetSelfEnergy;
     double ewaldSelfEnergy, alpha;
     int gridSizeX, gridSizeY, gridSizeZ;
     int numSubsets, numSlices;

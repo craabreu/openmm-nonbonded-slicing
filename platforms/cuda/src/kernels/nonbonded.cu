@@ -525,7 +525,7 @@ extern "C" __global__ void computeNonbonded(
     for (int slice = 0; slice < NUM_SLICES; slice++) {
         BUFFER[offset+slice] += sliceEnergy[slice];
         energy += LAMBDA[slice]*sliceEnergy[slice];
-    });
+    }
     energyBuffer[blockIdx.x*blockDim.x+threadIdx.x] += energy;
 #endif
     SAVE_DERIVATIVES
