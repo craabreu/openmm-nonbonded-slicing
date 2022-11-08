@@ -41,7 +41,7 @@
 #include <vector>
 #include "internal/windowsExportPmeSlicing.h"
 
-#define DEFALT_USE_CUDA_FFT false
+#define DEFAULT_USE_CUDA_FFT false
 
 using namespace OpenMM;
 
@@ -366,6 +366,41 @@ public:
      * @param defaultValue   the default value of the parameter
      */
     void setGlobalParameterDefaultValue(int index, double defaultValue);
+ 	/**
+     * Add a coupling parameter to multiply a particular Coulomb slice, that is, the Coulomb
+     * interactions between particles of a subset with those of another (or the same) subset.
+     * The order of subset definition is irrelevant.
+     *
+     * @param parameter the name of the global parameter.  It must have already been added
+     * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
+     * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
+     * @return          the index of coupling parameter that was added
+     */
+    int addCouplingParameter(const std::string& parameter, int subset1, int subset2);
+    /**
+     * Get the number of coupling parameters.
+     */
+    int getNumCouplingParameters() const;
+  	/**
+     * Get the coupling parameter applied to a particular nonbonded slice.
+     *
+     * @param index     the index of the coupling parameter to query, as returned by
+     *                      addCouplingParameter()
+     * @param parameter the name of the global parameter
+     * @param subset1   the index of the first particle subset
+     * @param subset2   the index of the second particle subset
+     */
+    void getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
+ 	/**
+     * Modify an added coupling parameter.
+     *
+     * @param index     the index of the coupling parameter to modify, as returned by
+     *                      addExceptionParameterOffset()
+     * @param parameter the name of the global parameter
+     * @param subset1   the index of the first particle subset
+     * @param subset2   the index of the second particle subset
+     */
+    void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
      * Add an offset to the charge of a particular particle, based on a global parameter.
      * 
@@ -511,41 +546,7 @@ public:
      */
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
  	/**
-     * Get the force group of a particular nonbonded slice. If this is -1 (the default value), the
-     * actual force group is the one obtained via getForceGroup.
-     * 
-     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     */
-    int getSliceForceGroup(int subset1, int subset2) const;
- 	/**
-     * Set the force group of a particular nonbonded slice, concerning the interactions between
-     * particles of a subset with those of another (or the same) subset.
-     * 
-     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param group    the group index.  Legal values are between 0 and 31 (inclusive), or -1 to
-     *                 use the same force group that is specified via setForceGroup.
-     */
-    void setSliceForceGroup(int subset1, int subset2, int group);
- 	/**
-     * Get the coupling parameter applied to a particular nonbonded slice.
-     *
-     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     */
-    double getCouplingParameter(int subset1, int subset2) const;
- 	/**
-     * Set the coupling parameter applied to a particular nonbonded slice, that is, to the
-     * interactions between particles of a subset with those of another (or the same) subset.
-     *
-     * @param subset1  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param subset2  the index of a particle subset.  Legal values are between 0 and numSubsets.
-     * @param lambda   the coupling parameter value (default = 1.0).
-     */
-    void setCouplingParameter(int subset1, int subset2, double lambda);
- 	/**
-     * Get whether CUDA Toolkit's cuFFT library is used to compute fast Fourier transform when
+     * Get whether to use CUDA Toolkit's cuFFT library to compute fast Fourier transform when
      * executing in the CUDA platform.
      */
     bool getUseCudaFFT() const {
@@ -553,9 +554,8 @@ public:
     };
  	/**
      * Set whether to use CUDA Toolkit's cuFFT library to compute fast Fourier transform when
-     * executing in the CUDA platform. The default value is 'DEFALT_USE_CUDA_FFT'. This choice
-     * has no effect when using platforms other than CUDA or when the CUDA Toolkit version is
-     * 7.0 or older.
+     * executing in the CUDA platform. The default value is 'DEFAULT_USE_CUDA_FFT'. This choice
+     * has no effect when using other platforms or when the CUDA Toolkit is version 7.0 or older.
      */
     void setUseCuFFT(bool use) {
         useCudaFFT = use;
@@ -569,6 +569,7 @@ private:
     class GlobalParameterInfo;
     class ParticleOffsetInfo;
     class ExceptionOffsetInfo;
+    class CouplingParameterInfo;
     int numSubsets;
     double cutoffDistance, ewaldErrorTol, alpha, dalpha;
     bool exceptionsUsePeriodic, includeDirectSpace;
@@ -582,7 +583,7 @@ private:
     std::vector<ParticleOffsetInfo> particleOffsets;
     std::vector<ExceptionOffsetInfo> exceptionOffsets;
     std::map<std::pair<int, int>, int> exceptionMap;
-    std::vector<std::vector<int>> sliceForceGroup;
+    std::vector<CouplingParameterInfo> couplingParameters;
     std::vector<double> couplingParameter;
 };
 
@@ -665,6 +666,24 @@ public:
     }
     ExceptionOffsetInfo(int parameter, int exception, double chargeProdScale) :
         parameter(parameter), exception(exception), chargeProdScale(chargeProdScale) {
+    }
+};
+
+/**
+ * This is an internal class used to record information about a coupling parameter.
+ * @private
+ */
+class SlicedPmeForce::CouplingParameterInfo {
+public:
+    int parameter, subset1, subset2, slice;
+    CouplingParameterInfo() {
+        parameter = subset1 = subset2 = slice = -1;
+    }
+    CouplingParameterInfo(int parameter, int subset1, int subset2) :
+        parameter(parameter), subset1(subset1), subset2(subset2) {
+        int i = std::min(subset1, subset2);
+        int j = std::max(subset1, subset2);
+        slice = j*(j+1)/2+i;
     }
 };
 

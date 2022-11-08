@@ -38,6 +38,7 @@
 #include <map>
 #include <sstream>
 #include <utility>
+#include <algorithm>
 
 using namespace PmeSlicing;
 using namespace OpenMM;
@@ -52,10 +53,7 @@ using std::vector;
 
 SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets), cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
-        includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFALT_USE_CUDA_FFT) {
-    vector<int> groupRow(numSubsets, -1);
-    for (int i = 0; i < numSubsets; i++)
-        sliceForceGroup.push_back(groupRow);
+        includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFAULT_USE_CUDA_FFT) {
     for (int j = 0; j < numSubsets*(numSubsets+1)/2; j++)
         couplingParameter.push_back(1.0);
 }
@@ -292,6 +290,43 @@ int SlicedPmeForce::getGlobalParameterIndex(const std::string& parameter) const 
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
+int SlicedPmeForce::addCouplingParameter(const std::string& parameter, int subset1, int subset2) {
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    int i = std::min(subset1, subset2);
+    int j = std::max(subset1, subset2);
+    int slice = j*(j+1)/2+i;
+    for (auto parameter : couplingParameters)
+        if (parameter.slice == slice)
+            throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
+    couplingParameters.push_back(CouplingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2));
+    return couplingParameters.size()-1;
+}
+
+int SlicedPmeForce::getNumCouplingParameters() const {
+    return couplingParameters.size();
+}
+
+void SlicedPmeForce::getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const {
+    ASSERT_VALID_INDEX(index, couplingParameters);
+    parameter = globalParameters[couplingParameters[index].parameter].name;
+    subset1 = couplingParameters[index].subset1;
+    subset2 = couplingParameters[index].subset2;
+}
+
+void SlicedPmeForce::setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2) {
+    ASSERT_VALID_INDEX(index, couplingParameters);
+    ASSERT_VALID_SUBSET(subset1);
+    ASSERT_VALID_SUBSET(subset2);
+    int i = std::min(subset1, subset2);
+    int j = std::max(subset1, subset2);
+    int slice = j*(j+1)/2+i;
+    for (int k = 0; k < couplingParameters.size(); k++)
+        if (k != index && couplingParameters[k].slice == slice)
+            throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
+    couplingParameters[index] = CouplingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2);
+}
+
 int SlicedPmeForce::addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale) {
     particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale));
     return particleOffsets.size()-1;
@@ -358,36 +393,4 @@ bool SlicedPmeForce::getExceptionsUsePeriodicBoundaryConditions() const {
 
 void SlicedPmeForce::setExceptionsUsePeriodicBoundaryConditions(bool periodic) {
     exceptionsUsePeriodic = periodic;
-}
-
-int SlicedPmeForce::getSliceForceGroup(int subset1, int subset2) const {
-    ASSERT_VALID_SUBSET(subset1);
-    ASSERT_VALID_SUBSET(subset2);
-    return sliceForceGroup[subset1][subset2];
-}
-
-void SlicedPmeForce::setSliceForceGroup(int subset1, int subset2, int group) {
-    if (group < -1 || group > 31)
-        throw OpenMMException("Argument group must be between -1 and 31");
-    ASSERT_VALID_SUBSET(subset1);
-    ASSERT_VALID_SUBSET(subset2);
-    int i = std::min(subset1, subset2);
-    int j = std::max(subset1, subset2);
-    sliceForceGroup[i][j] = sliceForceGroup[j][i] = group;
-}
-
-double SlicedPmeForce::getCouplingParameter(int subset1, int subset2) const {
-    ASSERT_VALID_SUBSET(subset1);
-    ASSERT_VALID_SUBSET(subset2);
-    int i = std::min(subset1, subset2);
-    int j = std::max(subset1, subset2);
-    return couplingParameter[j*(j+1)/2+i];
-}
-
-void SlicedPmeForce::setCouplingParameter(int subset1, int subset2, double lambda) {
-    ASSERT_VALID_SUBSET(subset1);
-    ASSERT_VALID_SUBSET(subset2);
-    int i = std::min(subset1, subset2);
-    int j = std::max(subset1, subset2);
-    couplingParameter[j*(j+1)/2+i] = lambda;
 }
