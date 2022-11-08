@@ -387,8 +387,8 @@ public:
      * @param index     the index of the coupling parameter to query, as returned by
      *                      addCouplingParameter()
      * @param parameter the name of the global parameter
-     * @param subset1   the index of the first particle subset
-     * @param subset2   the index of the second particle subset
+     * @param subset1   the smallest index of the two particle subsets
+     * @param subset2   the largest index of the two particle subsets
      */
     void getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
  	/**
@@ -396,9 +396,9 @@ public:
      *
      * @param index     the index of the coupling parameter to modify, as returned by
      *                      addExceptionParameterOffset()
-     * @param parameter the name of the global parameter
-     * @param subset1   the index of the first particle subset
-     * @param subset2   the index of the second particle subset
+     * @param parameter the name of the global parameter.  It must have already been added
+     * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
+     * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
      */
     void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
@@ -679,11 +679,12 @@ public:
     CouplingParameterInfo() {
         parameter = subset1 = subset2 = slice = -1;
     }
-    CouplingParameterInfo(int parameter, int subset1, int subset2) :
-        parameter(parameter), subset1(subset1), subset2(subset2) {
+    CouplingParameterInfo(int parameter, int subset1, int subset2) : parameter(parameter) {
         int i = std::min(subset1, subset2);
         int j = std::max(subset1, subset2);
-        slice = j*(j+1)/2+i;
+        this->subset1 = i;
+        this->subset2 = j;
+        this->slice = j*(j+1)/2+i;
     }
 };
 

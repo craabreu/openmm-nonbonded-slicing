@@ -612,8 +612,6 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
     SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 2);
     for (int k = 0; k < numMolecules; k++)
         slicedNonbonded->setParticleSubset(2*k, 1);
-    slicedNonbonded->setCouplingParameter(0, 1, lambda);
-    slicedNonbonded->setCouplingParameter(1, 1, lambda*lambda);
 
     nonbonded->addGlobalParameter("lambda", lambda);
     for (int k = 0; k < numMolecules; k++) {
@@ -622,6 +620,11 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
         nonbonded->setParticleParameters(2*k, 0.0, sigma, epsilon);
         nonbonded->addParticleParameterOffset("lambda", 2*k, charge, 0.0, 0.0);
     }
+
+    slicedNonbonded->addGlobalParameter("lambda", lambda);
+    slicedNonbonded->addGlobalParameter("lambdaSq", lambda*lambda);
+    slicedNonbonded->addCouplingParameter("lambda", 0, 1);
+    slicedNonbonded->addCouplingParameter("lambdaSq", 1, 1);
 
     if (exceptions)
         for (int i = 0; i < nonbonded->getNumExceptions(); i++) {

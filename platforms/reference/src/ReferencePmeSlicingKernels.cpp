@@ -78,9 +78,13 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
     sliceLambda.resize(numSlices);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceLambda[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
+    sliceCouplingParameter.resize(numSlices, "");
+    for (int index = 0; index < force.getNumCouplingParameters(); index++) {
+        string parameter;
+        int i, j;
+        force.getCouplingParameter(index, parameter, i, j);
+        sliceCouplingParameter[j*(j+1)/2+i] = parameter;
+    }
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -210,9 +214,6 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
 
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceLambda[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -278,6 +279,13 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
         double value = context.getParameter(offset.first.first);
         int index = offset.first.second;
         particleParamArray[index] += value*offset.second;
+    }
+
+    // Compute coupling parameter values.
+
+    for (int slice = 0; slice < numSlices; slice++) {
+        string parameter = sliceCouplingParameter[slice];
+        sliceLambda[slice] = parameter == "" ? 1.0 : context.getParameter(parameter);
     }
 
     // Compute exception parameters.

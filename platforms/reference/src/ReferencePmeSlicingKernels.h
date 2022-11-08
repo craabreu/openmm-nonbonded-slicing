@@ -105,6 +105,7 @@ private:
 
     int numSubsets, numSlices;
     vector<int> subsets;
+    vector<string> sliceCouplingParameter;
     vector<double> sliceLambda;
 };
 
