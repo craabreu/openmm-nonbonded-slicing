@@ -134,7 +134,7 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     for (int slice = 0; slice < numSlices; slice++) {
         int n = num14[slice];
         bonded14IndexArray[slice].resize(n, vector<int>(2));
-        bonded14ParamArray[slice].resize(n, vector<double>(1));
+        bonded14ParamArray[slice].resize(n, vector<double>(2));
         exceptionChargeProds[slice].resize(n);
         for (int i = 0; i < n; ++i)
             force.getExceptionParameters(
@@ -206,9 +206,13 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
 
-    // Get particle substes.
+    // Get particle subsets and coupling parameters.
+
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            sliceLambda[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -246,7 +250,7 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
     for (int slice = 0; slice < numSlices; slice++) {
         int n = num14[slice];
         bonded14IndexArray[slice].resize(n, vector<int>(2));
-        bonded14ParamArray[slice].resize(n, vector<double>(1));
+        bonded14ParamArray[slice].resize(n, vector<double>(2));
         exceptionChargeProds[slice].resize(n);
         for (int i = 0; i < n; ++i)
             force.getExceptionParameters(
@@ -284,5 +288,6 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
             for (auto offset : exceptionParamOffsets[nb14s[slice][i]])
                 chargeProd += context.getParameter(offset.first)*offset.second;
             bonded14ParamArray[slice][i][0] = chargeProd;
+            bonded14ParamArray[slice][i][1] = sliceLambda[slice];
         }
 }
