@@ -565,7 +565,7 @@ void testDirectAndReciprocal(Platform& platform) {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
-void testNonbondedCouplingParameters(Platform& platform) {
+void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
     const int numMolecules = 600;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
@@ -584,6 +584,8 @@ void testNonbondedCouplingParameters(Platform& platform) {
     nonbonded->setCutoffDistance(cutoff);
     vector<Vec3> positions(numParticles);
 
+    double intraChargeProd = -0.5;
+
     int M = static_cast<int>(std::pow(numMolecules, 1.0/3.0));
     if (M*M*M < numMolecules) M++;
     double sqrt3 = std::sqrt(3);
@@ -599,6 +601,8 @@ void testNonbondedCouplingParameters(Platform& platform) {
         double dz = (0.5 - iz%2)/2;
         nonbonded->addParticle(1.0, 1.0, 0.0);
         nonbonded->addParticle(-1.0, 1.0, 0.0);
+        if (exceptions)
+            nonbonded->addException(2*k, 2*k+1, intraChargeProd, 1.0, 0.0);
         positions[2*k] = Vec3(x+dx, y+dy, z+dz);
         positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
     }
@@ -607,12 +611,26 @@ void testNonbondedCouplingParameters(Platform& platform) {
 
     SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 2);
     for (int k = 0; k < numMolecules; k++)
-        slicedNonbonded->setParticleSubset(2*k+1, 1);
+        slicedNonbonded->setParticleSubset(2*k, 1);
     slicedNonbonded->setCouplingParameter(0, 1, lambda);
     slicedNonbonded->setCouplingParameter(1, 1, lambda*lambda);
 
-    for (int k = 0; k < numMolecules; k++)
-        nonbonded->setParticleParameters(2*k+1, -lambda, 1.0, 0.0);
+    nonbonded->addGlobalParameter("lambda", lambda);
+    for (int k = 0; k < numMolecules; k++) {
+        double charge, sigma, epsilon;
+        nonbonded->getParticleParameters(2*k, charge, sigma, epsilon);
+        nonbonded->setParticleParameters(2*k, 0.0, sigma, epsilon);
+        nonbonded->addParticleParameterOffset("lambda", 2*k, charge, 0.0, 0.0);
+    }
+
+    if (exceptions)
+        for (int i = 0; i < nonbonded->getNumExceptions(); i++) {
+            int p1, p2;
+            double chargeProd, sigma, epsilon;
+            nonbonded->getExceptionParameters(i, p1, p2, chargeProd, sigma, epsilon);
+            nonbonded->setExceptionParameters(i, p1, p2, 0.0, sigma, epsilon);
+            nonbonded->addExceptionParameterOffset("lambda", i, chargeProd, 0.0, 0.0);
+        }
 
     system1.addForce(nonbonded);
     system2.addForce(slicedNonbonded);
@@ -658,7 +676,8 @@ int main(int argc, char* argv[]) {
         testParameterOffsets(platform);
         testEwaldExceptions(platform);
         testDirectAndReciprocal(platform);
-        testNonbondedCouplingParameters(platform);
+        testNonbondedCouplingParameters(platform, false);
+        testNonbondedCouplingParameters(platform, true);
         runPlatformTests();
     }
     catch(const exception& e) {
