@@ -44,7 +44,6 @@ void testSerialization() {
 
     SlicedPmeForce force(2);
     force.setForceGroup(3);
-    force.setSliceForceGroup(0, 1, 1);
     force.setName("custom name");
     force.setCutoffDistance(2.0);
     force.setEwaldErrorTolerance(1e-3);
@@ -63,6 +62,10 @@ void testSerialization() {
     force.addParticleParameterOffset("scale1", 2, 1.5);
     force.addExceptionParameterOffset("scale2", 1, -0.1);
 
+    force.addGlobalParameter("lambda", 0.5);
+    force.addCouplingParameter("lambda", 0, 1);
+    force.addCouplingParameter("lambda", 1, 1);
+
     // Serialize and then deserialize it.
 
     stringstream buffer;
@@ -74,9 +77,6 @@ void testSerialization() {
     SlicedPmeForce& force2 = *copy;
     ASSERT_EQUAL(force.getNumSubsets(), force2.getNumSubsets());
     ASSERT_EQUAL(force.getForceGroup(), force2.getForceGroup());
-    for (int i = 0; i < force.getNumSubsets(); i++)
-        for (int j = 0; j < force.getNumSubsets(); j++)
-            ASSERT_EQUAL(force.getSliceForceGroup(i,j), force2.getSliceForceGroup(i, j));
     ASSERT_EQUAL(force.getName(), force2.getName());
     ASSERT_EQUAL(force.getCutoffDistance(), force2.getCutoffDistance());
     ASSERT_EQUAL(force.getEwaldErrorTolerance(), force2.getEwaldErrorTolerance());
@@ -84,6 +84,7 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
+    ASSERT_EQUAL(force.getNumCouplingParameters(), force2.getNumCouplingParameters());
     ASSERT_EQUAL(force.getNumParticleParameterOffsets(), force2.getNumParticleParameterOffsets());
     ASSERT_EQUAL(force.getNumExceptionParameterOffsets(), force2.getNumExceptionParameterOffsets());
     ASSERT_EQUAL(force.getIncludeDirectSpace(), force2.getIncludeDirectSpace());
@@ -97,6 +98,15 @@ void testSerialization() {
     for (int i = 0; i < force.getNumGlobalParameters(); i++) {
         ASSERT_EQUAL(force.getGlobalParameterName(i), force2.getGlobalParameterName(i));
         ASSERT_EQUAL(force.getGlobalParameterDefaultValue(i), force2.getGlobalParameterDefaultValue(i));
+    }
+    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+        string param1, param2;
+        int m1, m2, n1, n2;
+        force.getCouplingParameter(i, param1, m1, n1);
+        force2.getCouplingParameter(i, param2, m2, n2);
+        ASSERT_EQUAL(param1, param2);
+        ASSERT_EQUAL(m1, m2);
+        ASSERT_EQUAL(n1, n2);
     }
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         int index1, index2;

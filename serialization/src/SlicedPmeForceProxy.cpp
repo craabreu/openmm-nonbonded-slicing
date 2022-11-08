@@ -49,19 +49,6 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
     int numSubsets = force.getNumSubsets();
     node.setIntProperty("numSubsets", numSubsets);
     node.setIntProperty("forceGroup", force.getForceGroup());
-    SerializationNode& sliceForceGroup = node.createChildNode("sliceForceGroups");
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++) {
-            int group = force.getSliceForceGroup(i, j);
-            if (group >= 0)
-                sliceForceGroup.createChildNode("sliceForceGroup").setIntProperty("subset1", i).setIntProperty("subset2", j).setIntProperty("group", group);
-        }
-    SerializationNode& couplingParameter = node.createChildNode("couplingParameters");
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++) {
-            double lambda = force.getCouplingParameter(i, j);
-            couplingParameter.createChildNode("couplingParameter").setIntProperty("subset1", i).setIntProperty("subset2", j).setDoubleProperty("lambda", lambda);
-        }
     node.setStringProperty("name", force.getName());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
     node.setDoubleProperty("ewaldTolerance", force.getEwaldErrorTolerance());
@@ -78,6 +65,13 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
     SerializationNode& globalParams = node.createChildNode("GlobalParameters");
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
         globalParams.createChildNode("Parameter").setStringProperty("name", force.getGlobalParameterName(i)).setDoubleProperty("default", force.getGlobalParameterDefaultValue(i));
+    SerializationNode& couplingParams = node.createChildNode("CouplingParameters");
+    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+        int subset1, subset2;
+        string parameter;
+        force.getCouplingParameter(i, parameter, subset1, subset2);
+        couplingParams.createChildNode("couplingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2);
+    }
     SerializationNode& particleOffsets = node.createChildNode("ParticleOffsets");
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         int particle;
@@ -117,12 +111,6 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
     SlicedPmeForce* force = new SlicedPmeForce(numSubsets);
     try {
         force->setForceGroup(node.getIntProperty("forceGroup", 0));
-        const SerializationNode& sliceForceGroups = node.getChildNode("sliceForceGroups");
-        for (auto& sliceForceGroup : sliceForceGroups.getChildren())
-            force->setSliceForceGroup(sliceForceGroup.getIntProperty("subset1"), sliceForceGroup.getIntProperty("subset2"), sliceForceGroup.getIntProperty("group"));
-        const SerializationNode& couplingParameters = node.getChildNode("couplingParameters");
-        for (auto& couplingParameter : couplingParameters.getChildren())
-            force->setCouplingParameter(couplingParameter.getIntProperty("subset1"), couplingParameter.getIntProperty("subset2"), couplingParameter.getDoubleProperty("lambda"));
         force->setName(node.getStringProperty("name", force->getName()));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldTolerance"));
@@ -136,6 +124,9 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())
             force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));
+        const SerializationNode& couplingParameters = node.getChildNode("CouplingParameters");
+        for (auto& parameter : couplingParameters.getChildren())
+            force->addCouplingParameter(parameter.getStringProperty("parameter"), parameter.getIntProperty("subset1"), parameter.getIntProperty("subset2"));
         const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
         for (auto& offset : particleOffsets.getChildren())
             force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"));
