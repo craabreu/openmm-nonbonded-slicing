@@ -22,6 +22,20 @@ from openmm import unit
 /*
  * Add units to function outputs.
 */
+
+%pythonappend PmeSlicing::SlicedPmeForce::getCutoffDistance() const %{
+    val = unit.Quantity(val, unit.nanometers)
+%}
+
+%pythonappend PmeSlicing::SlicedPmeForce::getParticleCharge(int index) const %{
+    val = unit.Quantity(val, unit.elementary_charge)
+%}
+
+%pythonappend PmeSlicing::SlicedPmeForce::getPMEParameters(
+        double& alpha, int& nx, int& ny, int& nz) const %{
+    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
+%}
+
 %pythonappend PmeSlicing::SlicedPmeForce::getExceptionParameters(
         int index, int& particle1, int& particle2, double& chargeProd) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
@@ -40,6 +54,7 @@ from openmm import unit
 /*
  * Convert C++ exceptions to Python exceptions.
 */
+
 %exception {
     try {
         $action
@@ -60,6 +75,7 @@ public:
     int getNumParticles() const;
     int getNumExceptions() const;
     int getNumGlobalParameters() const;
+    int getNumCouplingParameters() const;
     int getNumParticleParameterOffsets() const;
     int getNumExceptionParameterOffsets() const;
     double getCutoffDistance() const;
@@ -83,7 +99,7 @@ public:
     %apply int& OUTPUT {int& nx};
     %apply int& OUTPUT {int& ny};
     %apply int& OUTPUT {int& nz};
-    void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
+    void getPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     %clear double& alpha;
     %clear int& nx;
     %clear int& ny;
@@ -111,6 +127,17 @@ public:
     void setGlobalParameterName(int index, const std::string& name);
     double getGlobalParameterDefaultValue(int index) const;
     void setGlobalParameterDefaultValue(int index, double defaultValue);
+    int addCouplingParameter(const std::string& parameter, int subset1, int subset2);
+
+    %apply std::string& OUTPUT {std::string& parameter};
+    %apply int& OUTPUT {int& subset1};
+    %apply int& OUTPUT {int& subset2};
+    void getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
+    %clear std::string& parameter;
+    %clear int& subset1;
+    %clear int& subset2;
+
+    void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
     int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale);
 
     %apply std::string& OUTPUT {std::string& parameter};
@@ -140,16 +167,13 @@ public:
     void updateParametersInContext(Context& context);
     bool getExceptionsUsePeriodicBoundaryConditions() const;
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
-    int getSliceForceGroup(int subset1, int subset2) const;
-    void setSliceForceGroup(int subset1, int subset2, int group);
-    double getCouplingParameter(int subset1, int subset2) const;
-    void setCouplingParameter(int subset1, int subset2, double lambda);
     bool getUseCudaFFT() const;
     void setUseCuFFT(bool use);
 
     /*
      * Add methods for casting a Force to a SlicedPmeForce.
     */
+
     %extend {
         static PmeSlicing::SlicedPmeForce& cast(OpenMM::Force& force) {
             return dynamic_cast<PmeSlicing::SlicedPmeForce&>(force);

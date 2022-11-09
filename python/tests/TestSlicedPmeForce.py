@@ -61,16 +61,23 @@ def testCoulomb(platformName, precision):
     nonbonded.addParticle(1.5, 1.0, 0.0)
     nonbonded.addParticle(-1.5, 1.0, 0.0)
     system.addForce(nonbonded)
-    ASSERT(system.usesPeriodicBoundaryConditions())
+    assert system.usesPeriodicBoundaryConditions()
 
     slicedNonbonded = plugin.SlicedPmeForce(nonbonded)
     slicedNonbonded.setForceGroup(1)
     system.addForce(slicedNonbonded)
 
+    charge, sigma, epsilon = nonbonded.getParticleParameters(0)
+    assert slicedNonbonded.getParticleCharge(0) == charge
+
     integrator = mm.VerletIntegrator(0.01)
     platform = mm.Platform.getPlatformByName(platformName)
     properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator, platform, properties)
+
+    assert nonbonded.getPMEParameters() == slicedNonbonded.getPMEParameters()   
+    assert nonbonded.getPMEParametersInContext(context) == slicedNonbonded.getPMEParametersInContext(context)
+ 
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
     assert_forces_and_energy(context)
@@ -123,11 +130,6 @@ def testLargeSystem(platformName, precision):
 
     assert nonbonded.getParticleSubset(0) == 0
     assert nonbonded.getParticleSubset(2) == 1
-
-    nonbonded.setSliceForceGroup(1, 0, 1)
-    assert nonbonded.getSliceForceGroup(0, 1) ==  1
-    assert nonbonded.getSliceForceGroup(0, 0) == -1
-    assert nonbonded.getSliceForceGroup(1, 1) == -1
 
     system.addForce(nonbonded)
     integrator1 = mm.VerletIntegrator(0.01)
