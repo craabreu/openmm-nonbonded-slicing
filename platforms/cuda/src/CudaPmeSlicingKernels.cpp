@@ -213,7 +213,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
 
-    // Initialize subsets and coupling parameters.
+    // Initialize subsets.
 
     subsets.initialize<int>(cu, cu.getPaddedNumAtoms(), "subsets");
     vector<int> subsetVec(cu.getPaddedNumAtoms());
@@ -221,10 +221,34 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         subsetVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetVec);
 
-    if (cu.getUseDoublePrecision())
-        uploadCouplingParameters<double>(force);
-    else
-        uploadCouplingParameters<float>(force);
+    // Initialize coupling parameters.
+
+    sliceCouplingParameterIndex.resize(numSlices, -1);
+    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+        string param;
+        int s1, s2;
+        force.getCouplingParameter(i, param, s1, s2);
+        int index = find(coupParamNames.begin(), coupParamNames.end(), param) - coupParamNames.begin();
+        if (index == coupParamNames.size()) {
+            coupParamNames.push_back(param);
+            coupParamValues.push_back(1.0);
+        }
+        sliceCouplingParameterIndex[s2*(s2+1)/2+s1] = index;
+    }
+    sliceLambdaVec.resize(numSlices, 1.0);
+    pairLambdaVec.resize(numSubsets*numSubsets, 1.0);
+    if (cu.getUseDoublePrecision()) {
+        sliceLambda.initialize<double>(cu, numSlices, "sliceLambda");
+        sliceLambda.upload(sliceLambdaVec);
+        pairLambda.initialize<double>(cu, numSubsets*numSubsets, "pairLambda");
+        pairLambda.upload(pairLambdaVec);
+    }
+    else {
+        sliceLambda.initialize<float>(cu, numSlices, "sliceLambda");
+        sliceLambda.upload(floatVector(sliceLambdaVec));
+        pairLambda.initialize<float>(cu, numSubsets*numSubsets, "pairLambda");
+        pairLambda.upload(floatVector(pairLambdaVec));
+    }
 
     // Compute the PME parameters.
 
@@ -244,8 +268,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         for (int i = 0; i < numParticles; i++)
             subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
         for (int j = 0; j < numSubsets; j++) {
-            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= force.getCouplingParameter(j ,j)*subsetSelfEnergy[j];
+            subsetSelfEnergy[j] *= -ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy += subsetSelfEnergy[j];
         }
         char deviceName[100];
         cuDeviceGetName(deviceName, 100, cu.getDevice());
@@ -485,7 +509,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
 
-    if (force.getIncludeDirectSpace() && numExclusions > 0) {
+    if (numExclusions > 0) {
         map<string, string> bondDefines;
         bondDefines["NUM_EXCLUSIONS"] = cu.intToString(numExclusions);
         bondDefines["NUM_EXCEPTIONS"] = cu.intToString(numExceptions);
@@ -579,16 +603,49 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 }
 
 double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
-    // Update particle and exception parameters.
-
+    ContextSelector selector(cu);
     double energy = 0.0;
 
-    ContextSelector selector(cu);
+    // Update coupling parameters if needed.
+
+    bool coupParamChanged = false;
+    for (int i = 0; i < coupParamNames.size(); i++) {
+        double value = context.getParameter(coupParamNames[i]);
+        if (value != coupParamValues[i]) {
+            coupParamValues[i] = value;
+            coupParamChanged = true;
+        }
+    }
+    if (coupParamChanged) {
+        for (int j = 0; j < numSubsets; j++)
+            for (int i = 0; i <= j; i++) {
+                int slice = j*(j+1)/2+i;
+                int index = sliceCouplingParameterIndex[slice];
+                if (index != -1)
+                    pairLambdaVec[j*numSubsets+i] = 
+                    pairLambdaVec[i*numSubsets+j] = 
+                    sliceLambdaVec[slice] = coupParamValues[index];
+        }
+        ewaldSelfEnergy = 0.0;
+        for (int j = 0; j < numSubsets; j++)
+            ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
+        if (cu.getUseDoublePrecision()) {
+            sliceLambda.upload(sliceLambdaVec);
+            pairLambda.upload(pairLambdaVec);
+        }
+        else {
+            sliceLambda.upload(floatVector(sliceLambdaVec));
+            pairLambda.upload(floatVector(pairLambdaVec));
+        }
+    }
+
+    // Update particle and exception parameters.
+
     bool paramChanged = false;
     for (int i = 0; i < paramNames.size(); i++) {
         double value = context.getParameter(paramNames[i]);
         if (value != paramValues[i]) {
-            paramValues[i] = value;;
+            paramValues[i] = value;
             paramChanged = true;
         }
     }
@@ -625,12 +682,15 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             cuEventRecord(paramsSyncEvent, cu.getCurrentStream());
             cuStreamWaitEvent(pmeStream, paramsSyncEvent, 0);
         }
+        ewaldSelfEnergy = 0.0;
+        for (int j = 0; j < numSubsets; j++)
+            ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
         recomputeParams = false;
     }
 
     // Do exclusion and exception calculations.
 
-    if (includeDirect && numExclusions > 0) {
+    if (numExclusions > 0 && includeDirect) {
         void* computeBondsArgs[] = {
             &cu.getPosq().getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &cu.getForce().getDevicePointer(),
             cu.getPeriodicBoxSizePointer(), cu.getInvPeriodicBoxSizePointer(),
@@ -731,27 +791,6 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
     return energy;
 }
 
-template <typename real>
-void CudaCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
-    ContextSelector selector(cu);
-    int numSubsets = force.getNumSubsets();
-    int numPairs = numSubsets*numSubsets;
-    int numSlices = numSubsets*(numSubsets+1)/2;
-    if (!pairLambda.isInitialized())
-        pairLambda.initialize<real>(cu, numPairs, "pairLambda");
-    if (!sliceLambda.isInitialized())
-        sliceLambda.initialize<real>(cu, numSlices, "sliceLambda");
-    vector<real> pairLambdaVec(numPairs);
-    vector<real> sliceLambdaVec(numSlices);
-    for (int j = 0; j < numSubsets; j++)
-        for (int i = 0; i <= j; i++)
-            pairLambdaVec[j*numSubsets+i] =
-            pairLambdaVec[i*numSubsets+j] =
-            sliceLambdaVec[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
-    pairLambda.upload(pairLambdaVec);
-    sliceLambda.upload(sliceLambdaVec);
-}
-
 void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
     // Make sure the new parameters are acceptable.
     
@@ -793,13 +832,6 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     baseParticleCharges.upload(baseParticleChargeVec);
     subsets.upload(subsetVec);
 
-    // Record coupling parameters.
-
-    if (cu.getUseDoublePrecision())
-        uploadCouplingParameters<double>(force);
-    else
-        uploadCouplingParameters<float>(force);
-
     // Record the exceptions.
     
     if (numExceptions > 0) {
@@ -822,10 +854,8 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     if (cu.getContextIndex() == 0) {
         for (int i = 0; i < cu.getNumAtoms(); i++)
             subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
-        for (int j = 0; j < numSubsets; j++) {
-            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= force.getCouplingParameter(j ,j)*subsetSelfEnergy[j];
-        }
+        for (int j = 0; j < numSubsets; j++)
+            subsetSelfEnergy[j] *= -ONE_4PI_EPS0*alpha/sqrt(M_PI);
     }
     cu.invalidateMolecules();
     recomputeParams = true;

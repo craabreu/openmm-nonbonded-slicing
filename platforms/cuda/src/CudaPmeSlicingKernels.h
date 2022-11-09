@@ -157,12 +157,19 @@ private:
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    CudaArray pairLambda, sliceLambda;
-    template <typename real>
-    void uploadCouplingParameters(const SlicedPmeForce& force);
-
     int numExclusions;
     CUfunction computeBondsKernel;
+
+    CudaArray pairLambda, sliceLambda;
+    std::vector<int> sliceCouplingParameterIndex;
+    std::vector<std::string> coupParamNames;
+    std::vector<double> coupParamValues;
+    std::vector<double> sliceLambdaVec, pairLambdaVec;
+
+    std::vector<float> floatVector(std::vector<double> input) {
+        vector<float> output(input.begin(), input.end());
+        return output;
+    }
 };
 
 } // namespace PmeSlicing
