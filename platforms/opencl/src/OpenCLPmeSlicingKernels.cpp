@@ -174,6 +174,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
     string prefix = "pme"+cl.intToString(forceIndex)+"_";
+    deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -230,7 +231,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
 
-    // Initialize subsets and coupling parameters.
+    // Initialize subsets.
 
     subsets.initialize<int>(cl, cl.getPaddedNumAtoms(), "subsets");
     vector<int> subsetVec(cl.getPaddedNumAtoms());
@@ -238,10 +239,34 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         subsetVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetVec);
 
-    if (cl.getUseDoublePrecision())
-        uploadCouplingParameters<double>(force);
-    else
-        uploadCouplingParameters<float>(force);
+    // Initialize coupling parameters.
+
+    sliceCouplingParameterIndex.resize(numSlices, -1);
+    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+        string param;
+        int s1, s2;
+        force.getCouplingParameter(i, param, s1, s2);
+        int index = find(coupParamNames.begin(), coupParamNames.end(), param) - coupParamNames.begin();
+        if (index == coupParamNames.size()) {
+            coupParamNames.push_back(param);
+            coupParamValues.push_back(1.0);
+        }
+        sliceCouplingParameterIndex[s2*(s2+1)/2+s1] = index;
+    }
+    sliceLambdaVec.resize(numSlices, 1.0);
+    pairLambdaVec.resize(numSubsets*numSubsets, 1.0);
+    if (cl.getUseDoublePrecision()) {
+        sliceLambda.initialize<double>(cl, numSlices, "sliceLambda");
+        sliceLambda.upload(sliceLambdaVec);
+        pairLambda.initialize<double>(cl, numSubsets*numSubsets, "pairLambda");
+        pairLambda.upload(pairLambdaVec);
+    }
+    else {
+        sliceLambda.initialize<float>(cl, numSlices, "sliceLambda");
+        sliceLambda.upload(floatVector(sliceLambdaVec));
+        pairLambda.initialize<float>(cl, numSubsets*numSubsets, "pairLambda");
+        pairLambda.upload(floatVector(pairLambdaVec));
+    }
 
     // Compute the PME parameters.
 
@@ -251,15 +276,13 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
     int roundedZSize = (int) ceil(gridSizeZ/(double) PmeOrder)*PmeOrder;
 
-    bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
-
     if (cl.getContextIndex() == 0) {
         paramsDefines["INCLUDE_EWALD"] = "1";
         for (int i = 0; i < numParticles; i++)
             subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
         for (int j = 0; j < numSubsets; j++) {
-            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= force.getCouplingParameter(j, j)*subsetSelfEnergy[j];
+            subsetSelfEnergy[j] *= -ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            ewaldSelfEnergy += subsetSelfEnergy[j];
         }
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
@@ -276,8 +299,6 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
         pmeDefines["USE_POSQ_CHARGES"] = usePosqCharges ? "1" : "0";
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
-        if (deviceIsCpu)
-            pmeDefines["DEVICE_IS_CPU"] = "1";
 
         // Create required data structures.
 
@@ -476,8 +497,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
 
-    numExclusions = max(numExclusions, numExceptions);
-    if (force.getIncludeDirectSpace() && numExclusions > 0) {
+    if (numExclusions > 0) {
         map<string, string> bondDefines;
         bondDefines["NUM_EXCLUSIONS"] = cl.intToString(numExclusions);
         bondDefines["NUM_EXCEPTIONS"] = cl.intToString(numExceptions);
@@ -571,7 +591,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
 double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
     double energy = 0.0;
-    bool deviceIsCpu = (cl.getDevice().getInfo<CL_DEVICE_TYPE>() == CL_DEVICE_TYPE_CPU);
+
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
         int index = 0;
@@ -601,6 +621,21 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionSlices.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionChargeProds.getDeviceBuffer());
         }
+        if (numExclusions > 0) {
+            computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
+            setPeriodicBoxArgs(cl, computeBondsKernel, 3);
+            computeBondsKernel.setArg<cl::Buffer>(8, exclusionAtoms.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(9, exclusionSlices.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(10, exclusionChargeProds.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(11, exceptionAtoms.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(12, exceptionSlices.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
+            computeBondsKernel.setArg<cl::Buffer>(15, pairwiseEnergyBuffer.getDeviceBuffer());
+        }
+
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
             
@@ -611,8 +646,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
-            if (hasOffsets)
-                pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
@@ -632,6 +665,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
             if (hasOffsets) {
+                pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, charges.getDeviceBuffer());
@@ -650,14 +684,47 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
        }
     }
-    
-    // Update particle and exception parameters.
+
+    // Update coupling parameters if needed.
+
+    bool coupParamChanged = false;
+    for (int i = 0; i < coupParamNames.size(); i++) {
+        double value = context.getParameter(coupParamNames[i]);
+        if (value != coupParamValues[i]) {
+            coupParamValues[i] = value;
+            coupParamChanged = true;
+        }
+    }
+    if (coupParamChanged) {
+        for (int j = 0; j < numSubsets; j++)
+            for (int i = 0; i <= j; i++) {
+                int slice = j*(j+1)/2+i;
+                int index = sliceCouplingParameterIndex[slice];
+                if (index != -1)
+                    pairLambdaVec[j*numSubsets+i] = 
+                    pairLambdaVec[i*numSubsets+j] = 
+                    sliceLambdaVec[slice] = coupParamValues[index];
+        }
+        ewaldSelfEnergy = 0.0;
+        for (int j = 0; j < numSubsets; j++)
+            ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
+        if (cl.getUseDoublePrecision()) {
+            sliceLambda.upload(sliceLambdaVec);
+            pairLambda.upload(pairLambdaVec);
+        }
+        else {
+            sliceLambda.upload(floatVector(sliceLambdaVec));
+            pairLambda.upload(floatVector(pairLambdaVec));
+        }
+    }
+
+    // Update particle and exception parameters if needed.
 
     bool paramChanged = false;
     for (int i = 0; i < paramNames.size(); i++) {
         double value = context.getParameter(paramNames[i]);
         if (value != paramValues[i]) {
-            paramValues[i] = value;;
+            paramValues[i] = value;
             paramChanged = true;
         }
     }
@@ -674,26 +741,16 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             cl.getQueue().enqueueMarkerWithWaitList(NULL, &events[0]);
             pmeQueue.enqueueBarrierWithWaitList(&events);
         }
+        ewaldSelfEnergy = 0.0;
+        for (int j = 0; j < numSubsets; j++)
+            ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
         recomputeParams = false;
     }
-    
+
     // Do exclusion and exception calculations.
 
-    if (includeDirect && numExclusions > 0) {
-        computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
-        setPeriodicBoxArgs(cl, computeBondsKernel, 3);
-        computeBondsKernel.setArg<cl::Buffer>(8, exclusionAtoms.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(9, exclusionSlices.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(10, exclusionChargeProds.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(11, exceptionAtoms.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(12, exceptionSlices.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
-        computeBondsKernel.setArg<cl::Buffer>(15, pairwiseEnergyBuffer.getDeviceBuffer());
+    if (numExclusions > 0 && includeDirect)
        cl.executeKernel(computeBondsKernel, numExclusions);
-    }
 
     // Do reciprocal space calculations.
     
@@ -795,26 +852,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     return energy;
 }
 
-template <typename real>
-void OpenCLCalcSlicedPmeForceKernel::uploadCouplingParameters(const SlicedPmeForce& force) {
-    int numSubsets = force.getNumSubsets();
-    int numPairs = numSubsets*numSubsets;
-    int numSlices = numSubsets*(numSubsets+1)/2;
-    if (!pairLambda.isInitialized())
-        pairLambda.initialize<real>(cl, numPairs, "pairLambda");
-    if (!sliceLambda.isInitialized())
-        sliceLambda.initialize<real>(cl, numSlices, "sliceLambda");
-    vector<real> pairLambdaVec(numPairs);
-    vector<real> sliceLambdaVec(numSlices);
-    for (int j = 0; j < numSubsets; j++)
-        for (int i = 0; i <= j; i++)
-            pairLambdaVec[j*numSubsets+i] =
-            pairLambdaVec[i*numSubsets+j] =
-            sliceLambdaVec[j*(j+1)/2+i] = force.getCouplingParameter(i, j);
-    pairLambda.upload(pairLambdaVec);
-    sliceLambda.upload(sliceLambdaVec);
-}
-
 void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
     // Make sure the new parameters are acceptable.
 
@@ -853,13 +890,6 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     }
     baseParticleCharges.upload(baseParticleChargeVec);
     subsets.upload(subsetVec);
-    
-    // Record coupling parameters.
-
-    if (cl.getUseDoublePrecision())
-        uploadCouplingParameters<double>(force);
-    else
-        uploadCouplingParameters<float>(force);
 
     // Record the exceptions.
     
@@ -883,10 +913,8 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     if (cl.getContextIndex() == 0) {
         for (int i = 0; i < cl.getNumAtoms(); i++)
             subsetSelfEnergy[subsetVec[i]] += baseParticleChargeVec[i]*baseParticleChargeVec[i];
-        for (int j = 0; j < numSubsets; j++) {
-            subsetSelfEnergy[j] *= ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            ewaldSelfEnergy -= force.getCouplingParameter(j, j)*subsetSelfEnergy[j];
-        }
+        for (int j = 0; j < numSubsets; j++)
+            subsetSelfEnergy[j] *= -ONE_4PI_EPS0*alpha/sqrt(M_PI);
     }
     cl.invalidateMolecules(info);
     recomputeParams = true;

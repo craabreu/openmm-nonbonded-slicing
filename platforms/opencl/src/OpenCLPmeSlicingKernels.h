@@ -103,6 +103,7 @@ private:
     OpenCLContext& cl;
     ForceInfo* info;
     bool hasInitializedKernel;
+    bool deviceIsCpu;
     OpenCLArray charges;
     OpenCLArray subsets;
     OpenCLArray exceptionAtoms;
@@ -157,12 +158,19 @@ private:
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    OpenCLArray pairLambda, sliceLambda;
-    template <typename real>
-    void uploadCouplingParameters(const SlicedPmeForce& force);
-
     int numExclusions;
     cl::Kernel computeBondsKernel;
+
+    OpenCLArray pairLambda, sliceLambda;
+    std::vector<int> sliceCouplingParameterIndex;
+    std::vector<std::string> coupParamNames;
+    std::vector<double> coupParamValues;
+    std::vector<double> sliceLambdaVec, pairLambdaVec;
+
+    std::vector<float> floatVector(std::vector<double> input) {
+        std::vector<float> output(input.begin(), input.end());
+        return output;
+    }
 };
 
 } // namespace PmeSlicing
