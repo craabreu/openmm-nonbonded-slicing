@@ -659,6 +659,18 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
+
+    // Change of coupling parameter value:
+    lambda = 0.8;
+
+    context1.setParameter("lambda", lambda);
+    context2.setParameter("lambda", lambda);
+    context2.setParameter("lambdaSq", lambda*lambda);
+
+    state1 = context1.getState(State::Energy | State::Forces);
+    state2 = context2.getState(State::Energy | State::Forces);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
 }
 
 void runPlatformTests();
