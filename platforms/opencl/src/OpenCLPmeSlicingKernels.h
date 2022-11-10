@@ -158,14 +158,14 @@ private:
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    int numExclusions;
+    bool hasExclusions;
     cl::Kernel computeBondsKernel;
 
-    OpenCLArray pairLambda, sliceLambda;
-    std::vector<int> sliceCouplingParameterIndex;
+    OpenCLArray sliceLambda;
+    std::vector<double> sliceLambdaVec;
     std::vector<std::string> coupParamNames;
     std::vector<double> coupParamValues;
-    std::vector<double> sliceLambdaVec, pairLambdaVec;
+    std::vector<int> sliceCoupParamIndex;
 
     std::vector<float> floatVector(std::vector<double> input) {
         std::vector<float> output(input.begin(), input.end());

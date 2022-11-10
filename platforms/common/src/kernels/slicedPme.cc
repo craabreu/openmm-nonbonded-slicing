@@ -261,7 +261,7 @@ KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT pmeEnergyBuffer,
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const int2* RESTRICT pmeAtomGridIndex,
-        GLOBAL const real* RESTRICT charges, GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT pairLambda
+        GLOBAL const real* RESTRICT charges, GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT sliceLambda
         ) {
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
@@ -275,7 +275,7 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
         int atom = pmeAtomGridIndex[i].x;
         real3 force = make_real3(0);
         real4 pos = posq[atom];
-        int offset = subsets[atom]*NUM_SUBSETS;
+        int s1 = subsets[atom];
         APPLY_PERIODIC_TO_POS(pos)
         real3 t = make_real3(pos.x*recipBoxVecX.x+pos.y*recipBoxVecY.x+pos.z*recipBoxVecZ.x,
                              pos.y*recipBoxVecY.y+pos.z*recipBoxVecZ.y,
@@ -330,8 +330,10 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int index = ybase + zindex;
                     real gridvalue = 0.0;
-                    for (int j = 0; j < NUM_SUBSETS; j++)
-                        gridvalue += pairLambda[offset+j]*pmeGrid[j*gridSize+index];
+                    for (int s2 = 0; s2 < s1; s2++)
+                        gridvalue += sliceLambda[s1*(s1+1)/2+s2]*pmeGrid[s2*gridSize+index];
+                    for (int s2 = s1; s2 < NUM_SUBSETS; s2++)
+                        gridvalue += sliceLambda[s2*(s2+1)/2+s1]*pmeGrid[s2*gridSize+index];
                     force.x += ddx*dy*data[iz].z*gridvalue;
                     force.y += dx*ddy*data[iz].z*gridvalue;
                     force.z += dx*dy*ddata[iz].z*gridvalue;

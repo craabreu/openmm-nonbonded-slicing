@@ -223,7 +223,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Initialize coupling parameters.
 
-    sliceCouplingParameterIndex.resize(numSlices, -1);
+    sliceCoupParamIndex.resize(numSlices, -1);
     for (int i = 0; i < force.getNumCouplingParameters(); i++) {
         string param;
         int s1, s2;
@@ -233,21 +233,16 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             coupParamNames.push_back(param);
             coupParamValues.push_back(1.0);
         }
-        sliceCouplingParameterIndex[s2*(s2+1)/2+s1] = index;
+        sliceCoupParamIndex[s2*(s2+1)/2+s1] = index;
     }
     sliceLambdaVec.resize(numSlices, 1.0);
-    pairLambdaVec.resize(numSubsets*numSubsets, 1.0);
     if (cu.getUseDoublePrecision()) {
         sliceLambda.initialize<double>(cu, numSlices, "sliceLambda");
         sliceLambda.upload(sliceLambdaVec);
-        pairLambda.initialize<double>(cu, numSubsets*numSubsets, "pairLambda");
-        pairLambda.upload(pairLambdaVec);
     }
     else {
         sliceLambda.initialize<float>(cu, numSlices, "sliceLambda");
         sliceLambda.upload(floatVector(sliceLambdaVec));
-        pairLambda.initialize<float>(cu, numSubsets*numSubsets, "pairLambda");
-        pairLambda.upload(floatVector(pairLambdaVec));
     }
 
     // Compute the PME parameters.
@@ -459,8 +454,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     int numContexts = cu.getPlatformData().contexts.size();
     int startIndex = cu.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cu.getContextIndex()+1)*force.getNumExceptions()/numContexts;
-    numExclusions = endIndex-startIndex;
-    if (numExclusions > 0) {
+    int numExclusions = endIndex-startIndex;
+    hasExclusions = numExclusions > 0;
+    if (hasExclusions) {
         exclusionAtoms.initialize<int2>(cu, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cu, numExclusions, "exclusionSlices");
         exclusionChargeProds.initialize<float>(cu, numExclusions, "exclusionChargeProds");
@@ -509,7 +505,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
 
-    if (numExclusions > 0) {
+    if (hasExclusions) {
         map<string, string> bondDefines;
         bondDefines["NUM_EXCLUSIONS"] = cu.intToString(numExclusions);
         bondDefines["NUM_EXCEPTIONS"] = cu.intToString(numExceptions);
@@ -617,26 +613,18 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         }
     }
     if (coupParamChanged) {
-        for (int j = 0; j < numSubsets; j++)
-            for (int i = 0; i <= j; i++) {
-                int slice = j*(j+1)/2+i;
-                int index = sliceCouplingParameterIndex[slice];
-                if (index != -1)
-                    pairLambdaVec[j*numSubsets+i] =
-                    pairLambdaVec[i*numSubsets+j] =
-                    sliceLambdaVec[slice] = coupParamValues[index];
+        for (int slice = 0; slice < numSlices; slice++) {
+            int index = sliceCoupParamIndex[slice];
+            if (index != -1)
+                sliceLambdaVec[slice] = coupParamValues[index];
         }
         ewaldSelfEnergy = 0.0;
         for (int j = 0; j < numSubsets; j++)
             ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
-        if (cu.getUseDoublePrecision()) {
+        if (cu.getUseDoublePrecision())
             sliceLambda.upload(sliceLambdaVec);
-            pairLambda.upload(pairLambdaVec);
-        }
-        else {
+        else
             sliceLambda.upload(floatVector(sliceLambdaVec));
-            pairLambda.upload(floatVector(pairLambdaVec));
-        }
     }
 
     // Update particle and exception parameters.
@@ -690,7 +678,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
 
     // Do exclusion and exception calculations.
 
-    if (numExclusions > 0 && includeDirect) {
+    if (hasExclusions && includeDirect) {
         void* computeBondsArgs[] = {
             &cu.getPosq().getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &cu.getForce().getDevicePointer(),
             cu.getPeriodicBoxSizePointer(), cu.getInvPeriodicBoxSizePointer(),
@@ -699,7 +687,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             &exceptionAtoms.getDevicePointer(), &exceptionSlices.getDevicePointer(), &exceptionChargeProds.getDevicePointer(),
             &sliceLambda.getDevicePointer(), &pairwiseEnergyBuffer.getDevicePointer()
         };
-        cu.executeKernel(computeBondsKernel, computeBondsArgs, numExclusions);
+        cu.executeKernel(computeBondsKernel, computeBondsArgs, exclusionChargeProds.getSize());
     }
 
     // Do reciprocal space calculations.
@@ -779,7 +767,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                 cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                 recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                &charges.getDevicePointer(), &subsets.getDevicePointer(), &pairLambda.getDevicePointer()};
+                &charges.getDevicePointer(), &subsets.getDevicePointer(), &sliceLambda.getDevicePointer()};
         cu.executeKernel(pmeInterpolateForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
 
         if (usePmeStream) {
