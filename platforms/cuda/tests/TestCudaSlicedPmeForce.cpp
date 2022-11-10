@@ -62,9 +62,9 @@ void testParallelComputation() {
                 force->addExceptionChargeOffset("scale", index, 0.5);
             }
         }
-    
+
     // Create two contexts, one with a single device and one with two devices.
-    
+
     VerletIntegrator integrator1(0.01);
     Context context1(system, integrator1, platform);
     context1.setPositions(positions);
@@ -76,13 +76,13 @@ void testParallelComputation() {
     Context context2(system, integrator2, platform, props);
     context2.setPositions(positions);
     State state2 = context2.getState(State::Forces | State::Energy);
-    
+
     // See if they agree.
-    
+
     ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
     for (int i = 0; i < numParticles; i++)
         ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-5);
-    
+
     // Modify some particle parameters and see if they still agree.
 
     for (int i = 0; i < numParticles; i += 5) {
@@ -100,7 +100,7 @@ void testParallelComputation() {
 
 void testReordering() {
     // Check that reordering of atoms doesn't alter their positions.
-    
+
     const int numParticles = 200;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(6, 0, 0), Vec3(2.1, 6, 0), Vec3(-1.5, -0.5, 6));
@@ -126,7 +126,7 @@ void testReordering() {
 
 void testDeterministicForces() {
     // Check that the CudaDeterministicForces property works correctly.
-    
+
     const int numParticles = 1000;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(6, 0, 0), Vec3(2.1, 6, 0), Vec3(-1.5, -0.5, 6));
@@ -147,9 +147,9 @@ void testDeterministicForces() {
     context.setPositions(positions);
     State state1 = context.getState(State::Forces);
     State state2 = context.getState(State::Forces);
-    
+
     // All forces should be *exactly* equal.
-    
+
     for (int i = 0; i < numParticles; i++) {
         ASSERT_EQUAL(state1.getForces()[i][0], state2.getForces()[i][0]);
         ASSERT_EQUAL(state1.getForces()[i][1], state2.getForces()[i][1]);

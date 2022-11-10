@@ -94,7 +94,7 @@ void testSerialization() {
     ASSERT_EQUAL(alpha, alpha2);
     ASSERT_EQUAL(nx, nx2);
     ASSERT_EQUAL(ny, ny2);
-    ASSERT_EQUAL(nz, nz2);    
+    ASSERT_EQUAL(nz, nz2);
     for (int i = 0; i < force.getNumGlobalParameters(); i++) {
         ASSERT_EQUAL(force.getGlobalParameterName(i), force2.getGlobalParameterName(i));
         ASSERT_EQUAL(force.getGlobalParameterDefaultValue(i), force2.getGlobalParameterDefaultValue(i));

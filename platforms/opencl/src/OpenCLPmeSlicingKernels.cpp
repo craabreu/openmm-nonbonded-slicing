@@ -405,7 +405,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     }
 
     // Add the interaction to the default nonbonded kernel.
-    
+
     charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
@@ -579,9 +579,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
     recomputeParams = true;
-    
+
     // Initialize the kernel for updating parameters.
-    
+
     cl::Program program = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
     computeParamsKernel = cl::Kernel(program, "computeParameters");
     computeExclusionParamsKernel = cl::Kernel(program, "computeExclusionParameters");
@@ -638,7 +638,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
 
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
-            
+
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
             cl::Program program = cl.createProgram(cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
@@ -701,8 +701,8 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
                 int slice = j*(j+1)/2+i;
                 int index = sliceCouplingParameterIndex[slice];
                 if (index != -1)
-                    pairLambdaVec[j*numSubsets+i] = 
-                    pairLambdaVec[i*numSubsets+j] = 
+                    pairLambdaVec[j*numSubsets+i] =
+                    pairLambdaVec[i*numSubsets+j] =
                     sliceLambdaVec[slice] = coupParamValues[index];
         }
         ewaldSelfEnergy = 0.0;
@@ -753,13 +753,13 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
        cl.executeKernel(computeBondsKernel, numExclusions);
 
     // Do reciprocal space calculations.
-    
+
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (usePmeQueue && !includeEnergy)
             cl.setQueue(pmeQueue);
-        
+
         // Invert the periodic box vectors.
-        
+
         Vec3 boxVectors[3];
         cl.getPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
         double determinant = boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2];
@@ -771,7 +771,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         mm_float4 recipBoxVectorsFloat[3];
         for (int i = 0; i < 3; i++)
             recipBoxVectorsFloat[i] = mm_float4((float) recipBoxVectors[i].x, (float) recipBoxVectors[i].y, (float) recipBoxVectors[i].z, 0);
-        
+
         // Execute the reciprocal space kernels.
 
         setPeriodicBoxArgs(cl, pmeGridIndexKernel, 3);
@@ -892,7 +892,7 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     subsets.upload(subsetVec);
 
     // Record the exceptions.
-    
+
     if (numExceptions > 0) {
         vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
@@ -905,9 +905,9 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
         }
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
-    
+
     // Compute other values.
-    
+
     ewaldSelfEnergy = 0.0;
     subsetSelfEnergy.assign(numSubsets, 0.0);
     if (cl.getContextIndex() == 0) {

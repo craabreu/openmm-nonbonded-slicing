@@ -592,7 +592,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
     recomputeParams = true;
-    
+
     // Initialize the kernel for updating parameters.
 
     CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::slicedPmeParameters, paramsDefines);
@@ -622,8 +622,8 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
                 int slice = j*(j+1)/2+i;
                 int index = sliceCouplingParameterIndex[slice];
                 if (index != -1)
-                    pairLambdaVec[j*numSubsets+i] = 
-                    pairLambdaVec[i*numSubsets+j] = 
+                    pairLambdaVec[j*numSubsets+i] =
+                    pairLambdaVec[i*numSubsets+j] =
                     sliceLambdaVec[slice] = coupParamValues[index];
         }
         ewaldSelfEnergy = 0.0;
@@ -703,7 +703,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
     }
 
     // Do reciprocal space calculations.
-    
+
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (usePmeStream)
             cu.setCurrentStream(pmeStream);
@@ -793,7 +793,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
 
 void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
     // Make sure the new parameters are acceptable.
-    
+
     ContextSelector selector(cu);
     if (force.getNumParticles() != cu.getNumAtoms())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
@@ -819,9 +819,9 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     int numExceptions = endIndex-startIndex;
     if (numExceptions != exceptionPairs.size())
         throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-    
+
     // Record the per-particle parameters.
-    
+
     vector<float> baseParticleChargeVec(cu.getPaddedNumAtoms(), 0.0);
     vector<int> subsetVec(cu.getPaddedNumAtoms());
     const vector<int>& order = cu.getAtomIndex();
@@ -833,7 +833,7 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
     subsets.upload(subsetVec);
 
     // Record the exceptions.
-    
+
     if (numExceptions > 0) {
         vector<float> baseExceptionChargeProdsVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
@@ -846,7 +846,7 @@ void CudaCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context,
         }
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
     }
-    
+
     // Compute other values.
 
     ewaldSelfEnergy = 0.0;

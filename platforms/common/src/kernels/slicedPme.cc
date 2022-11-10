@@ -267,10 +267,10 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
     real3 ddata[PME_ORDER];
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const real scale = RECIP((real) (PME_ORDER-1));
-    
+
     // Process the atoms in spatially sorted order.  This improves cache performance when loading
     // the grid values.
-    
+
     for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
         int atom = pmeAtomGridIndex[i].x;
         real3 force = make_real3(0);
@@ -317,14 +317,14 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
             xbase = xbase*GRID_SIZE_Y*GRID_SIZE_Z;
             real dx = data[ix].x;
             real ddx = ddata[ix].x;
-            
+
             for (int iy = 0; iy < PME_ORDER; iy++) {
                 int ybase = gridIndex.y+iy;
                 ybase -= (ybase >= GRID_SIZE_Y ? GRID_SIZE_Y : 0);
                 ybase = xbase + ybase*GRID_SIZE_Z;
                 real dy = data[iy].y;
                 real ddy = ddata[iy].y;
-                
+
                 for (int iz = 0; iz < PME_ORDER; iz++) {
                     int zindex = gridIndex.z+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);

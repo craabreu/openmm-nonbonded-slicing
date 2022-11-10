@@ -239,7 +239,7 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
         }
     }
     for (int slice = 0; slice < numSlices; slice++)
-        num14[slice] = nb14s[slice].size(); 
+        num14[slice] = nb14s[slice].size();
     if (accumulate(num14.begin(), num14.end(), 0) != total14)
         throw OpenMMException("updateParametersInContext: The number of non-excluded exceptions has changed");
 

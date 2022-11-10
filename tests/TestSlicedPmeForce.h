@@ -279,7 +279,7 @@ void testPeriodicExceptions(Platform& platform) {
     assertForcesAndEnergy(context);
 
     // Now make exceptions periodic and see if it changes correctly.
-    
+
     nonbonded->setExceptionsUsePeriodicBoundaryConditions(true);
     slicedNonbonded->setExceptionsUsePeriodicBoundaryConditions(true);
     context.reinitialize(true);
@@ -481,7 +481,7 @@ void testChargeOffsets(Platform& platform) {
 
     context.setParameter("p1", 0.5);
     context.setParameter("p2", 1.5);
-    
+
     assertForcesAndEnergy(context);
 }
 
@@ -506,9 +506,9 @@ void testEwaldExceptions(Platform& platform) {
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    
+
     // Compute the energy.
-    
+
     double e1 = context.getState(State::Energy).getPotentialEnergy();
 
     // Add a periodic exception and see if the energy changes by the correct amount.
@@ -547,18 +547,18 @@ void testDirectAndReciprocal(Platform& platform) {
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    
+
     // Compute the direct and reciprocal space energies together and separately.
-    
+
     double e1 = context.getState(State::Energy).getPotentialEnergy();
     double e2 = context.getState(State::Energy, true, 1<<0).getPotentialEnergy();
     double e3 = context.getState(State::Energy, true, 1<<1).getPotentialEnergy();
     ASSERT_EQUAL_TOL(e1, e2+e3, 1e-5);
     ASSERT(e2 != 0);
     ASSERT(e3 != 0);
-    
+
     // Completely disable the direct space calculation.
-    
+
     force->setIncludeDirectSpace(false);
     context.reinitialize(true);
     double e4 = context.getState(State::Energy).getPotentialEnergy();

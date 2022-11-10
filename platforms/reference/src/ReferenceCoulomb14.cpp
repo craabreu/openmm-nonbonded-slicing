@@ -85,7 +85,7 @@ void ReferenceCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>
     if (periodic)
         ReferenceForce::getDeltaRPeriodic(atomCoordinates[atomBIndex], atomCoordinates[atomAIndex], periodicBoxVectors, deltaR[0]);
     else
-        ReferenceForce::getDeltaR(atomCoordinates[atomBIndex], atomCoordinates[atomAIndex], deltaR[0]);  
+        ReferenceForce::getDeltaR(atomCoordinates[atomBIndex], atomCoordinates[atomAIndex], deltaR[0]);
 
     double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
     double dEdR = ONE_4PI_EPS0*parameters[0]*parameters[1]*inverseR*inverseR*inverseR;

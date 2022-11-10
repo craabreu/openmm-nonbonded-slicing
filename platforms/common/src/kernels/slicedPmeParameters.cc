@@ -15,7 +15,7 @@ KERNEL void computeParameters(GLOBAL real* RESTRICT globalParams,
         ) {
 
     // Compute particle parameters.
-    
+
     for (int i = GLOBAL_ID; i < numAtoms; i += GLOBAL_SIZE) {
         float q = baseParticleCharges[i];
 #ifdef HAS_PARTICLE_OFFSETS
@@ -33,7 +33,7 @@ KERNEL void computeParameters(GLOBAL real* RESTRICT globalParams,
     }
 
     // Compute exception parameters.
-    
+
 #ifdef HAS_EXCEPTIONS
     for (int i = GLOBAL_ID; i < numExceptions; i += GLOBAL_SIZE) {
         float chargeProd = baseExceptionChargeProds[i];

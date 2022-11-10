@@ -35,55 +35,55 @@ namespace PmeSlicing {
 class ReferenceCoulombIxn {
 
    private:
-       
+
       bool periodicExceptions;
       const OpenMM::NeighborList* neighborList;
       OpenMM::Vec3 periodicBoxVectors[3];
       double cutoffDistance;
       double alphaEwald;
       int meshDim[3];
-            
+
    public:
 
       /**---------------------------------------------------------------------------------------
-      
+
          Constructor
-      
+
          --------------------------------------------------------------------------------------- */
 
        ReferenceCoulombIxn();
 
       /**---------------------------------------------------------------------------------------
-      
+
          Destructor
-      
+
          --------------------------------------------------------------------------------------- */
 
        ~ReferenceCoulombIxn();
 
       /**---------------------------------------------------------------------------------------
-      
+
          Set the force to use a cutoff.
-      
+
          @param distance            the cutoff distance
          @param neighbors           the neighbor list to use
-      
+
          --------------------------------------------------------------------------------------- */
-      
+
       void setCutoff(double distance, const OpenMM::NeighborList& neighbors);
 
       /**---------------------------------------------------------------------------------------
-      
+
          Set the force to use periodic boundary conditions.  This requires that a cutoff has
          already been set, and the smallest side of the periodic box is at least twice the cutoff
          distance.
-      
+
          @param vectors    the vectors defining the periodic box
-      
+
          --------------------------------------------------------------------------------------- */
-      
+
       void setPeriodic(OpenMM::Vec3* vectors);
-       
+
       /**---------------------------------------------------------------------------------------
 
          Set the force to use Particle-Mesh Ewald (PME) summation.
@@ -92,9 +92,9 @@ class ReferenceCoulombIxn {
          @param gridSize the dimensions of the mesh
 
          --------------------------------------------------------------------------------------- */
-      
+
       void setPME(double alpha, int meshSize[3]);
-      
+
       /**---------------------------------------------------------------------------------------
 
          Set whether exceptions use periodic boundary conditions.
@@ -104,9 +104,9 @@ class ReferenceCoulombIxn {
       void setPeriodicExceptions(bool periodic);
 
       /**---------------------------------------------------------------------------------------
-      
+
          Calculate Ewald ixn
-      
+
          @param numberOfAtoms    number of atoms
          @param atomCoordinates  atom coordinates
          @param atomCharges      atom charges
@@ -116,9 +116,9 @@ class ReferenceCoulombIxn {
          @param sliceEnergies    slice energies
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
-            
+
          --------------------------------------------------------------------------------------- */
-          
+
       void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates,
                              int numSubsets, vector<int> subsets, vector<double> sliceLambda,
                              vector<double>& atomCharges, vector<set<int> >& exclusions,

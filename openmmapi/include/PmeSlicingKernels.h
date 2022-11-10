@@ -54,7 +54,7 @@ public:
     }
     /**
      * Initialize the kernel.
-     * 
+     *
      * @param system     the System this kernel will be applied to
      * @param force      the SlicedPmeForce this kernel will be used for
      */
@@ -105,7 +105,7 @@ public:
     }
     /**
      * Initialize the kernel.
-     * 
+     *
      * @param gridx        the x size of the PME grid
      * @param gridy        the y size of the PME grid
      * @param gridz        the z size of the PME grid
@@ -124,14 +124,14 @@ public:
     virtual void beginComputation(IO& io, const Vec3* periodicBoxVectors, bool includeEnergy) = 0;
     /**
      * Finish computing the force and energy.
-     * 
+     *
      * @param io   an object that coordinates data transfer
      * @return the potential energy due to the PME reciprocal space interactions
      */
     virtual double finishComputation(IO& io) = 0;
     /**
      * Get the parameters being used for PME.
-     * 
+     *
      * @param alpha   the separation parameter
      * @param nx      the number of grid points along the X axis
      * @param ny      the number of grid points along the Y axis
@@ -153,7 +153,7 @@ public:
     virtual float* getPosq() = 0;
     /**
      * Record the forces calculated by the kernel.
-     * 
+     *
      * @param force    an array containing four elements for each atom.  The first three
      *                 are the x, y, and z components of the force, while the fourth element
      *                 should be ignored.

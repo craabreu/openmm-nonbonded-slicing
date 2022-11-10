@@ -111,13 +111,13 @@ class OPENMM_EXPORT_PMESLICING SlicedPmeForce : public Force {
 public:
     /**
      * Create a SlicedPmeForce.
-     * 
+     *
      * @param numSubsets the number of particle subsets.
      */
     SlicedPmeForce(int numSubsets=1);
     /**
      * Create a SlicedPmeForce whose properties are imported from an existing NonbondedForce.
-     * 
+     *
      * @param nonbondedForce the NonbondedForce whose properties will be imported.
      * @param numSubsets the number of particle subsets.
      */
@@ -269,7 +269,7 @@ public:
      * Add an interaction to the list of exceptions that should be calculated differently from
      * other interactions. If chargeProd is equal to 0, this will cause the interaction to be
      * completely omitted from force and energy calculations.
-     * 
+     *
      * Cutoffs are never applied to exceptions. That is because they are primarily used for 1-4
      * interactions, which are really a type of bonded interaction and are parametrized together
      * with the other bonded interactions.
@@ -302,7 +302,7 @@ public:
      * Set the particle indices and charge product for an interaction that should be calculated
      * differently from others. If chargeProd is equal to 0, this will cause the interaction to be
      * completely omitted from force and energy calculations.
-     * 
+     *
      * Cutoffs are never applied to exceptions. That is because they are primarily used for 1-4
      * interactions, which are really a type of bonded interaction and are parametrized together
      * with the other bonded interactions.
@@ -332,7 +332,7 @@ public:
      * Add a new global parameter that charge offsets may depend on.  The default value provided
      * to this method is the initial value of the parameter in newly created Contexts.  You can
      * change the value at any time by calling setParameter() on the Context.
-     * 
+     *
      * @param name             the name of the parameter
      * @param defaultValue     the default value of the parameter
      * @return the index of the parameter that was added
@@ -403,7 +403,7 @@ public:
     void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
      * Add an offset to the charge of a particular particle, based on a global parameter.
-     * 
+     *
      * @param parameter       the name of the global parameter. It must have already been added
      *                        with addGlobalParameter(). Its value can be modified at any time by
      *                        calling Context::setParameter().
@@ -416,7 +416,7 @@ public:
     /**
      * Get the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
-     * 
+     *
      * @param index           the index of the offset to query, as returned by
      *                        addParticleChargeOffset()
      * @param parameter       the name of the global parameter
@@ -428,7 +428,7 @@ public:
     /**
      * Set the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
-     * 
+     *
      * @param index           the index of the offset to modify, as returned by
      *                        addParticleChargeOffset()
      * @param parameter       the name of the global parameter. It must have already been added
@@ -441,7 +441,7 @@ public:
     void setParticleChargeOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Add an offset to the parameters of a particular exception, based on a global parameter.
-     * 
+     *
      * @param parameter       the name of the global parameter.  It must have already been added
      *                        with addGlobalParameter(). Its value can be modified at any time by
      *                        calling Context::setParameter().
@@ -454,7 +454,7 @@ public:
     /**
      * Get the offset added to the parameters of a particular exception, based on a global
      * parameter.
-     * 
+     *
      * @param index           the index of the offset to query, as returned by
      *                        addExceptionChargeOffset()
      * @param parameter       the name of the global parameter
@@ -466,7 +466,7 @@ public:
     /**
      * Set the offset added to the parameters of a particular exception, based on a global
      * parameter.
-     * 
+     *
      * @param index           the index of the offset to modify, as returned by
      *                        addExceptionChargeOffset()
      * @param parameter       the name of the global parameter.  It must have already been added
@@ -525,7 +525,7 @@ public:
      * 1-4 pairs), but there are situations when it does make sense.  For pmeslicing, you may want to simulate
      * an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic
      * copy.
-     * 
+     *
      * Regardless of this value, periodic boundary conditions are only applied to exceptions if they also
      * are applied to other interactions.  If the nonbonded method is NoCutoff or CutoffNonPeriodic, this
      * value is ignored.  Also note that cutoffs are never applied to exceptions, again because they are
@@ -538,7 +538,7 @@ public:
      * (1-2, 1-3, and 1-4 pairs), but there are situations when it does make sense.  For example,
      * you may want to simulate an infinite chain where one end of a molecule is bonded to the
      * opposite end of the next periodic copy.
-     * 
+     *
      * Regardless of this value, periodic boundary conditions are only applied to exceptions if
      * they also get applied to other interactions.  If the nonbonded method is NoCutoff or
      * CutoffNonPeriodic, this value is ignored.  Also note that cutoffs are never applied to

@@ -120,7 +120,7 @@ __kernel void packBackwardData(__global const real2* restrict in, __global real2
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Transform the data.
-    
+
     const int gridSize = PACKED_XSIZE*PACKED_YSIZE*PACKED_ZSIZE;
     for (int index = get_global_id(0); index < gridSize; index += get_global_size(0)) {
         int x = index/(PACKED_YSIZE*PACKED_ZSIZE);

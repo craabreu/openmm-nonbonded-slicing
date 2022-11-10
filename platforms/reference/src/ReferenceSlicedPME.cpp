@@ -668,7 +668,7 @@ int pme_exec(pme_t pme,
 
     Vec3 recipBoxVectors[3];
     invert_box_vectors(periodicBoxVectors, recipBoxVectors);
-    
+
     /* Before we can do the actual interpolation, we need to recalculate and update
      * the indices for each particle in the charge grid (initialized in pme_init()),
      * and what its fractional offset in this grid cell is.

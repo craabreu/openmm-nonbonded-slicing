@@ -53,7 +53,7 @@ public:
     ~ReferenceCalcSlicedPmeForceKernel();
     /**
      * Initialize the kernel.
-     * 
+     *
      * @param system     the System this kernel will be applied to
      * @param force      the SlicedPmeForce this kernel will be used for
      */
@@ -77,7 +77,7 @@ public:
     void copyParametersToContext(OpenMM::ContextImpl& context, const SlicedPmeForce& force);
     /**
      * Get the parameters being used for PME.
-     * 
+     *
      * @param alpha   the separation parameter
      * @param nx      the number of grid points along the X axis
      * @param ny      the number of grid points along the Y axis

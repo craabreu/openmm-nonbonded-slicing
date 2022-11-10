@@ -70,7 +70,7 @@ public:
     void copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force);
     /**
      * Get the parameters being used for PME.
-     * 
+     *
      * @param alpha   the separation parameter
      * @param nx      the number of grid points along the X axis
      * @param ny      the number of grid points along the Y axis
