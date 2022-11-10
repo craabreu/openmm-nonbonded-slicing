@@ -352,6 +352,8 @@ public:
      * The order of subset definition is irrelevant.
      *
      * @param parameter the name of the global parameter.  It must have already been added
+     *                        with addGlobalParameter(). Its value can be modified at any time by
+     *                        calling Context::setParameter()
      * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @return          the index of switching parameter that was added
@@ -375,12 +377,44 @@ public:
      * Modify an added switching parameter.
      *
      * @param index     the index of the switching parameter to modify, as returned by
-     *                      addExceptionChargeOffset()
+     *                        addExceptionChargeOffset()
      * @param parameter the name of the global parameter.  It must have already been added
+     *                        with addGlobalParameter(). Its value can be modified at any time by
+     *                        calling Context::setParameter()
      * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
      */
     void setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2);
+    /**
+     * Request that this Force compute the derivative of its energy with respect to a switching parameter.
+     * The parameter must have already been added with addGlobalParameter() and addSwithingParameter().
+     *
+     * @param parameter   the name of the parameter
+     * @return the index of switching parameter derivative that was added
+     */
+    int addSwitchingParameterDerivative(const std::string& parameter);
+    /**
+     * Get the number of global parameters with respect to which the derivative of the Coulomb energy
+     * should be computed.
+     */
+    int getNumSwitchingParameterDerivatives() const;
+    /**
+     * Get the name of a global parameter with respect to which this Force should compute the
+     * derivative of the energy.
+     *
+     * @param index     the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives()
+     * @return the parameter name
+     */
+    const std::string& getSwitchingParameterDerivative(int index) const;
+    /**
+     * Set the name of the global parameter with respect to which this Force should compute the
+     * derivative of the energy.
+     *
+     * @param index     the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives()
+     * @param parameter the name of the parameter
+     * @return the parameter name
+     */
+    void setSwitchingParameterDerivative(int index, const std::string& parameter);
     /**
      * Add an offset to the charge of a particular particle, based on a global parameter.
      *
@@ -557,6 +591,7 @@ private:
     bool useCudaFFT;
     void addExclusionsToSet(const std::vector<std::set<int> >& bonded12, std::set<int>& exclusions, int baseParticle, int fromParticle, int currentLevel) const;
     int getGlobalParameterIndex(const std::string& parameter) const;
+    int getSwitchingParameterIndex(const std::string& parameter) const;
     std::vector<ParticleInfo> particles;
     std::vector<ExceptionInfo> exceptions;
     std::vector<GlobalParameterInfo> globalParameters;
@@ -565,6 +600,8 @@ private:
     std::map<std::pair<int, int>, int> exceptionMap;
     std::vector<SwitchingParameterInfo> switchingParameters;
     std::vector<double> switchingParameter;
+
+    std::vector<int> switchingParameterDerivatives;
 };
 
 /**
@@ -655,11 +692,11 @@ public:
  */
 class SlicedPmeForce::SwitchingParameterInfo {
 public:
-    int parameter, subset1, subset2, slice;
+    int globalIndex, subset1, subset2, slice;
     SwitchingParameterInfo() {
-        parameter = subset1 = subset2 = slice = -1;
+        globalIndex = subset1 = subset2 = slice = -1;
     }
-    SwitchingParameterInfo(int parameter, int subset1, int subset2) : parameter(parameter) {
+    SwitchingParameterInfo(int globalIndex, int subset1, int subset2) : globalIndex(globalIndex) {
         int i = std::min(subset1, subset2);
         int j = std::max(subset1, subset2);
         this->subset1 = i;

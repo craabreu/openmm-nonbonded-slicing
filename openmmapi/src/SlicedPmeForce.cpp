@@ -278,7 +278,7 @@ int SlicedPmeForce::addSwitchingParameter(const std::string& parameter, int subs
     int slice = j*(j+1)/2+i;
     for (auto parameter : switchingParameters)
         if (parameter.slice == slice)
-            throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
+            throwException(__FILE__, __LINE__, "A switching parameter has already been defined for this slice");
     switchingParameters.push_back(SwitchingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2));
     return switchingParameters.size()-1;
 }
@@ -289,7 +289,7 @@ int SlicedPmeForce::getNumSwitchingParameters() const {
 
 void SlicedPmeForce::getSwitchingParameter(int index, std::string& parameter, int& subset1, int& subset2) const {
     ASSERT_VALID_INDEX(index, switchingParameters);
-    parameter = globalParameters[switchingParameters[index].parameter].name;
+    parameter = globalParameters[switchingParameters[index].globalIndex].name;
     subset1 = switchingParameters[index].subset1;
     subset2 = switchingParameters[index].subset2;
 }
@@ -303,8 +303,46 @@ void SlicedPmeForce::setSwitchingParameter(int index, const std::string& paramet
     int slice = j*(j+1)/2+i;
     for (int k = 0; k < switchingParameters.size(); k++)
         if (k != index && switchingParameters[k].slice == slice)
-            throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
+            throwException(__FILE__, __LINE__, "A switching parameter has already been defined for this slice");
     switchingParameters[index] = SwitchingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2);
+}
+
+int SlicedPmeForce::getSwitchingParameterIndex(const std::string& parameter) const {
+    for (int i = 0; i < switchingParameters.size(); i++) {
+        int globalIndex = switchingParameters[i].globalIndex;
+        if (globalParameters[globalIndex].name == parameter)
+            return i;
+    }
+    throw OpenMMException("There is no switching parameter called '"+parameter+"'");
+}
+
+int SlicedPmeForce::addSwitchingParameterDerivative(const string& parameter) {
+    int switchParamIndex = getSwitchingParameterIndex(parameter);
+    int globalIndex = switchingParameters[switchParamIndex].globalIndex;
+    for (auto i : switchingParameterDerivatives)
+        if (i == globalIndex)
+            throwException(__FILE__, __LINE__, "This switching parameter derivative already been requested");
+    switchingParameterDerivatives.push_back(globalIndex);
+    return switchingParameterDerivatives.size()-1;
+}
+
+int SlicedPmeForce::getNumSwitchingParameterDerivatives() const {
+    return switchingParameterDerivatives.size();
+}
+
+const string& SlicedPmeForce::getSwitchingParameterDerivative(int index) const {
+    ASSERT_VALID_INDEX(index, switchingParameterDerivatives);
+    return globalParameters[switchingParameterDerivatives[index]].name;
+}
+
+void SlicedPmeForce::setSwitchingParameterDerivative(int index, const string& parameter) {
+    ASSERT_VALID_INDEX(index, switchingParameterDerivatives);
+    int switchParamIndex = getSwitchingParameterIndex(parameter);
+    int globalIndex = switchingParameters[switchParamIndex].globalIndex;
+    for (auto i : switchingParameterDerivatives)
+        if (i != index && i == globalIndex)
+            throwException(__FILE__, __LINE__, "This switching parameter derivative already been requested");
+    switchingParameterDerivatives[index] = globalIndex;
 }
 
 int SlicedPmeForce::addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale) {

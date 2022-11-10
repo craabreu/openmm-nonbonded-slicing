@@ -11,9 +11,9 @@ slices the total Coulomb potential and applies a different switching constant to
 By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
 becomes
 
-![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=0}^{n-1}&space;\lambda_{I,J}&space;U_{I,J})
+![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=0}^{n-1}&space;h_{I,J}&space;U_{I,J})
 
-where $\lambda_{I,J}$ is a switching constant and $U_{I,J}$ is the sum over every pair interaction
+where $h_{I,J}$ is a switching constant and $U_{I,J}$ is the sum over every pair interaction
 involving a particle in subset I and a particle in subset J.
 
 **Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
