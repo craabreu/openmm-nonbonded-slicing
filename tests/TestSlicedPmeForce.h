@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -545,7 +545,7 @@ void testDirectAndReciprocal(Platform& platform) {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
-void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
+void testNonbondedSwitchingParameters(Platform& platform, bool exceptions) {
     const int numMolecules = 600;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
@@ -603,8 +603,8 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
 
     slicedNonbonded->addGlobalParameter("lambda", lambda);
     slicedNonbonded->addGlobalParameter("lambdaSq", lambda*lambda);
-    slicedNonbonded->addCouplingParameter("lambda", 0, 1);
-    slicedNonbonded->addCouplingParameter("lambdaSq", 1, 1);
+    slicedNonbonded->addSwitchingParameter("lambda", 0, 1);
+    slicedNonbonded->addSwitchingParameter("lambdaSq", 1, 1);
 
     if (exceptions)
         for (int i = 0; i < nonbonded->getNumExceptions(); i++) {
@@ -640,7 +640,7 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // Change of coupling parameter value:
+    // Change of switching parameter value:
     lambda = 0.8;
 
     context1.setParameter("lambda", lambda);
@@ -651,6 +651,10 @@ void testNonbondedCouplingParameters(Platform& platform, bool exceptions) {
     state2 = context2.getState(State::Energy | State::Forces);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
+
+    // Coupling/offset parameter collapse:
+    slicedNonbonded->addParticleChargeOffset("lambda", 0, 1.0);
+    context2.reinitialize();
 }
 
 void runPlatformTests();
@@ -671,8 +675,8 @@ int main(int argc, char* argv[]) {
         testChargeOffsets(platform);
         testEwaldExceptions(platform);
         testDirectAndReciprocal(platform);
-        testNonbondedCouplingParameters(platform, false);
-        testNonbondedCouplingParameters(platform, true);
+        testNonbondedSwitchingParameters(platform, false);
+        testNonbondedSwitchingParameters(platform, true);
         runPlatformTests();
     }
     catch(const exception& e) {

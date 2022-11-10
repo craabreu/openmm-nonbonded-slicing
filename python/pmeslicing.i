@@ -75,7 +75,7 @@ public:
     int getNumParticles() const;
     int getNumExceptions() const;
     int getNumGlobalParameters() const;
-    int getNumCouplingParameters() const;
+    int getNumSwitchingParameters() const;
     int getNumParticleChargeOffsets() const;
     int getNumExceptionChargeOffsets() const;
     double getCutoffDistance() const;
@@ -127,17 +127,17 @@ public:
     void setGlobalParameterName(int index, const std::string& name);
     double getGlobalParameterDefaultValue(int index) const;
     void setGlobalParameterDefaultValue(int index, double defaultValue);
-    int addCouplingParameter(const std::string& parameter, int subset1, int subset2);
+    int addSwitchingParameter(const std::string& parameter, int subset1, int subset2);
 
     %apply std::string& OUTPUT {std::string& parameter};
     %apply int& OUTPUT {int& subset1};
     %apply int& OUTPUT {int& subset2};
-    void getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
+    void getSwitchingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
     %clear std::string& parameter;
     %clear int& subset1;
     %clear int& subset2;
 
-    void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
+    void setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2);
     int addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale);
 
     %apply std::string& OUTPUT {std::string& parameter};

@@ -5,8 +5,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -85,7 +85,7 @@ private:
 
     int numSubsets, numSlices;
     vector<int> subsets;
-    vector<string> sliceCouplingParameter;
+    vector<string> sliceSwitchingParameter;
     vector<double> sliceLambda;
 };
 

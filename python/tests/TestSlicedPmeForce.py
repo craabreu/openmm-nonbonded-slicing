@@ -60,7 +60,7 @@ def testParameterCollapse(platformName):
     force.addParticle(1.5)
     force.addParticle(-1.5)
     force.addGlobalParameter("param", 1)
-    force.addCouplingParameter("param", 0, 0)
+    force.addSwitchingParameter("param", 0, 0)
     force.addParticleChargeOffset("param", 0, 1.0)
     system.addForce(force)
     integrator = mm.VerletIntegrator(0.01)

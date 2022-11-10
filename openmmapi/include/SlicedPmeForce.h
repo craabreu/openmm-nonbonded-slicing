@@ -5,8 +5,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -34,7 +34,7 @@ namespace PmeSlicing {
  *
  * The total Coulomb potential can be divided into slices depending on which pairs of particles are
  * involved. After distributing all particles among disjoint subsets, each slice is distinguished
- * by two indices I and J. Slice[I,J] is the sum of interactions of all particles in subset I with
+ * by two indices I and J. U[I][J] is the sum of the interactions of all particles in subset I with
  * all particles in subset J.
  *
  * To use this class, create a SlicedPmeForce object, then call addParticle() once for each
@@ -46,14 +46,14 @@ namespace PmeSlicing {
  * you call updateParametersInContext().
  *
  * SlicedPmeForce also lets you specify "exceptions", particular pairs of particles whose
- * interactions should be computed based on different parameters than those defined for the
+ * interactions should be computed based on a product of charges other than those defined for the
  * individual particles. This can be used to completely exclude certain interactions from the
- * force calculation, or to alter how they interact with each other.
+ * force calculation.
  *
  * Many molecular force fields omit Coulomb interactions between particles separated by one
  * or two bonds, while using modified parameters for those separated by three bonds (known as
  * "1-4 interactions"). This class provides a convenience method for this case called
- * createExceptionsFromBonds().  You pass to it a list of bonds and the scale factors to use
+ * createExceptionsFromBonds().  You pass to it a list of bonds and the scale factor to use
  * for 1-4 interactions.  It identifies all pairs of particles which are separated by 1, 2, or
  * 3 bonds, then automatically creates exceptions for them.
  *
@@ -347,40 +347,40 @@ public:
      */
     void setGlobalParameterDefaultValue(int index, double defaultValue);
  	/**
-     * Add a coupling parameter to multiply a particular Coulomb slice, that is, the Coulomb
+     * Add a switching parameter to multiply a particular Coulomb slice, that is, the Coulomb
      * interactions between particles of a subset with those of another (or the same) subset.
      * The order of subset definition is irrelevant.
      *
      * @param parameter the name of the global parameter.  It must have already been added
      * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
-     * @return          the index of coupling parameter that was added
+     * @return          the index of switching parameter that was added
      */
-    int addCouplingParameter(const std::string& parameter, int subset1, int subset2);
+    int addSwitchingParameter(const std::string& parameter, int subset1, int subset2);
     /**
-     * Get the number of coupling parameters.
+     * Get the number of switching parameters.
      */
-    int getNumCouplingParameters() const;
+    int getNumSwitchingParameters() const;
   	/**
-     * Get the coupling parameter applied to a particular nonbonded slice.
+     * Get the switching parameter applied to a particular nonbonded slice.
      *
-     * @param index     the index of the coupling parameter to query, as returned by
-     *                      addCouplingParameter()
+     * @param index     the index of the switching parameter to query, as returned by
+     *                      addSwitchingParameter()
      * @param parameter the name of the global parameter
      * @param subset1   the smallest index of the two particle subsets
      * @param subset2   the largest index of the two particle subsets
      */
-    void getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
+    void getSwitchingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
  	/**
-     * Modify an added coupling parameter.
+     * Modify an added switching parameter.
      *
-     * @param index     the index of the coupling parameter to modify, as returned by
+     * @param index     the index of the switching parameter to modify, as returned by
      *                      addExceptionChargeOffset()
      * @param parameter the name of the global parameter.  It must have already been added
      * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
      */
-    void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
+    void setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
      * Add an offset to the charge of a particular particle, based on a global parameter.
      *
@@ -549,7 +549,7 @@ private:
     class GlobalParameterInfo;
     class ParticleOffsetInfo;
     class ExceptionOffsetInfo;
-    class CouplingParameterInfo;
+    class SwitchingParameterInfo;
     int numSubsets;
     double cutoffDistance, ewaldErrorTol, alpha, dalpha;
     bool exceptionsUsePeriodic, includeDirectSpace;
@@ -563,8 +563,8 @@ private:
     std::vector<ParticleOffsetInfo> particleOffsets;
     std::vector<ExceptionOffsetInfo> exceptionOffsets;
     std::map<std::pair<int, int>, int> exceptionMap;
-    std::vector<CouplingParameterInfo> couplingParameters;
-    std::vector<double> couplingParameter;
+    std::vector<SwitchingParameterInfo> switchingParameters;
+    std::vector<double> switchingParameter;
 };
 
 /**
@@ -650,16 +650,16 @@ public:
 };
 
 /**
- * This is an internal class used to record information about a coupling parameter.
+ * This is an internal class used to record information about a switching parameter.
  * @private
  */
-class SlicedPmeForce::CouplingParameterInfo {
+class SlicedPmeForce::SwitchingParameterInfo {
 public:
     int parameter, subset1, subset2, slice;
-    CouplingParameterInfo() {
+    SwitchingParameterInfo() {
         parameter = subset1 = subset2 = slice = -1;
     }
-    CouplingParameterInfo(int parameter, int subset1, int subset2) : parameter(parameter) {
+    SwitchingParameterInfo(int parameter, int subset1, int subset2) : parameter(parameter) {
         int i = std::min(subset1, subset2);
         int j = std::max(subset1, subset2);
         this->subset1 = i;

@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -219,17 +219,17 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         subsetVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetVec);
 
-    // Initialize coupling parameters.
+    // Initialize switching parameters.
 
     sliceCoupParamIndex.resize(numSlices, -1);
-    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+    for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         string param;
         int s1, s2;
-        force.getCouplingParameter(i, param, s1, s2);
-        int index = find(coupParamNames.begin(), coupParamNames.end(), param) - coupParamNames.begin();
-        if (index == coupParamNames.size()) {
-            coupParamNames.push_back(param);
-            coupParamValues.push_back(1.0);
+        force.getSwitchingParameter(i, param, s1, s2);
+        int index = find(switchParamNames.begin(), switchParamNames.end(), param) - switchParamNames.begin();
+        if (index == switchParamNames.size()) {
+            switchParamNames.push_back(param);
+            switchParamValues.push_back(1.0);
         }
         sliceCoupParamIndex[s2*(s2+1)/2+s1] = index;
     }
@@ -661,21 +661,21 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
        }
     }
 
-    // Update coupling parameters if needed.
+    // Update switching parameters if needed.
 
-    bool coupParamChanged = false;
-    for (int i = 0; i < coupParamNames.size(); i++) {
-        double value = context.getParameter(coupParamNames[i]);
-        if (value != coupParamValues[i]) {
-            coupParamValues[i] = value;
-            coupParamChanged = true;
+    bool switchParamChanged = false;
+    for (int i = 0; i < switchParamNames.size(); i++) {
+        double value = context.getParameter(switchParamNames[i]);
+        if (value != switchParamValues[i]) {
+            switchParamValues[i] = value;
+            switchParamChanged = true;
         }
     }
-    if (coupParamChanged) {
+    if (switchParamChanged) {
         for (int slice = 0; slice < numSlices; slice++) {
             int index = sliceCoupParamIndex[slice];
             if (index != -1)
-                sliceLambdaVec[slice] = coupParamValues[index];
+                sliceLambdaVec[slice] = switchParamValues[index];
         }
         ewaldSelfEnergy = 0.0;
         for (int j = 0; j < numSubsets; j++)

@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -45,12 +45,12 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
     SerializationNode& globalParams = node.createChildNode("GlobalParameters");
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
         globalParams.createChildNode("Parameter").setStringProperty("name", force.getGlobalParameterName(i)).setDoubleProperty("default", force.getGlobalParameterDefaultValue(i));
-    SerializationNode& couplingParams = node.createChildNode("CouplingParameters");
-    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+    SerializationNode& switchingParams = node.createChildNode("SwitchingParameters");
+    for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         int subset1, subset2;
         string parameter;
-        force.getCouplingParameter(i, parameter, subset1, subset2);
-        couplingParams.createChildNode("couplingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2);
+        force.getSwitchingParameter(i, parameter, subset1, subset2);
+        switchingParams.createChildNode("switchingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2);
     }
     SerializationNode& particleOffsets = node.createChildNode("ParticleOffsets");
     for (int i = 0; i < force.getNumParticleChargeOffsets(); i++) {
@@ -104,9 +104,9 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())
             force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));
-        const SerializationNode& couplingParameters = node.getChildNode("CouplingParameters");
-        for (auto& parameter : couplingParameters.getChildren())
-            force->addCouplingParameter(parameter.getStringProperty("parameter"), parameter.getIntProperty("subset1"), parameter.getIntProperty("subset2"));
+        const SerializationNode& switchingParameters = node.getChildNode("SwitchingParameters");
+        for (auto& parameter : switchingParameters.getChildren())
+            force->addSwitchingParameter(parameter.getStringProperty("parameter"), parameter.getIntProperty("subset1"), parameter.getIntProperty("subset2"));
         const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
         for (auto& offset : particleOffsets.getChildren())
             force->addParticleChargeOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"));

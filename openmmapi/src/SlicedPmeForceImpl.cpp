@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -111,10 +111,10 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
         owner.getExceptionChargeOffset(index, parameter, particle, value);
         offsetParams.insert(parameter);
     }
-    for (int index = 0; index < owner.getNumCouplingParameters(); index++) {
-        owner.getCouplingParameter(index, parameter, subset1, subset2);
+    for (int index = 0; index < owner.getNumSwitchingParameters(); index++) {
+        owner.getSwitchingParameter(index, parameter, subset1, subset2);
         if (offsetParams.find(parameter) != offsetParams.end())
-            throw OpenMMException("SlicedPmeForce: A coupling parameter cannot be used for charge offset.");
+            throw OpenMMException("SlicedPmeForce: A switching parameter cannot be used for charge offset.");
     }
 
     kernel.getAs<CalcSlicedPmeForceKernel>().initialize(context.getSystem(), owner);

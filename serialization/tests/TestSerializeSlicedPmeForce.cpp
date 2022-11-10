@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -43,8 +43,8 @@ void testSerialization() {
     force.addExceptionChargeOffset("scale2", 1, -0.1);
 
     force.addGlobalParameter("lambda", 0.5);
-    force.addCouplingParameter("lambda", 0, 1);
-    force.addCouplingParameter("lambda", 1, 1);
+    force.addSwitchingParameter("lambda", 0, 1);
+    force.addSwitchingParameter("lambda", 1, 1);
 
     // Serialize and then deserialize it.
 
@@ -64,7 +64,7 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
-    ASSERT_EQUAL(force.getNumCouplingParameters(), force2.getNumCouplingParameters());
+    ASSERT_EQUAL(force.getNumSwitchingParameters(), force2.getNumSwitchingParameters());
     ASSERT_EQUAL(force.getNumParticleChargeOffsets(), force2.getNumParticleChargeOffsets());
     ASSERT_EQUAL(force.getNumExceptionChargeOffsets(), force2.getNumExceptionChargeOffsets());
     ASSERT_EQUAL(force.getIncludeDirectSpace(), force2.getIncludeDirectSpace());
@@ -79,11 +79,11 @@ void testSerialization() {
         ASSERT_EQUAL(force.getGlobalParameterName(i), force2.getGlobalParameterName(i));
         ASSERT_EQUAL(force.getGlobalParameterDefaultValue(i), force2.getGlobalParameterDefaultValue(i));
     }
-    for (int i = 0; i < force.getNumCouplingParameters(); i++) {
+    for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         string param1, param2;
         int m1, m2, n1, n2;
-        force.getCouplingParameter(i, param1, m1, n1);
-        force2.getCouplingParameter(i, param2, m2, n2);
+        force.getSwitchingParameter(i, param1, m1, n1);
+        force2.getSwitchingParameter(i, param2, m2, n2);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(m1, m2);
         ASSERT_EQUAL(n1, n2);

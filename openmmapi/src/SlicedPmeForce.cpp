@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -35,7 +35,7 @@ SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets), cutoffD
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(DEFAULT_USE_CUDA_FFT) {
     for (int j = 0; j < numSubsets*(numSubsets+1)/2; j++)
-        couplingParameter.push_back(1.0);
+        switchingParameter.push_back(1.0);
 }
 
 SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : SlicedPmeForce(numSubsets) {
@@ -270,41 +270,41 @@ int SlicedPmeForce::getGlobalParameterIndex(const std::string& parameter) const 
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
-int SlicedPmeForce::addCouplingParameter(const std::string& parameter, int subset1, int subset2) {
+int SlicedPmeForce::addSwitchingParameter(const std::string& parameter, int subset1, int subset2) {
     ASSERT_VALID_SUBSET(subset1);
     ASSERT_VALID_SUBSET(subset2);
     int i = std::min(subset1, subset2);
     int j = std::max(subset1, subset2);
     int slice = j*(j+1)/2+i;
-    for (auto parameter : couplingParameters)
+    for (auto parameter : switchingParameters)
         if (parameter.slice == slice)
             throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
-    couplingParameters.push_back(CouplingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2));
-    return couplingParameters.size()-1;
+    switchingParameters.push_back(SwitchingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2));
+    return switchingParameters.size()-1;
 }
 
-int SlicedPmeForce::getNumCouplingParameters() const {
-    return couplingParameters.size();
+int SlicedPmeForce::getNumSwitchingParameters() const {
+    return switchingParameters.size();
 }
 
-void SlicedPmeForce::getCouplingParameter(int index, std::string& parameter, int& subset1, int& subset2) const {
-    ASSERT_VALID_INDEX(index, couplingParameters);
-    parameter = globalParameters[couplingParameters[index].parameter].name;
-    subset1 = couplingParameters[index].subset1;
-    subset2 = couplingParameters[index].subset2;
+void SlicedPmeForce::getSwitchingParameter(int index, std::string& parameter, int& subset1, int& subset2) const {
+    ASSERT_VALID_INDEX(index, switchingParameters);
+    parameter = globalParameters[switchingParameters[index].parameter].name;
+    subset1 = switchingParameters[index].subset1;
+    subset2 = switchingParameters[index].subset2;
 }
 
-void SlicedPmeForce::setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2) {
-    ASSERT_VALID_INDEX(index, couplingParameters);
+void SlicedPmeForce::setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2) {
+    ASSERT_VALID_INDEX(index, switchingParameters);
     ASSERT_VALID_SUBSET(subset1);
     ASSERT_VALID_SUBSET(subset2);
     int i = std::min(subset1, subset2);
     int j = std::max(subset1, subset2);
     int slice = j*(j+1)/2+i;
-    for (int k = 0; k < couplingParameters.size(); k++)
-        if (k != index && couplingParameters[k].slice == slice)
+    for (int k = 0; k < switchingParameters.size(); k++)
+        if (k != index && switchingParameters[k].slice == slice)
             throwException(__FILE__, __LINE__, "Coupling parameter has already been defined");
-    couplingParameters[index] = CouplingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2);
+    switchingParameters[index] = SwitchingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2);
 }
 
 int SlicedPmeForce::addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale) {

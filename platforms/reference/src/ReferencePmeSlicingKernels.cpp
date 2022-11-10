@@ -2,8 +2,8 @@
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
  *                                                                            *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-pme-slicing                             *
@@ -58,12 +58,12 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
     sliceLambda.resize(numSlices);
-    sliceCouplingParameter.resize(numSlices, "");
-    for (int index = 0; index < force.getNumCouplingParameters(); index++) {
+    sliceSwitchingParameter.resize(numSlices, "");
+    for (int index = 0; index < force.getNumSwitchingParameters(); index++) {
         string parameter;
         int i, j;
-        force.getCouplingParameter(index, parameter, i, j);
-        sliceCouplingParameter[j*(j+1)/2+i] = parameter;
+        force.getSwitchingParameter(index, parameter, i, j);
+        sliceSwitchingParameter[j*(j+1)/2+i] = parameter;
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -190,7 +190,7 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
 
-    // Get particle subsets and coupling parameters.
+    // Get particle subsets and switching parameters.
 
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
@@ -261,10 +261,10 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
         particleParamArray[index] += value*offset.second;
     }
 
-    // Compute coupling parameter values.
+    // Compute switching parameter values.
 
     for (int slice = 0; slice < numSlices; slice++) {
-        string parameter = sliceCouplingParameter[slice];
+        string parameter = sliceSwitchingParameter[slice];
         sliceLambda[slice] = parameter == "" ? 1.0 : context.getParameter(parameter);
     }
 
