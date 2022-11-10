@@ -91,7 +91,7 @@ SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : Sl
         int particleIndex;
         double chargeScale, sigmaScale, epsilonScale;
         force.getParticleParameterOffset(index, parameter, particleIndex, chargeScale, sigmaScale, epsilonScale);
-        addParticleParameterOffset(parameter, particleIndex, chargeScale);
+        addParticleChargeOffset(parameter, particleIndex, chargeScale);
     }
 
     for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
@@ -99,7 +99,7 @@ SlicedPmeForce::SlicedPmeForce(const NonbondedForce& force, int numSubsets) : Sl
         int exceptionIndex;
         double chargeProdScale, sigmaScale, epsilonScale;
         force.getExceptionParameterOffset(index, parameter, exceptionIndex, chargeProdScale, sigmaScale, epsilonScale);
-        addExceptionParameterOffset(parameter, exceptionIndex, chargeProdScale);
+        addExceptionChargeOffset(parameter, exceptionIndex, chargeProdScale);
     }
 }
 
@@ -327,38 +327,38 @@ void SlicedPmeForce::setCouplingParameter(int index, const std::string& paramete
     couplingParameters[index] = CouplingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2);
 }
 
-int SlicedPmeForce::addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale) {
+int SlicedPmeForce::addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale) {
     particleOffsets.push_back(ParticleOffsetInfo(getGlobalParameterIndex(parameter), particleIndex, chargeScale));
     return particleOffsets.size()-1;
 }
 
-void SlicedPmeForce::getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const {
+void SlicedPmeForce::getParticleChargeOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const {
     ASSERT_VALID_INDEX(index, particleOffsets);
     parameter = globalParameters[particleOffsets[index].parameter].name;
     particleIndex = particleOffsets[index].particle;
     chargeScale = particleOffsets[index].chargeScale;
 }
 
-void SlicedPmeForce::setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale) {
+void SlicedPmeForce::setParticleChargeOffset(int index, const std::string& parameter, int particleIndex, double chargeScale) {
     ASSERT_VALID_INDEX(index, particleOffsets);
     particleOffsets[index].parameter = getGlobalParameterIndex(parameter);
     particleOffsets[index].particle = particleIndex;
     particleOffsets[index].chargeScale = chargeScale;
 }
 
-int SlicedPmeForce::addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale) {
+int SlicedPmeForce::addExceptionChargeOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale) {
     exceptionOffsets.push_back(ExceptionOffsetInfo(getGlobalParameterIndex(parameter), exceptionIndex, chargeProdScale));
     return exceptionOffsets.size()-1;
 }
 
-void SlicedPmeForce::getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const {
+void SlicedPmeForce::getExceptionChargeOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const {
     ASSERT_VALID_INDEX(index, exceptionOffsets);
     parameter = globalParameters[exceptionOffsets[index].parameter].name;
     exceptionIndex = exceptionOffsets[index].exception;
     chargeProdScale = exceptionOffsets[index].chargeProdScale;
 }
 
-void SlicedPmeForce::setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale) {
+void SlicedPmeForce::setExceptionChargeOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale) {
     ASSERT_VALID_INDEX(index, exceptionOffsets);
     exceptionOffsets[index].parameter = getGlobalParameterIndex(parameter);
     exceptionOffsets[index].exception = exceptionIndex;

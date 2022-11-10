@@ -89,11 +89,11 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
-    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
+    for (int index = 0; index < force.getNumExceptionChargeOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(index, param, exception, charge);
+        force.getExceptionChargeOffset(index, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     exclusions.resize(numParticles);
@@ -119,11 +119,11 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     for (int i = 0; i < numParticles; ++i)
        particleCharges[i] = force.getParticleCharge(i);
 
-    for (int index = 0; index < force.getNumParticleParameterOffsets(); index++) {
+    for (int index = 0; index < force.getNumParticleChargeOffsets(); index++) {
         string param;
         int particle;
         double charge;
-        force.getParticleParameterOffset(index, param, particle, charge);
+        force.getParticleChargeOffset(index, param, particle, charge);
         particleParamOffsets[make_pair(param, particle)] = charge;
     }
 
@@ -149,11 +149,11 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
             );
     }
 
-    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
+    for (int index = 0; index < force.getNumExceptionChargeOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(index, param, exception, charge);
+        force.getExceptionChargeOffset(index, param, exception, charge);
         exceptionParamOffsets[exception].push_back(make_pair(param,charge));
     }
 
@@ -218,11 +218,11 @@ void ReferenceCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& con
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
-    for (int index = 0; index < force.getNumExceptionParameterOffsets(); index++) {
+    for (int index = 0; index < force.getNumExceptionChargeOffsets(); index++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(index, param, exception, charge);
+        force.getExceptionChargeOffset(index, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     for (int slice = 0; slice < numSlices; slice++)

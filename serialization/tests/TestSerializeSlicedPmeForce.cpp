@@ -59,8 +59,8 @@ void testSerialization() {
     force.addException(1, 2, 0.2);
     force.addGlobalParameter("scale1", 1.0);
     force.addGlobalParameter("scale2", 2.0);
-    force.addParticleParameterOffset("scale1", 2, 1.5);
-    force.addExceptionParameterOffset("scale2", 1, -0.1);
+    force.addParticleChargeOffset("scale1", 2, 1.5);
+    force.addExceptionChargeOffset("scale2", 1, -0.1);
 
     force.addGlobalParameter("lambda", 0.5);
     force.addCouplingParameter("lambda", 0, 1);
@@ -85,8 +85,8 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
     ASSERT_EQUAL(force.getNumCouplingParameters(), force2.getNumCouplingParameters());
-    ASSERT_EQUAL(force.getNumParticleParameterOffsets(), force2.getNumParticleParameterOffsets());
-    ASSERT_EQUAL(force.getNumExceptionParameterOffsets(), force2.getNumExceptionParameterOffsets());
+    ASSERT_EQUAL(force.getNumParticleChargeOffsets(), force2.getNumParticleChargeOffsets());
+    ASSERT_EQUAL(force.getNumExceptionChargeOffsets(), force2.getNumExceptionChargeOffsets());
     ASSERT_EQUAL(force.getIncludeDirectSpace(), force2.getIncludeDirectSpace());
     double alpha2;
     int nx2, ny2, nz2;
@@ -108,23 +108,23 @@ void testSerialization() {
         ASSERT_EQUAL(m1, m2);
         ASSERT_EQUAL(n1, n2);
     }
-    for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumParticleChargeOffsets(); i++) {
         int index1, index2;
         string param1, param2;
         double charge1;
         double charge2;
-        force.getParticleParameterOffset(i, param1, index1, charge1);
-        force2.getParticleParameterOffset(i, param2, index2, charge2);
+        force.getParticleChargeOffset(i, param1, index1, charge1);
+        force2.getParticleChargeOffset(i, param2, index2, charge2);
         ASSERT_EQUAL(index1, index1);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);
     }
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumExceptionChargeOffsets(); i++) {
         int index1, index2;
         string param1, param2;
         double charge1, charge2;
-        force.getExceptionParameterOffset(i, param1, index1, charge1);
-        force2.getExceptionParameterOffset(i, param2, index2, charge2);
+        force.getExceptionChargeOffset(i, param1, index1, charge1);
+        force2.getExceptionChargeOffset(i, param2, index2, charge2);
         ASSERT_EQUAL(index1, index1);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);

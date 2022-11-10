@@ -179,11 +179,11 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumExceptionChargeOffsets(); i++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
+        force.getExceptionChargeOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     vector<pair<int, int> > exclusions;
@@ -221,12 +221,12 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     subsetSelfEnergy.resize(numSubsets, 0.0);
     map<string, string> paramsDefines;
     paramsDefines["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
-    hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
+    hasOffsets = (force.getNumParticleChargeOffsets() > 0 || force.getNumExceptionChargeOffsets() > 0);
     if (hasOffsets)
         paramsDefines["HAS_OFFSETS"] = "1";
-    if (force.getNumParticleParameterOffsets() > 0)
+    if (force.getNumParticleChargeOffsets() > 0)
         paramsDefines["HAS_PARTICLE_OFFSETS"] = "1";
-    if (force.getNumExceptionParameterOffsets() > 0)
+    if (force.getNumExceptionChargeOffsets() > 0)
         paramsDefines["HAS_EXCEPTION_OFFSETS"] = "1";
     if (usePosqCharges)
         paramsDefines["USE_POSQ_CHARGES"] = "1";
@@ -510,15 +510,15 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         computeBondsKernel = cl::Kernel(bondProgram, "computeBonds");
     }
 
-    // Initialize parameter offsets.
+    // Initialize charge offsets.
 
     vector<vector<mm_float2> > particleOffsetVec(force.getNumParticles());
     vector<vector<mm_float2> > exceptionOffsetVec(numExceptions);
-    for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumParticleChargeOffsets(); i++) {
         string param;
         int particle;
         double charge;
-        force.getParticleParameterOffset(i, param, particle, charge);
+        force.getParticleChargeOffset(i, param, particle, charge);
         auto paramPos = find(paramNames.begin(), paramNames.end(), param);
         int paramIndex;
         if (paramPos == paramNames.end()) {
@@ -529,11 +529,11 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             paramIndex = paramPos-paramNames.begin();
         particleOffsetVec[particle].push_back(mm_float2(charge, paramIndex));
     }
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumExceptionChargeOffsets(); i++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
+        force.getExceptionChargeOffset(i, param, exception, charge);
         int index = exceptionIndex[exception];
         if (index < startIndex || index >= endIndex)
             continue;
@@ -548,7 +548,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exceptionOffsetVec[index-startIndex].push_back(mm_float2(charge, paramIndex));
     }
     paramValues.resize(paramNames.size(), 0.0);
-    particleParamOffsets.initialize<mm_float2>(cl, max(force.getNumParticleParameterOffsets(), 1), "particleParamOffsets");
+    particleParamOffsets.initialize<mm_float2>(cl, max(force.getNumParticleChargeOffsets(), 1), "particleParamOffsets");
     particleOffsetIndices.initialize<cl_int>(cl, cl.getPaddedNumAtoms()+1, "particleOffsetIndices");
     vector<cl_int> particleOffsetIndicesVec, exceptionOffsetIndicesVec;
     vector<mm_float2> p, e;
@@ -565,7 +565,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             e.push_back(exceptionOffsetVec[i][j]);
     }
     exceptionOffsetIndicesVec.push_back(e.size());
-    if (force.getNumParticleParameterOffsets() > 0) {
+    if (force.getNumParticleChargeOffsets() > 0) {
         particleParamOffsets.upload(p);
         particleOffsetIndices.upload(particleOffsetIndicesVec);
     }
@@ -858,11 +858,11 @@ void OpenCLCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& contex
     if (force.getNumParticles() != cl.getNumAtoms())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
     set<int> exceptionsWithOffsets;
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumExceptionChargeOffsets(); i++) {
         string param;
         int exception;
         double charge;
-        force.getExceptionParameterOffset(i, param, exception, charge);
+        force.getExceptionChargeOffset(i, param, exception, charge);
         exceptionsWithOffsets.insert(exception);
     }
     vector<int> exceptions;

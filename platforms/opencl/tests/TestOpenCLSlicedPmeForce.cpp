@@ -61,7 +61,7 @@ void testParallelComputation() {
             }
             else if (delta.dot(delta) < 0.2) {
                 int index = force->addException(i, j, 0.5);
-                force->addExceptionParameterOffset("scale", index, 0.5);
+                force->addExceptionChargeOffset("scale", index, 0.5);
             }
         }
     

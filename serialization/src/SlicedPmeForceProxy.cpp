@@ -73,19 +73,19 @@ void SlicedPmeForceProxy::serialize(const void* object, SerializationNode& node)
         couplingParams.createChildNode("couplingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2);
     }
     SerializationNode& particleOffsets = node.createChildNode("ParticleOffsets");
-    for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumParticleChargeOffsets(); i++) {
         int particle;
         double chargeScale;
         string parameter;
-        force.getParticleParameterOffset(i, parameter, particle, chargeScale);
+        force.getParticleChargeOffset(i, parameter, particle, chargeScale);
         particleOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("particle", particle).setDoubleProperty("q", chargeScale);
     }
     SerializationNode& exceptionOffsets = node.createChildNode("ExceptionOffsets");
-    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < force.getNumExceptionChargeOffsets(); i++) {
         int exception;
         double chargeProdScale;
         string parameter;
-        force.getExceptionParameterOffset(i, parameter, exception, chargeProdScale);
+        force.getExceptionChargeOffset(i, parameter, exception, chargeProdScale);
         exceptionOffsets.createChildNode("Offset").setStringProperty("parameter", parameter).setIntProperty("exception", exception).setDoubleProperty("q", chargeProdScale);
     }
     SerializationNode& particles = node.createChildNode("Particles");
@@ -129,10 +129,10 @@ void* SlicedPmeForceProxy::deserialize(const SerializationNode& node) const {
             force->addCouplingParameter(parameter.getStringProperty("parameter"), parameter.getIntProperty("subset1"), parameter.getIntProperty("subset2"));
         const SerializationNode& particleOffsets = node.getChildNode("ParticleOffsets");
         for (auto& offset : particleOffsets.getChildren())
-            force->addParticleParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"));
+            force->addParticleChargeOffset(offset.getStringProperty("parameter"), offset.getIntProperty("particle"), offset.getDoubleProperty("q"));
         const SerializationNode& exceptionOffsets = node.getChildNode("ExceptionOffsets");
         for (auto& offset : exceptionOffsets.getChildren())
-            force->addExceptionParameterOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"));
+            force->addExceptionChargeOffset(offset.getStringProperty("parameter"), offset.getIntProperty("exception"), offset.getDoubleProperty("q"));
         force->setExceptionsUsePeriodicBoundaryConditions(node.getIntProperty("exceptionsUsePeriodic"));
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())

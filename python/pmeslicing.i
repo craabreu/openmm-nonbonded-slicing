@@ -41,12 +41,12 @@ from openmm import unit
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getParticleParameterOffset(
+%pythonappend PmeSlicing::SlicedPmeForce::getParticleChargeOffset(
     int index, std::string& parameter, int& particleIndex, double& chargeScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getExceptionParameterOffset(
+%pythonappend PmeSlicing::SlicedPmeForce::getExceptionChargeOffset(
     int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
 %}
@@ -76,8 +76,8 @@ public:
     int getNumExceptions() const;
     int getNumGlobalParameters() const;
     int getNumCouplingParameters() const;
-    int getNumParticleParameterOffsets() const;
-    int getNumExceptionParameterOffsets() const;
+    int getNumParticleChargeOffsets() const;
+    int getNumExceptionChargeOffsets() const;
     double getCutoffDistance() const;
     void setCutoffDistance(double distance);
     double getEwaldErrorTolerance() const;
@@ -138,28 +138,28 @@ public:
     %clear int& subset2;
 
     void setCouplingParameter(int index, const std::string& parameter, int subset1, int subset2);
-    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale);
+    int addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale);
 
     %apply std::string& OUTPUT {std::string& parameter};
     %apply int& OUTPUT {int& particleIndex};
     %apply double& OUTPUT {double& chargeScale};
-    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
+    void getParticleChargeOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
     %clear std::string& parameter;
     %clear int& particleIndex;
     %clear double& chargeScale;
 
-    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
-    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
+    void setParticleChargeOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
+    int addExceptionChargeOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
 
     %apply std::string& OUTPUT {std::string& parameter};
     %apply int& OUTPUT {int& exceptionIndex};
     %apply double& OUTPUT {double& chargeProdScale};
-    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
+    void getExceptionChargeOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
     %clear std::string& parameter;
     %clear int& exceptionIndex;
     %clear double& chargeProdScale;
 
-    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
+    void setExceptionChargeOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     int getReciprocalSpaceForceGroup() const;
     void setReciprocalSpaceForceGroup(int group);
     bool getIncludeDirectSpace() const;

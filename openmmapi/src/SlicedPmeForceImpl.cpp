@@ -84,26 +84,26 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
         exceptions[particle[0]].insert(particle[1]);
         exceptions[particle[1]].insert(particle[0]);
     }
-    for (int i = 0; i < owner.getNumParticleParameterOffsets(); i++) {
+    for (int i = 0; i < owner.getNumParticleChargeOffsets(); i++) {
         string parameter;
         int particleIndex;
         double chargeScale;
-        owner.getParticleParameterOffset(i, parameter, particleIndex, chargeScale);
+        owner.getParticleChargeOffset(i, parameter, particleIndex, chargeScale);
         if (particleIndex < 0 || particleIndex >= owner.getNumParticles()) {
             stringstream msg;
-            msg << "SlicedPmeForce: Illegal particle index for a particle parameter offset: ";
+            msg << "SlicedPmeForce: Illegal particle index for a particle charge offset: ";
             msg << particleIndex;
             throw OpenMMException(msg.str());
         }
     }
-    for (int i = 0; i < owner.getNumExceptionParameterOffsets(); i++) {
+    for (int i = 0; i < owner.getNumExceptionChargeOffsets(); i++) {
         string parameter;
         int exceptionIndex;
         double chargeScale;
-        owner.getExceptionParameterOffset(i, parameter, exceptionIndex, chargeScale);
+        owner.getExceptionChargeOffset(i, parameter, exceptionIndex, chargeScale);
         if (exceptionIndex < 0 || exceptionIndex >= owner.getNumExceptions()) {
             stringstream msg;
-            msg << "SlicedPmeForce: Illegal exception index for an exception parameter offset: ";
+            msg << "SlicedPmeForce: Illegal exception index for an exception charge offset: ";
             msg << exceptionIndex;
             throw OpenMMException(msg.str());
         }

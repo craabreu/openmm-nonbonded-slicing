@@ -430,7 +430,7 @@ void testChangingParameters(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testParameterOffsets(Platform& platform) {
+void testChargeOffsets(Platform& platform) {
     const double L = 20.0;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
@@ -465,9 +465,9 @@ void testParameterOffsets(Platform& platform) {
     force->addException(0, 1, 1.0);
     force->addGlobalParameter("p1", 0.0);
     force->addGlobalParameter("p2", 1.0);
-    force->addParticleParameterOffset("p1", 0, 3.0);
-    force->addParticleParameterOffset("p2", 1, 1.0);
-    force->addExceptionParameterOffset("p1", 1, 0.5);
+    force->addParticleChargeOffset("p1", 0, 3.0);
+    force->addParticleChargeOffset("p2", 1, 1.0);
+    force->addExceptionChargeOffset("p1", 1, 0.5);
     system.addForce(force);
 
     vector<Vec3> positions(5);
@@ -688,7 +688,7 @@ int main(int argc, char* argv[]) {
         testTriclinic(platform);
         testLargeSystem(platform);
         testChangingParameters(platform);
-        testParameterOffsets(platform);
+        testChargeOffsets(platform);
         testEwaldExceptions(platform);
         testDirectAndReciprocal(platform);
         testNonbondedCouplingParameters(platform, false);

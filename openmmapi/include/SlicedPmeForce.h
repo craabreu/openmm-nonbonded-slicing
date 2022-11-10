@@ -82,7 +82,7 @@ namespace PmeSlicing {
  * example, a titratable group might have two states it can exist in, each described by a
  * different set of parameters for the atoms that make up the group. You might then want to
  * smoothly interpolate between the two states. This is done by first calling addGlobalParameter()
- * to define a Context parameter, then addParticleParameterOffset() to create a "parameter offset"
+ * to define a Context parameter, then addParticleChargeOffset() to create a "charge offset"
  * that depends on the Context parameter. Each offset defines the following:
  *
  * <ul>
@@ -104,7 +104,7 @@ namespace PmeSlicing {
  * where the "base" values are the ones specified by addParticle() and "param" is the current value
  * of the Context parameter. A single Context parameter can apply offsets to multiple particles,
  * and multiple parameters can be used to apply offsets to the same particle.  Parameters can also
- * be used to modify exceptions in exactly the same way by calling addExceptionParameterOffset().
+ * be used to modify exceptions in exactly the same way by calling addExceptionChargeOffset().
  */
 
 class OPENMM_EXPORT_PMESLICING SlicedPmeForce : public Force {
@@ -148,15 +148,15 @@ public:
         return globalParameters.size();
     }
     /**
-     * Get the number of particles parameter offsets that have been added.
+     * Get the number of particles charge offsets that have been added.
      */
-    int getNumParticleParameterOffsets() const {
+    int getNumParticleChargeOffsets() const {
         return particleOffsets.size();
     }
     /**
-     * Get the number of exception parameter offsets that have been added.
+     * Get the number of exception charge offsets that have been added.
      */
-    int getNumExceptionParameterOffsets() const {
+    int getNumExceptionChargeOffsets() const {
         return exceptionOffsets.size();
     }
     /**
@@ -329,7 +329,7 @@ public:
      */
     void createExceptionsFromBonds(const std::vector<std::pair<int, int> >& bonds, double coulomb14Scale, double lj14Scale);
     /**
-     * Add a new global parameter that parameter offsets may depend on.  The default value provided
+     * Add a new global parameter that charge offsets may depend on.  The default value provided
      * to this method is the initial value of the parameter in newly created Contexts.  You can
      * change the value at any time by calling setParameter() on the Context.
      * 
@@ -395,7 +395,7 @@ public:
      * Modify an added coupling parameter.
      *
      * @param index     the index of the coupling parameter to modify, as returned by
-     *                      addExceptionParameterOffset()
+     *                      addExceptionChargeOffset()
      * @param parameter the name of the global parameter.  It must have already been added
      * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
      * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
@@ -412,25 +412,25 @@ public:
      *                        particle's charge
      * @return the index of the offset that was added
      */
-    int addParticleParameterOffset(const std::string& parameter, int particleIndex, double chargeScale);
+    int addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Get the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
      * 
      * @param index           the index of the offset to query, as returned by
-     *                        addParticleParameterOffset()
+     *                        addParticleChargeOffset()
      * @param parameter       the name of the global parameter
      * @param particleIndex   the index of the particle whose parameters are affected
      * @param chargeScale     this value multiplied by the parameter value is added to the
      *                        particle's charge
      */
-    void getParticleParameterOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
+    void getParticleChargeOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
     /**
      * Set the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
      * 
      * @param index           the index of the offset to modify, as returned by
-     *                        addParticleParameterOffset()
+     *                        addParticleChargeOffset()
      * @param parameter       the name of the global parameter. It must have already been added
      *                        with addGlobalParameter(). Its value can be modified at any time by
      *                        calling Context::setParameter().
@@ -438,7 +438,7 @@ public:
      * @param chargeScale     this value multiplied by the parameter value is added to the
      *                        particle's charge
      */
-    void setParticleParameterOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
+    void setParticleChargeOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Add an offset to the parameters of a particular exception, based on a global parameter.
      * 
@@ -450,25 +450,25 @@ public:
      *                        exception's charge product
      * @return the index of the offset that was added
      */
-    int addExceptionParameterOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
+    int addExceptionChargeOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get the offset added to the parameters of a particular exception, based on a global
      * parameter.
      * 
      * @param index           the index of the offset to query, as returned by
-     *                        addExceptionParameterOffset()
+     *                        addExceptionChargeOffset()
      * @param parameter       the name of the global parameter
      * @param exceptionIndex  the index of the exception whose parameters are affected
      * @param chargeProdScale this value multiplied by the parameter value is added to the
      *                        exception's charge product
      */
-    void getExceptionParameterOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
+    void getExceptionChargeOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
     /**
      * Set the offset added to the parameters of a particular exception, based on a global
      * parameter.
      * 
      * @param index           the index of the offset to modify, as returned by
-     *                        addExceptionParameterOffset()
+     *                        addExceptionChargeOffset()
      * @param parameter       the name of the global parameter.  It must have already been added
      *                        with addGlobalParameter(). Its value can be modified at any time by
      *                        calling Context::setParameter().
@@ -476,7 +476,7 @@ public:
      * @param chargeProdScale this value multiplied by the parameter value is added to the
      *                        exception's charge product
      */
-    void setExceptionParameterOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
+    void setExceptionChargeOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get the force group that reciprocal space interactions for Ewald or PME are included in.  This allows multiple
      * time step integrators to evaluate direct and reciprocal space interactions at different intervals: getForceGroup()
@@ -636,7 +636,7 @@ public:
 };
 
 /**
- * This is an internal class used to record information about a particle parameter offset.
+ * This is an internal class used to record information about a particle charge offset.
  * @private
  */
 class SlicedPmeForce::ParticleOffsetInfo {
@@ -653,7 +653,7 @@ public:
 };
 
 /**
- * This is an internal class used to record information about an exception parameter offset.
+ * This is an internal class used to record information about an exception charge offset.
  * @private
  */
 class SlicedPmeForce::ExceptionOffsetInfo {
