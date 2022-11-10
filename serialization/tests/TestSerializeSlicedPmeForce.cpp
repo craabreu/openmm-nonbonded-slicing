@@ -3,8 +3,6 @@
  *                             ==================                             *
  *                                                                            *
  * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * An OpenMM plugin for Smooth Particle Mesh Ewald electrostatic calculations *
- * with multiple coupling parameters.                                         *
  * with multiple coupling parameters.                                         *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
