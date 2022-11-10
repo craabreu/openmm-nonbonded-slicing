@@ -50,6 +50,25 @@ def assert_forces_and_energy(context):
     ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL)
 
 
+@pytest.mark.parametrize('platformName', ['Reference', 'CUDA', 'OpenCL'])
+def testParameterCollapse(platformName):
+    system = mm.System()
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    force = plugin.SlicedPmeForce()
+    force.addParticle(1.5)
+    force.addParticle(-1.5)
+    force.addGlobalParameter("param", 1)
+    force.addCouplingParameter("param", 0, 0)
+    force.addParticleChargeOffset("param", 0, 1.0)
+    system.addForce(force)
+    integrator = mm.VerletIntegrator(0.01)
+    platform = mm.Platform.getPlatformByName(platformName)
+    with pytest.raises(Exception):
+        context = mm.Context(system, integrator, platform)
+
+
 @pytest.mark.parametrize('platformName, precision', cases, ids=ids)
 def testCoulomb(platformName, precision):
     system = mm.System()
@@ -75,9 +94,9 @@ def testCoulomb(platformName, precision):
     properties = {} if platformName == 'Reference' else {'Precision': precision}
     context = mm.Context(system, integrator, platform, properties)
 
-    assert nonbonded.getPMEParameters() == slicedNonbonded.getPMEParameters()   
+    assert nonbonded.getPMEParameters() == slicedNonbonded.getPMEParameters()
     assert nonbonded.getPMEParametersInContext(context) == slicedNonbonded.getPMEParametersInContext(context)
- 
+
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
     assert_forces_and_energy(context)

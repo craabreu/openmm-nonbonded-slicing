@@ -21,6 +21,7 @@
 #include <map>
 #include <sstream>
 #include <algorithm>
+#include <iostream>
 
 using namespace PmeSlicing;
 using namespace OpenMM;
@@ -40,6 +41,7 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
     const System& system = context.getSystem();
     if (owner.getNumParticles() != system.getNumParticles())
         throw OpenMMException("SlicedPmeForce must have exactly as many particles as the System it belongs to.");
+
     vector<set<int> > exceptions(owner.getNumParticles());
     for (int i = 0; i < owner.getNumExceptions(); i++) {
         int particle[2];
@@ -64,6 +66,7 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
         exceptions[particle[0]].insert(particle[1]);
         exceptions[particle[1]].insert(particle[0]);
     }
+
     for (int i = 0; i < owner.getNumParticleChargeOffsets(); i++) {
         string parameter;
         int particleIndex;
@@ -76,6 +79,7 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
             throw OpenMMException(msg.str());
         }
     }
+
     for (int i = 0; i < owner.getNumExceptionChargeOffsets(); i++) {
         string parameter;
         int exceptionIndex;
@@ -88,11 +92,31 @@ void SlicedPmeForceImpl::initialize(ContextImpl& context) {
             throw OpenMMException(msg.str());
         }
     }
+
     Vec3 boxVectors[3];
     system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
     double cutoff = owner.getCutoffDistance();
     if (cutoff > 0.5*boxVectors[0][0] || cutoff > 0.5*boxVectors[1][1] || cutoff > 0.5*boxVectors[2][2])
         throw OpenMMException("SlicedPmeForce: The cutoff distance cannot be greater than half the periodic box size.");
+
+    set<string> offsetParams;
+    string parameter;
+    int particle, subset1, subset2;
+    double value;
+    for (int index = 0; index < owner.getNumParticleChargeOffsets(); index++) {
+        owner.getParticleChargeOffset(index, parameter, particle, value);
+        offsetParams.insert(parameter);
+    }
+    for (int index = 0; index < owner.getNumExceptionChargeOffsets(); index++) {
+        owner.getExceptionChargeOffset(index, parameter, particle, value);
+        offsetParams.insert(parameter);
+    }
+    for (int index = 0; index < owner.getNumCouplingParameters(); index++) {
+        owner.getCouplingParameter(index, parameter, subset1, subset2);
+        if (offsetParams.find(parameter) != offsetParams.end())
+            throw OpenMMException("SlicedPmeForce: A coupling parameter cannot be used for charge offset.");
+    }
+
     kernel.getAs<CalcSlicedPmeForceKernel>().initialize(context.getSystem(), owner);
 }
 
