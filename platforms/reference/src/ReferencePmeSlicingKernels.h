@@ -28,7 +28,7 @@ namespace PmeSlicing {
  */
 class ReferenceCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    ReferenceCalcSlicedPmeForceKernel(string name, const OpenMM::Platform& platform) : CalcSlicedPmeForceKernel(name, platform) {
+    ReferenceCalcSlicedPmeForceKernel(string name, const OpenMM::Platform& platform) : CalcSlicedPmeForceKernel(name, platform), neighborList(NULL) {
     }
     ~ReferenceCalcSlicedPmeForceKernel();
     /**
