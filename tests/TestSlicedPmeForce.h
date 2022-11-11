@@ -651,10 +651,6 @@ void testNonbondedSwitchingParameters(Platform& platform, bool exceptions) {
     state2 = context2.getState(State::Energy | State::Forces);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
-
-    // Coupling/offset parameter collapse:
-    slicedNonbonded->addParticleChargeOffset("lambda", 0, 1.0);
-    context2.reinitialize();
 }
 
 void runPlatformTests();
