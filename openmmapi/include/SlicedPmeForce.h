@@ -405,7 +405,7 @@ public:
      * @param index     the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives()
      * @return the parameter name
      */
-    const std::string& getSwitchingParameterDerivative(int index) const;
+    const std::string& getSwitchingParameterDerivativeName(int index) const;
     /**
      * Set the name of the global parameter with respect to which this Force should compute the
      * derivative of the energy.
@@ -601,7 +601,7 @@ private:
     std::vector<SwitchingParameterInfo> switchingParameters;
     std::vector<double> switchingParameter;
 
-    std::vector<int> switchingParameterDerivatives;
+    std::vector<int> switchParamDerivatives;
 };
 
 /**
@@ -692,15 +692,15 @@ public:
  */
 class SlicedPmeForce::SwitchingParameterInfo {
 public:
-    int globalIndex, subset1, subset2, slice;
+    int globalParamIndex, subset1, subset2, slice;
     SwitchingParameterInfo() {
-        globalIndex = subset1 = subset2 = slice = -1;
+        globalParamIndex = subset1 = subset2 = slice = -1;
     }
-    SwitchingParameterInfo(int globalIndex, int subset1, int subset2) : globalIndex(globalIndex) {
+    SwitchingParameterInfo(int globalParamIndex, int subset1, int subset2) : globalParamIndex(globalParamIndex) {
+        this->subset1 = subset1;
+        this->subset2 = subset2;
         int i = std::min(subset1, subset2);
         int j = std::max(subset1, subset2);
-        this->subset1 = i;
-        this->subset2 = j;
         this->slice = j*(j+1)/2+i;
     }
 };
