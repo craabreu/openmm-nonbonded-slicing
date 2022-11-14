@@ -85,8 +85,11 @@ private:
 
     int numSubsets, numSlices;
     vector<int> subsets;
-    vector<string> sliceSwitchingParameter;
+    vector<int> sliceSwitchParamIndex;
+    vector<string> switchParamName;
     vector<double> sliceLambda;
+
+    vector<int> sliceSwitchParamDerivative;
 };
 
 } // namespace PmeSlicing

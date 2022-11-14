@@ -21,6 +21,8 @@
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <cstring>
 #include <numeric>
+#include <vector>
+#include <algorithm>
 #include <iostream>
 
 #include "internal/ReferenceCoulombIxn.h"
@@ -45,6 +47,11 @@ static RealVec* extractBoxVectors(ContextImpl& context) {
     return (RealVec*) data->periodicBoxVectors;
 }
 
+static map<string, double>& extractEnergyParameterDerivatives(ContextImpl& context) {
+    ReferencePlatform::PlatformData* data = reinterpret_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
+    return *data->energyParameterDerivatives;
+}
+
 ReferenceCalcSlicedPmeForceKernel::~ReferenceCalcSlicedPmeForceKernel() {
     if (neighborList != NULL)
         delete neighborList;
@@ -54,16 +61,32 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
     numSlices = numSubsets*(numSubsets+1)/2;
+    sliceLambda.resize(numSlices);
+
     subsets.resize(numParticles);
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
-    sliceLambda.resize(numSlices);
-    sliceSwitchingParameter.resize(numSlices, "");
+
+    vector<string> requestedDerivatives;
+    for (int index = 0; index < force.getNumSwitchingParameterDerivatives(); index++) {
+        string parameter = force.getSwitchingParameterDerivativeName(index);
+        requestedDerivatives.push_back(parameter);
+    }
+
+    sliceSwitchParamIndex.resize(numSlices, -1);
+    sliceSwitchParamDerivative.resize(numSlices, -1);
     for (int index = 0; index < force.getNumSwitchingParameters(); index++) {
         string parameter;
         int i, j;
         force.getSwitchingParameter(index, parameter, i, j);
-        sliceSwitchingParameter[j*(j+1)/2+i] = parameter;
+        switchParamName.push_back(parameter);
+        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        sliceSwitchParamIndex[slice] = index;
+        auto begin = requestedDerivatives.begin();
+        auto end = requestedDerivatives.end();
+        auto position = find(begin, end, parameter);
+        if (position != end)
+            sliceSwitchParamDerivative[slice] = position-begin;
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -177,7 +200,14 @@ double ReferenceCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool inc
         }
         for (int slice = 0; slice < numSlices; slice++)
             refBondForce.calculateForce(num14[slice], bonded14IndexArray[slice], posData, bonded14ParamArray[slice],
-                                        forceData, includeEnergy ? &sliceEnergies[slice] : NULL, nonbonded14);
+                                        forceData, &sliceEnergies[slice], nonbonded14);
+    }
+
+    map<string, double>& energyParamDerivs = extractEnergyParameterDerivatives(context);
+    for (int slice = 0; slice < numSlices; slice++) {
+        int index = sliceSwitchParamDerivative[slice];
+        if (index != -1)
+            energyParamDerivs[switchParamName[index]] += sliceEnergies[slice];
     }
 
     double energy = 0;
@@ -264,8 +294,8 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
     // Compute switching parameter values.
 
     for (int slice = 0; slice < numSlices; slice++) {
-        string parameter = sliceSwitchingParameter[slice];
-        sliceLambda[slice] = parameter == "" ? 1.0 : context.getParameter(parameter);
+        int index = sliceSwitchParamIndex[slice];
+        sliceLambda[slice] = index == -1 ? 1.0 : context.getParameter(switchParamName[index]);
     }
 
     // Compute exception parameters.
