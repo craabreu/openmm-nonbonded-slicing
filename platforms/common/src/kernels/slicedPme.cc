@@ -189,7 +189,8 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
     }
 }
 
-KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT pmeEnergyBuffer,
+KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT energyBuffer,
+                      GLOBAL const real* RESTRICT sliceLambda,
                       GLOBAL const real* RESTRICT pmeBsplineModuliX,
                       GLOBAL const real* RESTRICT pmeBsplineModuliY,
                       GLOBAL const real* RESTRICT pmeBsplineModuliZ,
@@ -235,13 +236,16 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         }
     }
 
+#if USE_PME_STREAM
+    energyBuffer[GLOBAL_ID] = 0;
+#endif
     for (int j = 0; j < NUM_SLICES; j++)
-        pmeEnergyBuffer[GLOBAL_ID*NUM_SLICES+j] = recipScaleFactor*energy[j];
+        energyBuffer[GLOBAL_ID] += sliceLambda[j]*recipScaleFactor*energy[j];
 }
 
 KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT pmeEnergyBuffer,
                           GLOBAL const real4* RESTRICT posq, GLOBAL const real* RESTRICT charge,
-                          GLOBAL const int* RESTRICT subsets) {
+                          GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT sliceLambda) {
 
     mixed sumSquareCharges[NUM_SUBSETS] = { 0 };
     for (int atom = GLOBAL_ID; atom < NUM_ATOMS; atom += GLOBAL_SIZE) {
@@ -253,7 +257,7 @@ KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT pmeEnergyBuffer,
         sumSquareCharges[subsets[atom]] += q*q;
     }
     for (int j = 0; j < NUM_SUBSETS; j++)
-        pmeEnergyBuffer[GLOBAL_ID*NUM_SLICES+j*(j+3)/2] -= EWALD_SELF_ENERGY_SCALE*sumSquareCharges[j];
+        pmeEnergyBuffer[GLOBAL_ID] -= sliceLambda[j*(j+3)/2]*EWALD_SELF_ENERGY_SCALE*sumSquareCharges[j];
 }
 
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
@@ -363,13 +367,7 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-                GLOBAL const real* RESTRICT sliceLambda, int bufferSize) {
-    for (int index = GLOBAL_ID; index < bufferSize; index += GLOBAL_SIZE) {
-        int offset = index*NUM_SLICES;
-        real energy = 0.0;
-        for (int j = 0; j < NUM_SLICES; j++)
-            energy += sliceLambda[j]*pmeEnergyBuffer[offset+j];
-        energyBuffer[index] += energy;
-    }
+KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
+    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
+        energyBuffer[i] += pmeEnergyBuffer[i];
 }

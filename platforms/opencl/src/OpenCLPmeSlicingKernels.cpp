@@ -119,14 +119,13 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, int bufferSize, int forceGroup) :
-        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, int forceGroup) :
+        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(pmeEnergyBuffer.getSize()), forceGroup(forceGroup) {}
     void setKernel(cl::Kernel kernel) {
         addEnergyKernel = kernel;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(3, bufferSize);
+        addEnergyKernel.setArg<cl_int>(2, bufferSize);
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (includeEnergy && (groups&(1<<forceGroup)) != 0)
@@ -137,7 +136,6 @@ private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
-    OpenCLArray& sliceLambda;
     int bufferSize;
     int forceGroup;
 };
@@ -303,8 +301,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
             cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
             cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
+            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, recipForceGroup));
         }
-        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
 
         // Initialize the b-spline moduli.
 
@@ -633,16 +631,18 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<cl::Buffer>(2, pmeBsplineModuliY.getDeviceBuffer());
             pmeConvolutionKernel.setArg<cl::Buffer>(3, pmeBsplineModuliZ.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyBuffer.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliX.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliY.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(5, pmeBsplineModuliZ.getDeviceBuffer());
             if (hasOffsets) {
                 pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, charges.getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(4, sliceLambda.getDeviceBuffer());
             }
             pmeInterpolateForceKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
@@ -654,7 +654,8 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
+            if (usePmeQueue)
+                addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
        }
     }
 
@@ -772,17 +773,17 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<mm_double4>(4, recipBoxVectors[0]);
             pmeConvolutionKernel.setArg<mm_double4>(5, recipBoxVectors[1]);
             pmeConvolutionKernel.setArg<mm_double4>(6, recipBoxVectors[2]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(5, recipBoxVectors[0]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(6, recipBoxVectors[1]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(7, recipBoxVectors[2]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(6, recipBoxVectors[0]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(7, recipBoxVectors[1]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(8, recipBoxVectors[2]);
         }
         else {
             pmeConvolutionKernel.setArg<mm_float4>(4, recipBoxVectorsFloat[0]);
             pmeConvolutionKernel.setArg<mm_float4>(5, recipBoxVectorsFloat[1]);
             pmeConvolutionKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[2]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(5, recipBoxVectorsFloat[0]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[0]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[1]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(8, recipBoxVectorsFloat[2]);
         }
         if (includeEnergy) {
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
