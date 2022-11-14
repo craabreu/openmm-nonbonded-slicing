@@ -73,7 +73,7 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
         requestedDerivatives.push_back(parameter);
     }
 
-    sliceSwitchParamIndex.resize(numSlices, -1);
+    sliceSwitchParamIndices.resize(numSlices, -1);
     sliceSwitchParamDerivative.resize(numSlices, -1);
     for (int index = 0; index < force.getNumSwitchingParameters(); index++) {
         string parameter;
@@ -81,7 +81,7 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
         force.getSwitchingParameter(index, parameter, i, j);
         switchParamName.push_back(parameter);
         int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
-        sliceSwitchParamIndex[slice] = index;
+        sliceSwitchParamIndices[slice] = index;
         auto begin = requestedDerivatives.begin();
         auto end = requestedDerivatives.end();
         auto position = find(begin, end, parameter);
@@ -294,7 +294,7 @@ void ReferenceCalcSlicedPmeForceKernel::computeParameters(ContextImpl& context) 
     // Compute switching parameter values.
 
     for (int slice = 0; slice < numSlices; slice++) {
-        int index = sliceSwitchParamIndex[slice];
+        int index = sliceSwitchParamIndices[slice];
         sliceLambda[slice] = index == -1 ? 1.0 : context.getParameter(switchParamName[index]);
     }
 

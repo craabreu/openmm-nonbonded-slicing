@@ -85,7 +85,7 @@ private:
 
     int numSubsets, numSlices;
     vector<int> subsets;
-    vector<int> sliceSwitchParamIndex;
+    vector<int> sliceSwitchParamIndices;
     vector<string> switchParamName;
     vector<double> sliceLambda;
 

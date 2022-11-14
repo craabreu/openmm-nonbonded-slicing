@@ -145,7 +145,7 @@ private:
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;
-    std::vector<int> sliceCoupParamIndex;
+    std::vector<int> sliceSwitchParamIndices;
 
     std::vector<float> floatVector(std::vector<double> input) {
         std::vector<float> output(input.begin(), input.end());

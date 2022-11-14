@@ -177,6 +177,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
     usePosqCharges = cu.requestPosqCharges();
+    size_t sizeOfReal = cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
+    size_t sizeOfMixed = (cu.getUseMixedPrecision() ? sizeof(double) : sizeOfReal);
 
     alpha = 0;
     ewaldSelfEnergy = 0.0;
@@ -203,7 +205,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Initialize switching parameters.
 
-    sliceCoupParamIndex.resize(numSlices, -1);
+    sliceSwitchParamIndices.resize(numSlices, -1);
     for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         string param;
         int s1, s2;
@@ -213,17 +215,14 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             switchParamNames.push_back(param);
             switchParamValues.push_back(1.0);
         }
-        sliceCoupParamIndex[s2*(s2+1)/2+s1] = index;
+        sliceSwitchParamIndices[s2*(s2+1)/2+s1] = index;
     }
     sliceLambdaVec.resize(numSlices, 1.0);
-    if (cu.getUseDoublePrecision()) {
-        sliceLambda.initialize<double>(cu, numSlices, "sliceLambda");
+    sliceLambda.initialize(cu, numSlices, sizeOfReal, "sliceLambda");
+    if (cu.getUseDoublePrecision())
         sliceLambda.upload(sliceLambdaVec);
-    }
-    else {
-        sliceLambda.initialize<float>(cu, numSlices, "sliceLambda");
+    else
         sliceLambda.upload(floatVector(sliceLambdaVec));
-    }
 
     // Compute the PME parameters.
 
@@ -286,18 +285,16 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
         // Create required data structures.
 
-        int elementSize = (cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
         int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
-        pmeGrid1.initialize(cu, gridElements, 2*elementSize, "pmeGrid1");
-        pmeGrid2.initialize(cu, gridElements, 2*elementSize, "pmeGrid2");
+        pmeGrid1.initialize(cu, gridElements, 2*sizeOfReal, "pmeGrid1");
+        pmeGrid2.initialize(cu, gridElements, 2*sizeOfReal, "pmeGrid2");
         cu.addAutoclearBuffer(pmeGrid2);
-        pmeBsplineModuliX.initialize(cu, gridSizeX, elementSize, "pmeBsplineModuliX");
-        pmeBsplineModuliY.initialize(cu, gridSizeY, elementSize, "pmeBsplineModuliY");
-        pmeBsplineModuliZ.initialize(cu, gridSizeZ, elementSize, "pmeBsplineModuliZ");
+        pmeBsplineModuliX.initialize(cu, gridSizeX, sizeOfReal, "pmeBsplineModuliX");
+        pmeBsplineModuliY.initialize(cu, gridSizeY, sizeOfReal, "pmeBsplineModuliY");
+        pmeBsplineModuliZ.initialize(cu, gridSizeZ, sizeOfReal, "pmeBsplineModuliZ");
         pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
-        int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
         int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
-        pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
+        pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, sizeOfMixed, "pmeEnergyBuffer");
         cu.clearBuffer(pmeEnergyBuffer);
         // cu.addAutoclearBuffer(pmeEnergyBuffer);
         sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
@@ -395,16 +392,15 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Add the interaction to the default nonbonded kernel.
 
-    charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
+    charges.initialize(cu, cu.getPaddedNumAtoms(), sizeOfReal, "charges");
     baseParticleCharges.initialize<float>(cu, cu.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
 
     if (force.getIncludeDirectSpace()) {
         CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
 
-        int energyElementSize = cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
         int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
-        pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
+        pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, sizeOfMixed, "pairwiseEnergyBuffer");
         // cu.clearBuffer(pairwiseEnergyBuffer);
         // cu.addAutoclearBuffer(pairwiseEnergyBuffer);
 
@@ -564,7 +560,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         exceptionParamOffsets.upload(e);
         exceptionOffsetIndices.upload(exceptionOffsetIndicesVec);
     }
-    globalParams.initialize(cu, max((int) paramValues.size(), 1), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "globalParams");
+    globalParams.initialize(cu, max((int) paramValues.size(), 1), sizeOfReal, "globalParams");
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
     recomputeParams = true;
@@ -594,7 +590,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
     }
     if (switchParamChanged) {
         for (int slice = 0; slice < numSlices; slice++) {
-            int index = sliceCoupParamIndex[slice];
+            int index = sliceSwitchParamIndices[slice];
             if (index != -1)
                 sliceLambdaVec[slice] = switchParamValues[index];
         }
