@@ -435,8 +435,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     int startIndex = cu.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cu.getContextIndex()+1)*force.getNumExceptions()/numContexts;
     int numExclusions = endIndex-startIndex;
-    hasExclusions = numExclusions > 0;
-    if (hasExclusions) {
+    if (numExclusions > 0 && force.getIncludeDirectSpace()) {
+        exclusionPairs.resize(numExclusions);
         exclusionAtoms.initialize<int2>(cu, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cu, numExclusions, "exclusionSlices");
         exclusionChargeProds.initialize<float>(cu, numExclusions, "exclusionChargeProds");
@@ -446,12 +446,29 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             int atom1 = exclusions[k+startIndex].first;
             int atom2 = exclusions[k+startIndex].second;
             exclusionAtomsVec[k] = make_int2(atom1, atom2);
+            exclusionPairs[k] = (vector<int>) {atom1, atom2};
             int i = subsetVec[atom1];
             int j = subsetVec[atom2];
             exclusionSlicesVec[k] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         }
         exclusionAtoms.upload(exclusionAtomsVec);
         exclusionSlices.upload(exclusionSlicesVec);
+        CudaBondedUtilities* bonded = &cu.getBondedUtilities();
+        map<string, string> replacements;
+        replacements["NUM_ALL_DERIVS"] = cu.intToString(allDerivs.size());
+        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+        replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
+        replacements["CHARGE_PRODS"] = bonded->addArgument(exclusionChargeProds.getDevicePointer(), "float");
+        replacements["SLICES"] = bonded->addArgument(exclusionSlices.getDevicePointer(), "int");
+        replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDevicePointer(), "real");
+        if (hasDerivatives) {
+            for (string param : requestedDerivs)
+                bonded->addEnergyParameterDerivative(param);
+            replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
+        }
+        bonded->addInteraction(exclusionPairs, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
     }
 
     // Initialize the exceptions.
@@ -459,7 +476,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     startIndex = cu.getContextIndex()*exceptions.size()/numContexts;
     endIndex = (cu.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
-    if (numExceptions > 0) {
+    if (numExceptions > 0 && force.getIncludeDirectSpace()) {
         paramsDefines["HAS_EXCEPTIONS"] = "1";
         exceptionPairs.resize(numExceptions);
         exceptionAtoms.initialize<int2>(cu, numExceptions, "exceptionAtoms");
@@ -496,22 +513,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
                 bonded->addEnergyParameterDerivative(param);
             replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
         }
-        if (force.getIncludeDirectSpace())
-            bonded->addInteraction(exceptionPairs, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
-    }
-
-    if (hasExclusions) {
-        map<string, string> bondDefines;
-        bondDefines["NUM_EXCLUSIONS"] = cu.intToString(numExclusions);
-        bondDefines["NUM_EXCEPTIONS"] = cu.intToString(numExceptions);
-        bondDefines["NUM_SLICES"] = cu.intToString(numSlices);
-        bondDefines["EWALD_ALPHA"] = cu.doubleToString(alpha);
-        bondDefines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
-        bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-        bondDefines["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
-        CUmodule bondModule = cu.createModule(CudaPmeSlicingKernelSources::vectorOps+
-                                              CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
-        computeBondsKernel = cu.getKernel(bondModule, "computeBonds");
+        bonded->addInteraction(exceptionPairs, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
 
     // Initialize charge offsets.
@@ -669,20 +671,6 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         for (int j = 0; j < numSubsets; j++)
             ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
         recomputeParams = false;
-    }
-
-    // Do exclusion and exception calculations.
-
-    if (hasExclusions && includeDirect) {
-        void* computeBondsArgs[] = {
-            &cu.getPosq().getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &cu.getForce().getDevicePointer(),
-            cu.getPeriodicBoxSizePointer(), cu.getInvPeriodicBoxSizePointer(),
-            cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
-            &exclusionAtoms.getDevicePointer(), &exclusionSlices.getDevicePointer(), &exclusionChargeProds.getDevicePointer(),
-            &exceptionAtoms.getDevicePointer(), &exceptionSlices.getDevicePointer(), &exceptionChargeProds.getDevicePointer(),
-            &sliceLambda.getDevicePointer()
-        };
-        cu.executeKernel(computeBondsKernel, computeBondsArgs, exclusionChargeProds.getSize());
     }
 
     // Do reciprocal space calculations.

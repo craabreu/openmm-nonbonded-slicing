@@ -426,8 +426,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
     int numExclusions = endIndex-startIndex;
-    hasExclusions = numExclusions > 0;
-    if (hasExclusions) {
+    if (numExclusions > 0 && force.getIncludeDirectSpace()) {
+        exclusionPairs.resize(numExclusions);
         exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cl, numExclusions, "exclusionSlices");
         exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
@@ -437,12 +437,29 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             int atom1 = exclusions[k+startIndex].first;
             int atom2 = exclusions[k+startIndex].second;
             exclusionAtomsVec[k] = mm_int2(atom1, atom2);
+            exclusionPairs[k] = (vector<int>) {atom1, atom2};
             int i = subsetVec[atom1];
             int j = subsetVec[atom2];
             exclusionSlicesVec[k] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         }
         exclusionAtoms.upload(exclusionAtomsVec);
         exclusionSlices.upload(exclusionSlicesVec);
+        OpenCLBondedUtilities* bonded = &cl.getBondedUtilities();
+        map<string, string> replacements;
+        replacements["NUM_ALL_DERIVS"] = cl.intToString(allDerivs.size());
+        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+        replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        replacements["CHARGE_PRODS"] = bonded->addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
+        replacements["SLICES"] = bonded->addArgument(exclusionSlices.getDeviceBuffer(), "int");
+        replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDeviceBuffer(), "real");
+        if (hasDerivatives) {
+            for (string param : requestedDerivs)
+                bonded->addEnergyParameterDerivative(param);
+            replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
+        }
+        bonded->addInteraction(exclusionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
     }
 
     // Initialize the exceptions.
@@ -450,7 +467,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
     endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
-    if (numExceptions > 0) {
+    if (numExceptions > 0 && force.getIncludeDirectSpace()) {
         paramsDefines["HAS_EXCEPTIONS"] = "1";
         exceptionPairs.resize(numExceptions);
         exceptionAtoms.initialize<mm_int2>(cl, numExceptions, "exceptionAtoms");
@@ -487,21 +504,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
                 bonded->addEnergyParameterDerivative(param);
             replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
         }
-        if (force.getIncludeDirectSpace())
-            bonded->addInteraction(exceptionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
-    }
-
-    if (hasExclusions) {
-        map<string, string> bondDefines;
-        bondDefines["NUM_EXCLUSIONS"] = cl.intToString(numExclusions);
-        bondDefines["NUM_EXCEPTIONS"] = cl.intToString(numExceptions);
-        bondDefines["NUM_SLICES"] = cl.intToString(numSlices);
-        bondDefines["EWALD_ALPHA"] = cl.doubleToString(alpha);
-        bondDefines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-        bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-        bondDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
-        cl::Program bondProgram = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
-        computeBondsKernel = cl::Kernel(bondProgram, "computeBonds");
+        bonded->addInteraction(exceptionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
 
     // Initialize charge offsets.
@@ -615,20 +618,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionSlices.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionChargeProds.getDeviceBuffer());
         }
-        if (hasExclusions) {
-            computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
-            setPeriodicBoxArgs(cl, computeBondsKernel, 3);
-            computeBondsKernel.setArg<cl::Buffer>(8, exclusionAtoms.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(9, exclusionSlices.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(10, exclusionChargeProds.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(11, exceptionAtoms.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(12, exceptionSlices.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
-        }
-
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
 
@@ -734,11 +723,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
         recomputeParams = false;
     }
-
-    // Do exclusion and exception calculations.
-
-    if (hasExclusions && includeDirect)
-       cl.executeKernel(computeBondsKernel, exclusionChargeProds.getSize());
 
     // Do reciprocal space calculations.
 

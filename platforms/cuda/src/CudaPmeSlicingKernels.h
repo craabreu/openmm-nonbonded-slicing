@@ -124,7 +124,7 @@ private:
     CUfunction pmeAddSelfEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    std::vector<std::vector<int>> exceptionPairs;
+    std::vector<std::vector<int>> exclusionPairs, exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     std::vector<double> subsetSelfEnergy;
@@ -134,9 +134,6 @@ private:
     int numSubsets, numSlices;
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
-
-    bool hasExclusions;
-    CUfunction computeBondsKernel;
 
     CudaArray sliceLambda;
     CudaArray sliceDerivIndices;
