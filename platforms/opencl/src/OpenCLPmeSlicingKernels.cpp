@@ -216,6 +216,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         requestedDerivs.insert(param);
         cl.addEnergyParameterDerivative(param);
     }
+    bool hasDerivatives = requestedDerivs.size() > 0;
     const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
 
     // Initialize switching parameters and derivative indices.
@@ -405,15 +406,16 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
-        replacements["DERIV_INDEX"] = prefix+"derivIndices";
+        replacements["DERIV_INDICES"] = prefix+"derivIndices";
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
-        for (string param : requestedDerivs)
-            nb->addEnergyParameterDerivative(param);
         nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
-        if (requestedDerivs.size() > 0)
+        if (hasDerivatives) {
+            for (string param : requestedDerivs)
+                nb->addEnergyParameterDerivative(param);
             nb->addArgument(ComputeParameterInfo(sliceDerivIndices, prefix+"derivIndices", "int", 1));
+        }
         string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
     }
@@ -472,6 +474,21 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exceptionAtoms.upload(exceptionAtomsVec);
         exceptionSlices.upload(exceptionSlicesVec);
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
+        OpenCLBondedUtilities* bonded = &cl.getBondedUtilities();
+        map<string, string> replacements;
+        replacements["NUM_ALL_DERIVS"] = cl.intToString(allDerivs.size());
+        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+        replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        replacements["CHARGE_PRODS"] = bonded->addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
+        replacements["SLICES"] = bonded->addArgument(exceptionSlices.getDeviceBuffer(), "int");
+        replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDeviceBuffer(), "real");
+        if (hasDerivatives) {
+            for (string param : requestedDerivs)
+                bonded->addEnergyParameterDerivative(param);
+            replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
+        }
+        if (force.getIncludeDirectSpace())
+            bonded->addInteraction(exceptionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
 
     if (hasExclusions) {
