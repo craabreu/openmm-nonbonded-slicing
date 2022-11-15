@@ -79,7 +79,6 @@ private:
     class ForceInfo;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
-    class AddEnergyPostComputation;
     OpenCLContext& cl;
     ForceInfo* info;
     bool hasInitializedKernel;
@@ -108,13 +107,12 @@ private:
     OpenCLArray pmeAtomRange;
     OpenCLArray pmeAtomGridIndex;
     OpenCLArray pmeEnergyBuffer;
-    OpenCLArray pairwiseEnergyBuffer;
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
     OpenCLVkFFT3D* fft;
     Kernel cpuPme;
-    AddEnergyPostComputation* addEnergy;
+    SyncQueuePostComputation* syncQueue;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
@@ -142,6 +140,7 @@ private:
     cl::Kernel computeBondsKernel;
 
     OpenCLArray sliceLambda;
+    OpenCLArray sliceDerivIndices;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;

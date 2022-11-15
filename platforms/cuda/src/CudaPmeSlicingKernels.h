@@ -84,7 +84,6 @@ private:
     class ForceInfo;
     class SyncStreamPreComputation;
     class SyncStreamPostComputation;
-    class AddEnergyPostComputation;
     CudaContext& cu;
     ForceInfo* info;
     bool hasInitializedFFT;
@@ -110,7 +109,6 @@ private:
     CudaArray pmeBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
-    CudaArray pairwiseEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
     CUstream pmeStream;
@@ -141,6 +139,7 @@ private:
     CUfunction computeBondsKernel;
 
     CudaArray sliceLambda;
+    CudaArray sliceDerivIndices;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;

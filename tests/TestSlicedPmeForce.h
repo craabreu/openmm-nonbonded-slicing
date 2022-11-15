@@ -664,7 +664,7 @@ void testNonbondedSwitchingParameters(Platform& platform, bool exceptions) {
     state2 = context2.getState(State::ParameterDerivatives);
     auto derivatives = state2.getEnergyParameterDerivatives();
 
-    ASSERT_EQUAL_TOL(derivatives["lambda"]+derivatives["lambdaSq"], energy1-energy0, TOL);
+    ASSERT_EQUAL_TOL(energy1-energy0, derivatives["lambda"]+derivatives["lambdaSq"], TOL);
 }
 
 void runPlatformTests();

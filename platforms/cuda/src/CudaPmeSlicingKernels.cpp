@@ -82,35 +82,25 @@ private:
 
 class CudaCalcSlicedPmeForceKernel::SyncStreamPostComputation : public CudaContext::ForcePostComputation {
 public:
-    SyncStreamPostComputation(CudaContext& cu, CUevent event, int forceGroup) : cu(cu), event(event), forceGroup(forceGroup) {}
+    SyncStreamPostComputation(CudaContext& cu, CUevent event, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, int forceGroup) : cu(cu), event(event),
+            addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
+    }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if ((groups&(1<<forceGroup)) != 0)
+        if ((groups&(1<<forceGroup)) != 0) {
             cuStreamWaitEvent(cu.getCurrentStream(), event, 0);
-        return 0.0;
-    }
-private:
-    CudaContext& cu;
-    CUevent event;
-    int forceGroup;
-};
-
-class CudaCalcSlicedPmeForceKernel::AddEnergyPostComputation : public CudaContext::ForcePostComputation {
-public:
-    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, int forceGroup) :
-        cu(cu), addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), bufferSize(pmeEnergyBuffer.getSize()), forceGroup(forceGroup) {
-    }
-    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
-            void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &bufferSize};
-            cu.executeKernel(addEnergyKernel, args, bufferSize);
+            if (includeEnergy) {
+                int bufferSize = pmeEnergyBuffer.getSize();
+                void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &bufferSize};
+                cu.executeKernel(addEnergyKernel, args, bufferSize);
+            }
         }
         return 0.0;
     }
 private:
     CudaContext& cu;
+    CUevent event;
     CUfunction addEnergyKernel;
     CudaArray& pmeEnergyBuffer;
-    int bufferSize;
     int forceGroup;
 };
 
@@ -202,9 +192,20 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         subsetVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetVec);
 
-    // Initialize switching parameters.
+    // Identify requested derivatives.
+
+    set<string> requestedDerivs;
+    for (int index = 0; index < force.getNumSwitchingParameterDerivatives(); index++) {
+        string param = force.getSwitchingParameterDerivativeName(index);
+        requestedDerivs.insert(param);
+        cu.addEnergyParameterDerivative(param);
+    }
+    const vector<string>& allDerivs = cu.getEnergyParamDerivNames();
+
+    // Initialize switching parameters and derivative indices.
 
     sliceSwitchParamIndices.resize(numSlices, -1);
+    vector<int> sliceDerivIndexVec(numSlices, -1);
     for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         string param;
         int s1, s2;
@@ -214,7 +215,10 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             switchParamNames.push_back(param);
             switchParamValues.push_back(1.0);
         }
-        sliceSwitchParamIndices[s2*(s2+1)/2+s1] = index;
+        int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+        sliceSwitchParamIndices[slice] = index;
+        if (requestedDerivs.find(param) != requestedDerivs.end())
+            sliceDerivIndexVec[slice] = find(allDerivs.begin(), allDerivs.end(), param) - allDerivs.begin();
     }
     sliceLambdaVec.resize(numSlices, 1.0);
     sliceLambda.initialize(cu, numSlices, sizeOfReal, "sliceLambda");
@@ -222,6 +226,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         sliceLambda.upload(sliceLambdaVec);
     else
         sliceLambda.upload(floatVector(sliceLambdaVec));
+    sliceDerivIndices.initialize<int>(cu, numSlices, "sliceDerivIndices");
+    sliceDerivIndices.upload(sliceDerivIndexVec);
 
     // Compute the PME parameters.
 
@@ -292,10 +298,11 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         pmeBsplineModuliY.initialize(cu, gridSizeY, sizeOfReal, "pmeBsplineModuliY");
         pmeBsplineModuliZ.initialize(cu, gridSizeZ, sizeOfReal, "pmeBsplineModuliZ");
         pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
-        int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
-        pmeEnergyBuffer.initialize(cu, bufferSize, sizeOfMixed, "pmeEnergyBuffer");
-        cu.clearBuffer(pmeEnergyBuffer);
-        // cu.addAutoclearBuffer(pmeEnergyBuffer);
+        if (usePmeStream) {
+            int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
+            pmeEnergyBuffer.initialize(cu, bufferSize, sizeOfMixed, "pmeEnergyBuffer");
+            cu.clearBuffer(pmeEnergyBuffer);
+        }
         sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
 
         // Prepare for doing PME on its own stream or not.
@@ -308,8 +315,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
             CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
             cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
-            cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
-            cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
+            cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
         }
         else
             pmeStream = cu.getCurrentStream();
@@ -397,15 +403,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     if (force.getIncludeDirectSpace()) {
         CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
-
-        int bufferSize = max(cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, nb->getNumEnergyBuffers());
-        pairwiseEnergyBuffer.initialize(cu, numSlices*bufferSize, sizeOfMixed, "pairwiseEnergyBuffer");
-        // cu.clearBuffer(pairwiseEnergyBuffer);
-        // cu.addAutoclearBuffer(pairwiseEnergyBuffer);
-
         map<string, string> replacements;
-        replacements["NUM_SLICES"] = cu.intToString(numSlices);
-        replacements["BUFFER"] = prefix+"buffer";
+        replacements["NUM_REQUESTED_DERIVS"] = cu.intToString(requestedDerivs.size());
+        replacements["NUM_ALL_DERIVS"] = cu.intToString(allDerivs.size());
         replacements["LAMBDA"] = prefix+"lambda";
         replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
         replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -414,12 +414,15 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
-        nb->setKernelSource(cu.replaceStrings(CudaPmeSlicingKernelSources::nonbonded, replacements));
+        replacements["DERIV_INDEX"] = prefix+"derivIndices";
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
+        for (string param : requestedDerivs)
+            nb->addEnergyParameterDerivative(param);
         nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
-        nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+        if (requestedDerivs.size() > 0)
+            nb->addArgument(ComputeParameterInfo(sliceDerivIndices, prefix+"derivIndices", "int", 1));
         string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
     }
@@ -660,7 +663,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
             &exclusionAtoms.getDevicePointer(), &exclusionSlices.getDevicePointer(), &exclusionChargeProds.getDevicePointer(),
             &exceptionAtoms.getDevicePointer(), &exceptionSlices.getDevicePointer(), &exceptionChargeProds.getDevicePointer(),
-            &sliceLambda.getDevicePointer(), &pairwiseEnergyBuffer.getDevicePointer()
+            &sliceLambda.getDevicePointer()
         };
         cu.executeKernel(computeBondsKernel, computeBondsArgs, exclusionChargeProds.getSize());
     }

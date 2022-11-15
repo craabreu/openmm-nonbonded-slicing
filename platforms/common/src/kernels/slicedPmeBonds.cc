@@ -2,7 +2,7 @@ KERNEL void computeBonds(GLOBAL const real4* RESTRICT posq, GLOBAL mixed* RESTRI
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         GLOBAL const uint2* RESTRICT exclusionAtoms, GLOBAL const int* RESTRICT exclusionSlices, GLOBAL const float* RESTRICT exclusionChargeProds,
         GLOBAL const uint2* RESTRICT exceptionAtoms, GLOBAL const int* RESTRICT exceptionSlices, GLOBAL const float* RESTRICT exceptionChargeProds,
-        GLOBAL const real* RESTRICT sliceLambda, GLOBAL mixed* RESTRICT pairwiseEnergyBuffer) {
+        GLOBAL const real* RESTRICT sliceLambda) {
 
     mixed energy[NUM_SLICES] = {0};
 
@@ -80,9 +80,6 @@ KERNEL void computeBonds(GLOBAL const real4* RESTRICT posq, GLOBAL mixed* RESTRI
     }
 #endif
 
-    int offset = GLOBAL_ID*NUM_SLICES;
-    for (int slice = 0; slice < NUM_SLICES; slice++) {
-        pairwiseEnergyBuffer[offset+slice] += energy[slice];
+    for (int slice = 0; slice < NUM_SLICES; slice++)
         energyBuffer[GLOBAL_ID] += sliceLambda[slice]*energy[slice];
-    }
 }
