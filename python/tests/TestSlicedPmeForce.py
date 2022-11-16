@@ -51,7 +51,7 @@ def assert_forces_and_energy(context):
 
 
 @pytest.mark.parametrize('platformName', ['Reference', 'CUDA', 'OpenCL'])
-def testParameterCollapse(platformName):
+def testParameterClash(platformName):
     system = mm.System()
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
     system.addParticle(1.0)
