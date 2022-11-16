@@ -135,8 +135,10 @@ private:
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
+    bool hasDerivatives;
     CudaArray sliceLambda;
     CudaArray sliceDerivIndices;
+    CudaArray pmeEnergyParamDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;

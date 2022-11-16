@@ -136,8 +136,10 @@ private:
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
+    bool hasDerivatives;
     OpenCLArray sliceLambda;
     OpenCLArray sliceDerivIndices;
+    OpenCLArray pmeEnergyParamDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;

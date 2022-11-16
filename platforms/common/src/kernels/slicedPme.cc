@@ -190,6 +190,8 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 }
 
 KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT energyBuffer,
+                      GLOBAL mixed* RESTRICT energyParamDerivs,
+                      GLOBAL const int* RESTRICT sliceDerivIndices,
                       GLOBAL const real* RESTRICT sliceLambda,
                       GLOBAL const real* RESTRICT pmeBsplineModuliX,
                       GLOBAL const real* RESTRICT pmeBsplineModuliY,
@@ -224,7 +226,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
             kz = GRID_SIZE_Z-kz;
         }
         int nonZero = kx != 0 || ky != 0 || kz != 0;
-        real eterm = nonZero ? EXP(-RECIP_EXP_FACTOR*m2)/denom : 0.0;
+        real eterm = nonZero ? recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom : 0.0;
         int indexInHalfComplexGrid = kz+(ky+kx*GRID_SIZE_Y)*(GRID_SIZE_Z/2+1);
         real2 grid[NUM_SUBSETS];
         for (int j = 0; j < NUM_SUBSETS; j++) {
@@ -236,28 +238,52 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         }
     }
 
-#if USE_PME_STREAM
-    energyBuffer[GLOBAL_ID] = 0;
-#endif
-    for (int j = 0; j < NUM_SLICES; j++)
-        energyBuffer[GLOBAL_ID] += sliceLambda[j]*recipScaleFactor*energy[j];
+    mixed totalEnergy = 0;
+    for (int slice = 0; slice < NUM_SLICES; slice++) {
+        totalEnergy += sliceLambda[slice]*energy[slice];
+        #if HAS_DERIVATIVES
+            int derivIndex = sliceDerivIndices[slice];
+            if (derivIndex != -1)
+                #if USE_PME_STREAM
+                    energyParamDerivs[GLOBAL_ID*NUM_ALL_DERIVS+derivIndex] = energy[slice];
+                #else
+                    energyParamDerivs[GLOBAL_ID*NUM_ALL_DERIVS+derivIndex] += energy[slice];
+                #endif
+        #endif
+    }
+    #if USE_PME_STREAM
+        energyBuffer[GLOBAL_ID] = totalEnergy;
+    #else
+        energyBuffer[GLOBAL_ID] += totalEnergy;
+    #endif
 }
 
-KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT pmeEnergyBuffer,
+KERNEL void addSelfEnergy(GLOBAL mixed* RESTRICT energyBuffer,
+                          GLOBAL mixed* RESTRICT energyParamDerivs,
                           GLOBAL const real4* RESTRICT posq, GLOBAL const real* RESTRICT charge,
-                          GLOBAL const int* RESTRICT subsets, GLOBAL const real* RESTRICT sliceLambda) {
+                          GLOBAL const int* RESTRICT subsets,
+                          GLOBAL const int* RESTRICT sliceDerivIndices,
+                          GLOBAL const real* RESTRICT sliceLambda) {
 
     mixed sumSquareCharges[NUM_SUBSETS] = { 0 };
     for (int atom = GLOBAL_ID; atom < NUM_ATOMS; atom += GLOBAL_SIZE) {
-#ifdef USE_POSQ_CHARGES
-        real q = posq[atom].w;
-#else
-        real q = charges[atom];
-#endif
+        #ifdef USE_POSQ_CHARGES
+            real q = posq[atom].w;
+        #else
+            real q = charges[atom];
+        #endif
         sumSquareCharges[subsets[atom]] += q*q;
     }
-    for (int j = 0; j < NUM_SUBSETS; j++)
-        pmeEnergyBuffer[GLOBAL_ID] -= sliceLambda[j*(j+3)/2]*EWALD_SELF_ENERGY_SCALE*sumSquareCharges[j];
+    for (int j = 0; j < NUM_SUBSETS; j++) {
+        int slice = j*(j+3)/2;
+        mixed energy = -EWALD_SELF_ENERGY_SCALE*sumSquareCharges[j];
+        energyBuffer[GLOBAL_ID] += sliceLambda[slice]*energy;
+        #if HAS_DERIVATIVES
+            int derivIndex = sliceDerivIndices[slice];
+            if (derivIndex != -1)
+                energyParamDerivs[GLOBAL_ID*NUM_ALL_DERIVS+derivIndex] += energy;
+        #endif
+    }
 }
 
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
@@ -367,7 +393,19 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
-    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
+KERNEL void addEnergy(
+    GLOBAL const mixed* RESTRICT pmeEnergyBuffer,
+    GLOBAL const mixed* RESTRICT pmeEnergyParamDerivs,
+    GLOBAL mixed* RESTRICT energyBuffer,
+    GLOBAL mixed* RESTRICT energyParamDerivs,
+    int bufferSize
+) {
+    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE) {
         energyBuffer[i] += pmeEnergyBuffer[i];
+        #if HAS_DERIVATIVES
+            int offset = i*NUM_ALL_DERIVS;
+            for (int j = 0; j < NUM_ALL_DERIVS; j++)
+                energyParamDerivs[offset+j] += pmeEnergyParamDerivs[offset+j];
+        #endif
+    }
 }

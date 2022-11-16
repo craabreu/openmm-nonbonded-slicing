@@ -663,8 +663,19 @@ void testNonbondedSwitchingParameters(Platform& platform, bool exceptions) {
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     auto derivatives = state2.getEnergyParameterDerivatives();
-
     ASSERT_EQUAL_TOL(energy1-energy0, derivatives["lambda"]+derivatives["lambdaSq"], TOL);
+
+    slicedNonbonded->addGlobalParameter("remainder", 1.0);
+    slicedNonbonded->addSwitchingParameter("remainder", 0, 0);
+    slicedNonbonded->addSwitchingParameterDerivative("remainder");
+    context2.reinitialize(true);
+    context2.setParameter("lambda", 1.0);
+    context2.setParameter("lambdaSq", 1.0);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
+    double energy = state2.getPotentialEnergy();
+    derivatives = state2.getEnergyParameterDerivatives();
+    double sum = derivatives["lambda"]+derivatives["lambdaSq"]+derivatives["remainder"];
+    ASSERT_EQUAL_TOL(energy, sum, TOL);
 }
 
 void runPlatformTests();

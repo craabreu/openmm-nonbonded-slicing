@@ -17,7 +17,7 @@ real tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
 #define SLICE(i, j) i > j ? i*(i+1)/2+j : j*(j+1)/2+i
 int slice = SLICE(SUBSET1, SUBSET2);
 tempEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
-#if NUM_REQUESTED_DERIVS > 0
+#if HAS_DERIVATIVES
     int derivIndex = DERIV_INDICES[slice];
     if (derivIndex != -1)
         energyParamDerivs[GLOBAL_ID*NUM_ALL_DERIVS+derivIndex] += interactionScale*tempEnergy;
