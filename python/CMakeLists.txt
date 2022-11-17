@@ -7,6 +7,7 @@ add_custom_command(
     OUTPUT "${WRAP_FILE}"
     COMMAND "${SWIG_EXECUTABLE}"
         -python -c++
+        -doxygen
         -o "${WRAP_FILE}"
         "-I${OPENMM_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/pmeslicing.i"
