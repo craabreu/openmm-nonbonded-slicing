@@ -117,29 +117,85 @@ private:
     int forceGroup;
 };
 
+// class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
+// public:
+//     AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, OpenCLArray& sliceDerivIndices, bool hasDerivatives, int bufferSize, int forceGroup) :
+//         cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), sliceDerivIndices(sliceDerivIndices), hasDerivatives(hasDerivatives), bufferSize(bufferSize), forceGroup(forceGroup) {}
+//     void setKernel(cl::Kernel kernel) {
+//         addEnergyKernel = kernel;
+//         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(3, sliceLambda.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(4, sliceDerivIndices.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl_int>(5, bufferSize);
+//     }
+//     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+//         if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
+//             cl.executeKernel(addEnergyKernel, bufferSize);
+//         return 0.0;
+//     }
+// private:
+//     OpenCLContext& cl;
+//     cl::Kernel addEnergyKernel;
+//     OpenCLArray& pmeEnergyBuffer;
+//     OpenCLArray& sliceLambda;
+//     OpenCLArray& sliceDerivIndices;
+//     bool hasDerivatives;
+//     int bufferSize;
+//     int forceGroup;
+// };
 class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, int bufferSize, int forceGroup) :
-        cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), bufferSize(bufferSize), forceGroup(forceGroup) {}
-    void setKernel(cl::Kernel kernel) {
-        addEnergyKernel = kernel;
+    AddEnergyPostComputation(OpenCLContext& cl, int forceGroup) : cl(cl), forceGroup(forceGroup), initialized(false) { }
+    void initialize(OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, vector<string> requestedDerivs, OpenCLArray& sliceDerivIndices) {
+        int numSlices = sliceDerivIndices.getSize();
+        hasDerivatives = requestedDerivs.size() > 0;
+        stringstream code;
+        if (hasDerivatives) {
+            vector<int> sliceDerivIndexVec(numSlices);
+            sliceDerivIndices.download(sliceDerivIndexVec);
+            const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
+            for (int index = 0; index < requestedDerivs.size(); index++) {
+                string param = requestedDerivs[index];
+                int derivIndex = find(allDerivs.begin(), allDerivs.end(), param) - allDerivs.begin();
+                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<derivIndex<<"] +=";
+                int position = 0;
+                for (int slice = 0; slice < numSlices; slice++)
+                    if (sliceDerivIndexVec[slice] == index)
+                        code<<(position++ > 0 ? " + " : " ")<<"sliceEnergy["<<slice<<"]";
+                code<<";"<<endl;
+            }
+        }
+        map<string, string> replacements, defines;
+        replacements["UPDATE_DERIVATIVE_BUFFER"] = code.str();
+        replacements["NUM_SLICES"] = cl.intToString(numSlices);
+        string source = cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeAddEnergy, replacements);
+        cl::Program program = cl.createProgram(source, defines);
+        addEnergyKernel = cl::Kernel(program, "addEnergy");
+        bufferSize = pmeEnergyBuffer.getSize()/numSlices;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(2, sliceLambda.getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(3, bufferSize);
+        addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(3, sliceLambda.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(4, bufferSize);
+        initialized = true;
+    }
+    bool isInitialized() {
+        return initialized;
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if (includeEnergy && (groups&(1<<forceGroup)) != 0)
+        if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
             cl.executeKernel(addEnergyKernel, bufferSize);
         return 0.0;
     }
 private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
-    OpenCLArray& pmeEnergyBuffer;
-    OpenCLArray& sliceLambda;
+    bool hasDerivatives;
     int bufferSize;
     int forceGroup;
+    bool initialized;
 };
 
 OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
@@ -196,6 +252,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exclusionList[exclusion.second].push_back(exclusion.first);
     }
     usePosqCharges = cl.requestPosqCharges();
+    size_t sizeOfReal = cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
+    size_t sizeOfMixed = (cl.getUseMixedPrecision() ? sizeof(double) : sizeOfReal);
+
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     subsetSelfEnergy.resize(numSubsets, 0.0);
@@ -219,9 +278,21 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         subsetVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetVec);
 
-    // Initialize switching parameters.
+    // Identify requested derivatives.
 
-    sliceCoupParamIndex.resize(numSlices, -1);
+    for (int index = 0; index < force.getNumSwitchingParameterDerivatives(); index++) {
+        string param = force.getSwitchingParameterDerivativeName(index);
+        requestedDerivs.push_back(param);
+        cl.addEnergyParameterDerivative(param);
+    }
+    hasDerivatives = requestedDerivs.size() > 0;
+    const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
+    int numAllDerivs = allDerivs.size();
+
+    // Initialize switching parameters and derivative indices.
+
+    sliceSwitchParamIndices.resize(numSlices, -1);
+    vector<int> sliceDerivIndexVec(numSlices, -1);
     for (int i = 0; i < force.getNumSwitchingParameters(); i++) {
         string param;
         int s1, s2;
@@ -231,21 +302,25 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             switchParamNames.push_back(param);
             switchParamValues.push_back(1.0);
         }
-        sliceCoupParamIndex[s2*(s2+1)/2+s1] = index;
+        int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+        sliceSwitchParamIndices[slice] = index;
+        index = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
+        if (index < requestedDerivs.size())
+            sliceDerivIndexVec[slice] = index;
     }
     sliceLambdaVec.resize(numSlices, 1.0);
-    if (cl.getUseDoublePrecision()) {
-        sliceLambda.initialize<double>(cl, numSlices, "sliceLambda");
+    sliceLambda.initialize(cl, numSlices, sizeOfReal, "sliceLambda");
+    if (cl.getUseDoublePrecision())
         sliceLambda.upload(sliceLambdaVec);
-    }
-    else {
-        sliceLambda.initialize<float>(cl, numSlices, "sliceLambda");
+    else
         sliceLambda.upload(floatVector(sliceLambdaVec));
-    }
+    sliceDerivIndices.initialize<int>(cl, numSlices, "sliceDerivIndices");
+    sliceDerivIndices.upload(sliceDerivIndexVec);
 
     // Compute the PME parameters.
 
     SlicedPmeForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
+
     gridSizeX = OpenCLVkFFT3D::findLegalDimension(gridSizeX);
     gridSizeY = OpenCLVkFFT3D::findLegalDimension(gridSizeY);
     gridSizeZ = OpenCLVkFFT3D::findLegalDimension(gridSizeZ);
@@ -259,6 +334,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             subsetSelfEnergy[j] *= -ONE_4PI_EPS0*alpha/sqrt(M_PI);
             ewaldSelfEnergy += subsetSelfEnergy[j];
         }
+        string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
+        bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
+        usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
         pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
         pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
@@ -273,40 +351,42 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeDefines["M_PI"] = cl.doubleToString(M_PI);
         pmeDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
         pmeDefines["USE_POSQ_CHARGES"] = usePosqCharges ? "1" : "0";
+        pmeDefines["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+        pmeDefines["NUM_ALL_DERIVS"] = cl.intToString(numAllDerivs);
         pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
+        if (usePmeQueue)
+            pmeDefines["USE_PME_STREAM"] = "1";
 
         // Create required data structures.
 
-        int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
         int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
-        pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
-        pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
+        pmeGrid1.initialize(cl, gridElements, 2*sizeOfReal, "pmeGrid1");
+        pmeGrid2.initialize(cl, gridElements, 2*sizeOfReal, "pmeGrid2");
         cl.addAutoclearBuffer(pmeGrid2);
-        pmeBsplineModuliX.initialize(cl, gridSizeX, elementSize, "pmeBsplineModuliX");
-        pmeBsplineModuliY.initialize(cl, gridSizeY, elementSize, "pmeBsplineModuliY");
-        pmeBsplineModuliZ.initialize(cl, gridSizeZ, elementSize, "pmeBsplineModuliZ");
-        pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*elementSize, "pmeBsplineTheta");
+        pmeBsplineModuliX.initialize(cl, gridSizeX, sizeOfReal, "pmeBsplineModuliX");
+        pmeBsplineModuliY.initialize(cl, gridSizeY, sizeOfReal, "pmeBsplineModuliY");
+        pmeBsplineModuliZ.initialize(cl, gridSizeZ, sizeOfReal, "pmeBsplineModuliZ");
+        pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*sizeOfReal, "pmeBsplineTheta");
         pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
         pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
-        int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
         int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
-        pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
+        pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, sizeOfMixed, "pmeEnergyBuffer");
         cl.clearBuffer(pmeEnergyBuffer);
         sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-        fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
-        string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
-        bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
-        usePmeQueue = (!cl.getPlatformData().disablePmeStream && !cl.getPlatformData().useCpuPme && isNvidia);
+
+        // Prepare for doing PME on its own queue or not.
+
         int recipForceGroup = force.getReciprocalSpaceForceGroup();
         if (recipForceGroup < 0)
             recipForceGroup = force.getForceGroup();
         if (usePmeQueue) {
-            pmeDefines["USE_PME_STREAM"] = "1";
             pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
             cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
             cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
         }
-        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, sliceLambda, bufferSize, recipForceGroup));
+        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, recipForceGroup));
+
+        fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
 
         // Initialize the b-spline moduli.
 
@@ -381,20 +461,13 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
 
     // Add the interaction to the default nonbonded kernel.
 
-    charges.initialize(cl, cl.getPaddedNumAtoms(), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
+    charges.initialize(cl, cl.getPaddedNumAtoms(), sizeOfReal, "charges");
     baseParticleCharges.initialize<float>(cl, cl.getPaddedNumAtoms(), "baseParticleCharges");
     baseParticleCharges.upload(baseParticleChargeVec);
 
     if (force.getIncludeDirectSpace()) {
         OpenCLNonbondedUtilities* nb = &cl.getNonbondedUtilities();
-
-        int energyElementSize = cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float);
-        int bufferSize = max(cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, nb->getNumEnergyBuffers());
-        pairwiseEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pairwiseEnergyBuffer");
-
         map<string, string> replacements;
-        replacements["NUM_SLICES"] = cl.intToString(numSlices);
-        replacements["BUFFER"] = prefix+"buffer";
         replacements["LAMBDA"] = prefix+"lambda";
         replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
         replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
@@ -403,16 +476,21 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
-
-        if (deviceIsCpu)
-            nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded_cpu, replacements));
-        else
-            nb->setKernelSource(cl.replaceStrings(OpenCLPmeSlicingKernelSources::nonbonded, replacements));
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
         nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
-        nb->addArgument(ComputeParameterInfo(pairwiseEnergyBuffer, prefix+"buffer", "mixed", 1, false));
+        stringstream code;
+        if (hasDerivatives) {
+            string derivIndices = prefix+"derivIndices";
+            nb->addArgument(ComputeParameterInfo(sliceDerivIndices, derivIndices, "int", 1));
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = nb->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? interactionScale*tempEnergy : 0;"<<endl;
+            }
+        }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         string source = cl.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
     }
@@ -423,8 +501,8 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     int startIndex = cl.getContextIndex()*force.getNumExceptions()/numContexts;
     int endIndex = (cl.getContextIndex()+1)*force.getNumExceptions()/numContexts;
     int numExclusions = endIndex-startIndex;
-    hasExclusions = numExclusions > 0;
-    if (hasExclusions) {
+    if (numExclusions > 0 && force.getIncludeDirectSpace()) {
+        exclusionPairs.resize(numExclusions);
         exclusionAtoms.initialize<mm_int2>(cl, numExclusions, "exclusionAtoms");
         exclusionSlices.initialize<int>(cl, numExclusions, "exclusionSlices");
         exclusionChargeProds.initialize<float>(cl, numExclusions, "exclusionChargeProds");
@@ -434,12 +512,32 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
             int atom1 = exclusions[k+startIndex].first;
             int atom2 = exclusions[k+startIndex].second;
             exclusionAtomsVec[k] = mm_int2(atom1, atom2);
+            exclusionPairs[k] = (vector<int>) {atom1, atom2};
             int i = subsetVec[atom1];
             int j = subsetVec[atom2];
             exclusionSlicesVec[k] = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         }
         exclusionAtoms.upload(exclusionAtomsVec);
         exclusionSlices.upload(exclusionSlicesVec);
+        OpenCLBondedUtilities* bonded = &cl.getBondedUtilities();
+        map<string, string> replacements;
+        replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
+        replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
+        replacements["CHARGE_PRODS"] = bonded->addArgument(exclusionChargeProds.getDeviceBuffer(), "float");
+        replacements["SLICES"] = bonded->addArgument(exclusionSlices.getDeviceBuffer(), "int");
+        replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDeviceBuffer(), "real");
+        stringstream code;
+        if (hasDerivatives) {
+            string derivIndices = bonded->addArgument(sliceDerivIndices, "int");
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = bonded->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? tempEnergy : 0;"<<endl;
+            }
+        }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
+        bonded->addInteraction(exclusionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
     }
 
     // Initialize the exceptions.
@@ -447,7 +545,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
     startIndex = cl.getContextIndex()*exceptions.size()/numContexts;
     endIndex = (cl.getContextIndex()+1)*exceptions.size()/numContexts;
     int numExceptions = endIndex-startIndex;
-    if (numExceptions > 0) {
+    if (numExceptions > 0 && force.getIncludeDirectSpace()) {
         paramsDefines["HAS_EXCEPTIONS"] = "1";
         exceptionPairs.resize(numExceptions);
         exceptionAtoms.initialize<mm_int2>(cl, numExceptions, "exceptionAtoms");
@@ -471,19 +569,23 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exceptionAtoms.upload(exceptionAtomsVec);
         exceptionSlices.upload(exceptionSlicesVec);
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
-    }
-
-    if (hasExclusions) {
-        map<string, string> bondDefines;
-        bondDefines["NUM_EXCLUSIONS"] = cl.intToString(numExclusions);
-        bondDefines["NUM_EXCEPTIONS"] = cl.intToString(numExceptions);
-        bondDefines["NUM_SLICES"] = cl.intToString(numSlices);
-        bondDefines["EWALD_ALPHA"] = cl.doubleToString(alpha);
-        bondDefines["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
-        bondDefines["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
-        bondDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
-        cl::Program bondProgram = cl.createProgram(CommonPmeSlicingKernelSources::slicedPmeBonds, bondDefines);
-        computeBondsKernel = cl::Kernel(bondProgram, "computeBonds");
+        OpenCLBondedUtilities* bonded = &cl.getBondedUtilities();
+        map<string, string> replacements;
+        replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
+        replacements["CHARGE_PRODS"] = bonded->addArgument(exceptionChargeProds.getDeviceBuffer(), "float");
+        replacements["SLICES"] = bonded->addArgument(exceptionSlices.getDeviceBuffer(), "int");
+        replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDeviceBuffer(), "real");
+        stringstream code;
+        if (hasDerivatives) {
+            string derivIndices = bonded->addArgument(sliceDerivIndices, "int");
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = bonded->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? tempEnergy : 0;"<<endl;
+            }
+        }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
+        bonded->addInteraction(exceptionPairs, cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
 
     // Initialize charge offsets.
@@ -551,7 +653,7 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         exceptionParamOffsets.upload(e);
         exceptionOffsetIndices.upload(exceptionOffsetIndicesVec);
     }
-    globalParams.initialize(cl, max((int) paramValues.size(), 1), cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "globalParams");
+    globalParams.initialize(cl, max((int) paramValues.size(), 1), sizeOfReal, "globalParams");
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
     recomputeParams = true;
@@ -597,21 +699,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionSlices.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionChargeProds.getDeviceBuffer());
         }
-        if (hasExclusions) {
-            computeBondsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(2, cl.getLongForceBuffer().getDeviceBuffer());
-            setPeriodicBoxArgs(cl, computeBondsKernel, 3);
-            computeBondsKernel.setArg<cl::Buffer>(8, exclusionAtoms.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(9, exclusionSlices.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(10, exclusionChargeProds.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(11, exceptionAtoms.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(12, exceptionSlices.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(13, exceptionChargeProds.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(14, sliceLambda.getDeviceBuffer());
-            computeBondsKernel.setArg<cl::Buffer>(15, pairwiseEnergyBuffer.getDeviceBuffer());
-        }
-
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
 
@@ -623,7 +710,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");
             pmeEvalEnergyKernel = cl::Kernel(program, "gridEvaluateEnergy");
             pmeInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
-            int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
+            int sizeOfReal = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeGridIndexKernel.setArg<cl::Buffer>(1, subsets.getDeviceBuffer());
             pmeGridIndexKernel.setArg<cl::Buffer>(2, pmeAtomGridIndex.getDeviceBuffer());
@@ -640,7 +727,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
-            if (hasOffsets) {
+            if (hasOffsets || hasDerivatives) {
                 pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
                 pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
@@ -657,7 +744,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
+            addEnergy->initialize(pmeEnergyBuffer, sliceLambda, requestedDerivs, sliceDerivIndices);
        }
     }
 
@@ -673,7 +760,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
     }
     if (switchParamChanged) {
         for (int slice = 0; slice < numSlices; slice++) {
-            int index = sliceCoupParamIndex[slice];
+            int index = sliceSwitchParamIndices[slice];
             if (index != -1)
                 sliceLambdaVec[slice] = switchParamValues[index];
         }
@@ -714,11 +801,6 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             ewaldSelfEnergy += sliceLambdaVec[j*(j+3)/2]*subsetSelfEnergy[j];
         recomputeParams = false;
     }
-
-    // Do exclusion and exception calculations.
-
-    if (hasExclusions && includeDirect)
-       cl.executeKernel(computeBondsKernel, exclusionChargeProds.getSize());
 
     // Do reciprocal space calculations.
 
@@ -768,6 +850,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
         }
         cl.executeKernel(pmeSpreadChargeKernel, cl.getNumAtoms());
         cl.executeKernel(pmeFinishSpreadChargeKernel, numSubsets*gridSizeX*gridSizeY*gridSizeZ);
+
         fft->execFFT(true, cl.getQueue());
 
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
@@ -787,9 +870,9 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
             pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
         }
-        if (includeEnergy) {
+        if (includeEnergy || hasDerivatives) {
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
-            if (hasOffsets)
+            if (hasOffsets || hasDerivatives)
                 cl.executeKernel(pmeAddSelfEnergyKernel, cl.getNumAtoms());
             else
                 energy = ewaldSelfEnergy;

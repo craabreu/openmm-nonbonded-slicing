@@ -14,7 +14,10 @@ const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2*invR;
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
 real tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+#define SLICE(i, j) i > j ? i*(i+1)/2+j : j*(j+1)/2+i
 int slice = SLICE(SUBSET1, SUBSET2);
-sliceEnergy[slice] += includeInteraction ? interactionScale*prefactor*erfcAlphaR : 0;
+tempEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
+COMPUTE_DERIVATIVES
+tempEnergy *= LAMBDA[slice];
 dEdR += includeInteraction ? LAMBDA[slice]*tempForce*invR*invR : 0;
 }

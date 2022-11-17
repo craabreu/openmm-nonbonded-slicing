@@ -364,14 +364,3 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
         forceBuffers[atom+2*PADDED_NUM_ATOMS] += realToFixedPoint(f.z);
     }
 }
-
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-                GLOBAL const real* RESTRICT sliceLambda, int bufferSize) {
-    for (int index = GLOBAL_ID; index < bufferSize; index += GLOBAL_SIZE) {
-        int offset = index*NUM_SLICES;
-        real energy = 0.0;
-        for (int j = 0; j < NUM_SLICES; j++)
-            energy += sliceLambda[j]*pmeEnergyBuffer[offset+j];
-        energyBuffer[index] += energy;
-    }
-}

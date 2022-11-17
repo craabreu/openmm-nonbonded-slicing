@@ -110,9 +110,9 @@ private:
     CudaArray pmeBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
-    CudaArray pairwiseEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
+    AddEnergyPostComputation* addEnergy;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
@@ -126,7 +126,7 @@ private:
     CUfunction pmeAddSelfEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
-    std::vector<std::vector<int>> exceptionPairs;
+    std::vector<std::vector<int>> exclusionPairs, exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     std::vector<double> subsetSelfEnergy;
@@ -137,14 +137,14 @@ private:
     bool usePmeStream, useCudaFFT, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    bool hasExclusions;
-    CUfunction computeBondsKernel;
-
+    bool hasDerivatives;
     CudaArray sliceLambda;
+    CudaArray sliceDerivIndices;
+    std::vector<std::string> requestedDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;
-    std::vector<int> sliceCoupParamIndex;
+    std::vector<int> sliceSwitchParamIndices;
 
     std::vector<float> floatVector(std::vector<double> input) {
         vector<float> output(input.begin(), input.end());

@@ -108,7 +108,6 @@ private:
     OpenCLArray pmeAtomRange;
     OpenCLArray pmeAtomGridIndex;
     OpenCLArray pmeEnergyBuffer;
-    OpenCLArray pairwiseEnergyBuffer;
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
@@ -128,7 +127,7 @@ private:
     cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeInterpolateForceKernel;
     std::map<std::string, std::string> pmeDefines;
-    std::vector<std::vector<int>> exceptionPairs;
+    std::vector<std::vector<int>> exclusionPairs, exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     std::vector<double> subsetSelfEnergy;
@@ -138,14 +137,14 @@ private:
     bool usePmeQueue, usePosqCharges, recomputeParams, hasOffsets;
     static const int PmeOrder = 5;
 
-    bool hasExclusions;
-    cl::Kernel computeBondsKernel;
-
+    bool hasDerivatives;
     OpenCLArray sliceLambda;
+    OpenCLArray sliceDerivIndices;
+    std::vector<std::string> requestedDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;
-    std::vector<int> sliceCoupParamIndex;
+    std::vector<int> sliceSwitchParamIndices;
 
     std::vector<float> floatVector(std::vector<double> input) {
         std::vector<float> output(input.begin(), input.end());
