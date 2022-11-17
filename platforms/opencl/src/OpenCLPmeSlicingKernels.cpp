@@ -100,35 +100,102 @@ private:
 
 class OpenCLCalcSlicedPmeForceKernel::SyncQueuePostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, OpenCLArray& pmeEnergyBuffer, OpenCLArray& pmeEnergyParamDerivs, int forceGroup) : cl(cl), event(event),
-            pmeEnergyBuffer(pmeEnergyBuffer), pmeEnergyParamDerivs(pmeEnergyParamDerivs), forceGroup(forceGroup) {
-    }
-    void setKernel(cl::Kernel kernel) {
-        addEnergyKernel = kernel;
-        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyParamDerivs.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(3, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(4, pmeEnergyBuffer.getSize());
-    }
+    SyncQueuePostComputation(OpenCLContext& cl, cl::Event& event, int forceGroup) :
+        cl(cl), event(event), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             vector<cl::Event> events(1);
             events[0] = event;
             event = cl::Event();
             cl.getQueue().enqueueBarrierWithWaitList(&events);
-            if (includeEnergy || pmeEnergyParamDerivs.isInitialized())
-                cl.executeKernel(addEnergyKernel, pmeEnergyBuffer.getSize());
         }
         return 0.0;
     }
 private:
     OpenCLContext& cl;
     cl::Event& event;
-    cl::Kernel addEnergyKernel;
-    OpenCLArray& pmeEnergyBuffer;
-    OpenCLArray& pmeEnergyParamDerivs;
     int forceGroup;
+};
+
+// class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
+// public:
+//     AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, OpenCLArray& sliceDerivIndices, bool hasDerivatives, int bufferSize, int forceGroup) :
+//         cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), sliceDerivIndices(sliceDerivIndices), hasDerivatives(hasDerivatives), bufferSize(bufferSize), forceGroup(forceGroup) {}
+//     void setKernel(cl::Kernel kernel) {
+//         addEnergyKernel = kernel;
+//         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(3, sliceLambda.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl::Buffer>(4, sliceDerivIndices.getDeviceBuffer());
+//         addEnergyKernel.setArg<cl_int>(5, bufferSize);
+//     }
+//     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+//         if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
+//             cl.executeKernel(addEnergyKernel, bufferSize);
+//         return 0.0;
+//     }
+// private:
+//     OpenCLContext& cl;
+//     cl::Kernel addEnergyKernel;
+//     OpenCLArray& pmeEnergyBuffer;
+//     OpenCLArray& sliceLambda;
+//     OpenCLArray& sliceDerivIndices;
+//     bool hasDerivatives;
+//     int bufferSize;
+//     int forceGroup;
+// };
+class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
+public:
+    AddEnergyPostComputation(OpenCLContext& cl, int forceGroup) : cl(cl), forceGroup(forceGroup), initialized(false) { }
+    void initialize(OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, vector<string> requestedDerivs, OpenCLArray& sliceDerivIndices) {
+        int numSlices = sliceDerivIndices.getSize();
+        hasDerivatives = requestedDerivs.size() > 0;
+        stringstream code;
+        if (hasDerivatives) {
+            vector<int> sliceDerivIndexVec(numSlices);
+            sliceDerivIndices.download(sliceDerivIndexVec);
+            const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
+            for (int index = 0; index < requestedDerivs.size(); index++) {
+                string param = requestedDerivs[index];
+                int derivIndex = find(allDerivs.begin(), allDerivs.end(), param) - allDerivs.begin();
+                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<derivIndex<<"] +=";
+                int position = 0;
+                for (int slice = 0; slice < numSlices; slice++)
+                    if (sliceDerivIndexVec[slice] == index)
+                        code<<(position++ > 0 ? " + " : " ")<<"sliceEnergy["<<slice<<"]";
+                code<<";"<<endl;
+            }
+        }
+        map<string, string> replacements, defines;
+        replacements["UPDATE_DERIVATIVE_BUFFER"] = code.str();
+        replacements["NUM_SLICES"] = cl.intToString(numSlices);
+        string source = cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeAddEnergy, replacements);
+        cl::Program program = cl.createProgram(source, defines);
+        addEnergyKernel = cl::Kernel(program, "addEnergy");
+        bufferSize = pmeEnergyBuffer.getSize()/numSlices;
+        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(3, sliceLambda.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(4, bufferSize);
+        initialized = true;
+    }
+    bool isInitialized() {
+        return initialized;
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
+            cl.executeKernel(addEnergyKernel, bufferSize);
+        return 0.0;
+    }
+private:
+    OpenCLContext& cl;
+    cl::Kernel addEnergyKernel;
+    bool hasDerivatives;
+    int bufferSize;
+    int forceGroup;
+    bool initialized;
 };
 
 OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
@@ -237,8 +304,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         }
         int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
         sliceSwitchParamIndices[slice] = index;
-        if (hasDerivatives)
-            sliceDerivIndexVec[slice] = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
+        index = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
+        if (index < requestedDerivs.size())
+            sliceDerivIndexVec[slice] = index;
     }
     sliceLambdaVec.resize(numSlices, 1.0);
     sliceLambda.initialize(cl, numSlices, sizeOfReal, "sliceLambda");
@@ -301,15 +369,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         pmeBsplineTheta.initialize(cl, PmeOrder*numParticles, 4*sizeOfReal, "pmeBsplineTheta");
         pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
         pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
-        if (usePmeQueue) {
-            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
-            pmeEnergyBuffer.initialize(cl, bufferSize, sizeOfMixed, "pmeEnergyBuffer");
-            cl.clearBuffer(pmeEnergyBuffer);
-            if (hasDerivatives) {
-                pmeEnergyParamDerivs.initialize(cl, bufferSize*numAllDerivs, sizeOfMixed, "pmeEnergyParamDerivs");
-                cl.clearBuffer(pmeEnergyParamDerivs);
-            }
-        }
+        int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+        pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, sizeOfMixed, "pmeEnergyBuffer");
+        cl.clearBuffer(pmeEnergyBuffer);
         sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
 
         // Prepare for doing PME on its own queue or not.
@@ -320,8 +382,9 @@ void OpenCLCalcSlicedPmeForceKernel::initialize(const System& system, const Slic
         if (usePmeQueue) {
             pmeQueue = cl::CommandQueue(cl.getContext(), cl.getDevice());
             cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
-            cl.addPostComputation(syncQueue = new SyncQueuePostComputation(cl, pmeSyncEvent, pmeEnergyBuffer, pmeEnergyParamDerivs, recipForceGroup));
+            cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
         }
+        cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, recipForceGroup));
 
         fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
 
@@ -660,22 +723,16 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<cl::Buffer>(2, pmeBsplineModuliY.getDeviceBuffer());
             pmeConvolutionKernel.setArg<cl::Buffer>(3, pmeBsplineModuliZ.getDeviceBuffer());
             pmeEvalEnergyKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(2, usePmeQueue ? pmeEnergyParamDerivs.getDeviceBuffer() : cl.getEnergyParamDerivBuffer().getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(3, sliceDerivIndices.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(4, sliceLambda.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(5, pmeBsplineModuliX.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(6, pmeBsplineModuliY.getDeviceBuffer());
-            pmeEvalEnergyKernel.setArg<cl::Buffer>(7, pmeBsplineModuliZ.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyBuffer.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(2, pmeBsplineModuliX.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(3, pmeBsplineModuliY.getDeviceBuffer());
+            pmeEvalEnergyKernel.setArg<cl::Buffer>(4, pmeBsplineModuliZ.getDeviceBuffer());
             if (hasOffsets || hasDerivatives) {
                 pmeAddSelfEnergyKernel = cl::Kernel(program, "addSelfEnergy");
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, usePmeQueue ? pmeEnergyBuffer.getDeviceBuffer() : cl.getEnergyBuffer().getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, usePmeQueue ? pmeEnergyParamDerivs.getDeviceBuffer() : cl.getEnergyParamDerivBuffer().getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, cl.getPosq().getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(3, charges.getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(4, subsets.getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(5, sliceDerivIndices.getDeviceBuffer());
-                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(6, sliceLambda.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(2, charges.getDeviceBuffer());
+                pmeAddSelfEnergyKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
             }
             pmeInterpolateForceKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(1, cl.getLongForceBuffer().getDeviceBuffer());
@@ -687,8 +744,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            if (usePmeQueue)
-                syncQueue->setKernel(cl::Kernel(program, "addEnergy"));
+            addEnergy->initialize(pmeEnergyBuffer, sliceLambda, requestedDerivs, sliceDerivIndices);
        }
     }
 
@@ -802,17 +858,17 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
             pmeConvolutionKernel.setArg<mm_double4>(4, recipBoxVectors[0]);
             pmeConvolutionKernel.setArg<mm_double4>(5, recipBoxVectors[1]);
             pmeConvolutionKernel.setArg<mm_double4>(6, recipBoxVectors[2]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(8, recipBoxVectors[0]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(9, recipBoxVectors[1]);
-            pmeEvalEnergyKernel.setArg<mm_double4>(10, recipBoxVectors[2]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(5, recipBoxVectors[0]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(6, recipBoxVectors[1]);
+            pmeEvalEnergyKernel.setArg<mm_double4>(7, recipBoxVectors[2]);
         }
         else {
             pmeConvolutionKernel.setArg<mm_float4>(4, recipBoxVectorsFloat[0]);
             pmeConvolutionKernel.setArg<mm_float4>(5, recipBoxVectorsFloat[1]);
             pmeConvolutionKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[2]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(8, recipBoxVectorsFloat[0]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[1]);
-            pmeEvalEnergyKernel.setArg<mm_float4>(10, recipBoxVectorsFloat[2]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(5, recipBoxVectorsFloat[0]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
+            pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
         }
         if (includeEnergy || hasDerivatives) {
             cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);

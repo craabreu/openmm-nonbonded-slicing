@@ -82,33 +82,70 @@ private:
 
 class CudaCalcSlicedPmeForceKernel::SyncStreamPostComputation : public CudaContext::ForcePostComputation {
 public:
-    SyncStreamPostComputation(CudaContext& cu, CUevent event, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, CudaArray& pmeEnergyParamDerivs, int forceGroup) : cu(cu), event(event),
-            addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), pmeEnergyParamDerivs(pmeEnergyParamDerivs), forceGroup(forceGroup) {
-    }
+    SyncStreamPostComputation(CudaContext& cu, CUevent event, int forceGroup) : cu(cu), event(event), forceGroup(forceGroup) {}
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if ((groups&(1<<forceGroup)) != 0) {
+        if ((groups&(1<<forceGroup)) != 0)
             cuStreamWaitEvent(cu.getCurrentStream(), event, 0);
-            if (includeEnergy || pmeEnergyParamDerivs.isInitialized()) {
-                int bufferSize = pmeEnergyBuffer.getSize();
-                void* args[] = {
-                    &pmeEnergyBuffer.getDevicePointer(),
-                    &pmeEnergyParamDerivs.getDevicePointer(),
-                    &cu.getEnergyBuffer().getDevicePointer(),
-                    &cu.getEnergyParamDerivBuffer().getDevicePointer(),
-                    &bufferSize
-                };
-                cu.executeKernel(addEnergyKernel, args, bufferSize);
-            }
-        }
         return 0.0;
     }
 private:
     CudaContext& cu;
     CUevent event;
-    CUfunction addEnergyKernel;
-    CudaArray& pmeEnergyBuffer;
-    CudaArray& pmeEnergyParamDerivs;
     int forceGroup;
+};
+
+class CudaCalcSlicedPmeForceKernel::AddEnergyPostComputation : public CudaContext::ForcePostComputation {
+public:
+    AddEnergyPostComputation(CudaContext& cu, int forceGroup) : cu(cu), forceGroup(forceGroup), initialized(false) { }
+    void initialize(CudaArray& pmeEnergyBuffer, CudaArray& sliceLambda, vector<string> requestedDerivs, CudaArray& sliceDerivIndices) {
+        int numSlices = sliceDerivIndices.getSize();
+        hasDerivatives = requestedDerivs.size() > 0;
+        stringstream code;
+        if (hasDerivatives) {
+            vector<int> sliceDerivIndexVec(numSlices);
+            sliceDerivIndices.download(sliceDerivIndexVec);
+            const vector<string>& allDerivs = cu.getEnergyParamDerivNames();
+            for (int index = 0; index < requestedDerivs.size(); index++) {
+                string param = requestedDerivs[index];
+                int derivIndex = find(allDerivs.begin(), allDerivs.end(), param) - allDerivs.begin();
+                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<derivIndex<<"] +=";
+                int position = 0;
+                for (int slice = 0; slice < numSlices; slice++)
+                    if (sliceDerivIndexVec[slice] == index)
+                        code<<(position++ > 0 ? " + " : " ")<<"sliceEnergy["<<slice<<"]";
+                code<<";"<<endl;
+            }
+        }
+        map<string, string> replacements, defines;
+        replacements["UPDATE_DERIVATIVE_BUFFER"] = code.str();
+        replacements["NUM_SLICES"] = cu.intToString(numSlices);
+        string source = cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeAddEnergy, replacements);
+        CUmodule module = cu.createModule(CudaPmeSlicingKernelSources::vectorOps + source, defines);
+        addEnergyKernel = cu.getKernel(module, "addEnergy");
+        bufferSize = pmeEnergyBuffer.getSize()/numSlices;
+        arguments = {&pmeEnergyBuffer.getDevicePointer(),
+                     &cu.getEnergyBuffer().getDevicePointer(),
+                     &cu.getEnergyParamDerivBuffer().getDevicePointer(),
+                     &sliceLambda.getDevicePointer(),
+                     &bufferSize};
+        initialized = true;
+    }
+    bool isInitialized() {
+        return initialized;
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
+            cu.executeKernel(addEnergyKernel, &arguments[0], bufferSize);
+        return 0.0;
+    }
+private:
+    CudaContext& cu;
+    CUfunction addEnergyKernel;
+    bool hasDerivatives;
+    int bufferSize;
+    int forceGroup;
+    vector<void*> arguments;
+    bool initialized;
 };
 
 CudaCalcSlicedPmeForceKernel::~CudaCalcSlicedPmeForceKernel() {
@@ -225,8 +262,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         }
         int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
         sliceSwitchParamIndices[slice] = index;
-        if (hasDerivatives)
-            sliceDerivIndexVec[slice] = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
+        index = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
+        if (index < requestedDerivs.size())
+            sliceDerivIndexVec[slice] = index;
     }
     sliceLambdaVec.resize(numSlices, 1.0);
     sliceLambda.initialize(cu, numSlices, sizeOfReal, "sliceLambda");
@@ -308,15 +346,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         pmeBsplineModuliY.initialize(cu, gridSizeY, sizeOfReal, "pmeBsplineModuliY");
         pmeBsplineModuliZ.initialize(cu, gridSizeZ, sizeOfReal, "pmeBsplineModuliZ");
         pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
-        if (usePmeStream) {
-            int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
-            pmeEnergyBuffer.initialize(cu, bufferSize, sizeOfMixed, "pmeEnergyBuffer");
-            cu.clearBuffer(pmeEnergyBuffer);
-            if (hasDerivatives) {
-                pmeEnergyParamDerivs.initialize(cu, bufferSize*numAllDerivs, sizeOfMixed, "pmeEnergyParamDerivs");
-                cu.clearBuffer(pmeEnergyParamDerivs);
-            }
-        }
+        int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
+        pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, sizeOfMixed, "pmeEnergyBuffer");
+        cu.clearBuffer(pmeEnergyBuffer);
         sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
 
         // Prepare for doing PME on its own stream or not.
@@ -329,10 +361,12 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
             CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for NonbondedForce");
             cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
-            cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, pmeEnergyParamDerivs, recipForceGroup));
+            cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
         }
         else
             pmeStream = cu.getCurrentStream();
+
+        cu.addPostComputation(addEnergy = new AddEnergyPostComputation(cu, recipForceGroup));
 
         if (useCudaFFT)
             fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
@@ -698,6 +732,9 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
     // Do reciprocal space calculations.
 
     if (pmeGrid1.isInitialized() && includeReciprocal) {
+        if (!addEnergy->isInitialized())
+            addEnergy->initialize(pmeEnergyBuffer, sliceLambda, requestedDerivs, sliceDerivIndices);
+
         if (usePmeStream)
             cu.setCurrentStream(pmeStream);
 
@@ -750,10 +787,7 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
         if (includeEnergy || hasDerivatives) {
             void* computeEnergyArgs[] = {
                 &pmeGrid2.getDevicePointer(),
-                usePmeStream ? &pmeEnergyBuffer.getDevicePointer() : &cu.getEnergyBuffer().getDevicePointer(),
-                usePmeStream ? &pmeEnergyParamDerivs.getDevicePointer() : &cu.getEnergyParamDerivBuffer().getDevicePointer(),
-                &sliceDerivIndices.getDevicePointer(),
-                &sliceLambda.getDevicePointer(),
+                &pmeEnergyBuffer.getDevicePointer(),
                 &pmeBsplineModuliX.getDevicePointer(),
                 &pmeBsplineModuliY.getDevicePointer(),
                 &pmeBsplineModuliZ.getDevicePointer(),
@@ -764,16 +798,13 @@ double CudaCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeF
             cu.executeKernel(pmeEvalEnergyKernel, computeEnergyArgs, gridSizeX*gridSizeY*gridSizeZ);
 
             if (hasOffsets || hasDerivatives) {
-                vector<void*> addSelfEnergyArgs = {
-                    usePmeStream ? &pmeEnergyBuffer.getDevicePointer() : &cu.getEnergyBuffer().getDevicePointer(),
-                    usePmeStream ? &pmeEnergyParamDerivs.getDevicePointer() : &cu.getEnergyParamDerivBuffer().getDevicePointer(),
+                void* addSelfEnergyArgs[] = {
+                    &pmeEnergyBuffer.getDevicePointer(),
                     &cu.getPosq().getDevicePointer(),
                     &charges.getDevicePointer(),
-                    &subsets.getDevicePointer(),
-                    &sliceDerivIndices.getDevicePointer(),
-                    &sliceLambda.getDevicePointer()
+                    &subsets.getDevicePointer()
                 };
-                cu.executeKernel(pmeAddSelfEnergyKernel, &addSelfEnergyArgs[0], cu.getPaddedNumAtoms());
+                cu.executeKernel(pmeAddSelfEnergyKernel, addSelfEnergyArgs, cu.getPaddedNumAtoms());
             }
             else
                 energy = ewaldSelfEnergy;
@@ -881,4 +912,3 @@ void CudaCalcSlicedPmeForceKernel::getPMEParameters(double& alpha, int& nx, int&
         nz = gridSizeZ;
     }
 }
-
