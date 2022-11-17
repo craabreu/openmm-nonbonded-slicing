@@ -14,8 +14,5 @@ energy += lambda*tempEnergy;
 delta *= dEdR;
 real3 force1 = -delta;
 real3 force2 = delta;
-#if HAS_DERIVATIVES
-    int derivIndex = DERIV_INDICES[slice];
-    if (derivIndex != -1)
-        energyParamDerivs[GLOBAL_ID*NUM_ALL_DERIVS+derivIndex] += tempEnergy;
-#endif
+
+COMPUTE_DERIVATIVES

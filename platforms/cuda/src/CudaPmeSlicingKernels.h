@@ -139,6 +139,7 @@ private:
     CudaArray sliceLambda;
     CudaArray sliceDerivIndices;
     CudaArray pmeEnergyParamDerivs;
+    std::vector<std::string> requestedDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;

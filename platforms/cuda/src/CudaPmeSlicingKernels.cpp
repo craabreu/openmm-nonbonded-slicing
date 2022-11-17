@@ -201,10 +201,9 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
 
     // Identify requested derivatives.
 
-    set<string> requestedDerivs;
     for (int index = 0; index < force.getNumSwitchingParameterDerivatives(); index++) {
         string param = force.getSwitchingParameterDerivativeName(index);
-        requestedDerivs.insert(param);
+        requestedDerivs.push_back(param);
         cu.addEnergyParameterDerivative(param);
     }
     hasDerivatives = requestedDerivs.size() > 0;
@@ -226,8 +225,8 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         }
         int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
         sliceSwitchParamIndices[slice] = index;
-        if (requestedDerivs.find(param) != requestedDerivs.end())
-            sliceDerivIndexVec[slice] = find(allDerivs.begin(), allDerivs.end(), param) - allDerivs.begin();
+        if (hasDerivatives)
+            sliceDerivIndexVec[slice] = find(requestedDerivs.begin(), requestedDerivs.end(), param) - requestedDerivs.begin();
     }
     sliceLambdaVec.resize(numSlices, 1.0);
     sliceLambda.initialize(cu, numSlices, sizeOfReal, "sliceLambda");
@@ -419,8 +418,6 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
     if (force.getIncludeDirectSpace()) {
         CudaNonbondedUtilities* nb = &cu.getNonbondedUtilities();
         map<string, string> replacements;
-        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
-        replacements["NUM_ALL_DERIVS"] = cu.intToString(numAllDerivs);
         replacements["LAMBDA"] = prefix+"lambda";
         replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
         replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
@@ -429,16 +426,21 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         replacements["CHARGE2"] = usePosqCharges ? "posq2.w" : prefix+"charge2";
         replacements["SUBSET1"] = prefix+"subset1";
         replacements["SUBSET2"] = prefix+"subset2";
-        replacements["DERIV_INDICES"] = prefix+"derivIndices";
         if (!usePosqCharges)
             nb->addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
         nb->addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
         nb->addArgument(ComputeParameterInfo(sliceLambda, prefix+"lambda", "real", 1));
+        stringstream code;
         if (hasDerivatives) {
-            for (string param : requestedDerivs)
-                nb->addEnergyParameterDerivative(param);
-            nb->addArgument(ComputeParameterInfo(sliceDerivIndices, prefix+"derivIndices", "int", 1));
+            string derivIndices = prefix+"derivIndices";
+            nb->addArgument(ComputeParameterInfo(sliceDerivIndices, derivIndices, "int", 1));
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = nb->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? interactionScale*tempEnergy : 0;"<<endl;
+            }
         }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         string source = cu.replaceStrings(CommonPmeSlicingKernelSources::coulomb, replacements);
         nb->addInteraction(true, true, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
     }
@@ -469,19 +471,22 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         exclusionSlices.upload(exclusionSlicesVec);
         CudaBondedUtilities* bonded = &cu.getBondedUtilities();
         map<string, string> replacements;
-        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
-        replacements["NUM_ALL_DERIVS"] = cu.intToString(numAllDerivs);
         replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
         replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
         replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
         replacements["CHARGE_PRODS"] = bonded->addArgument(exclusionChargeProds.getDevicePointer(), "float");
         replacements["SLICES"] = bonded->addArgument(exclusionSlices.getDevicePointer(), "int");
         replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDevicePointer(), "real");
+        stringstream code;
         if (hasDerivatives) {
-            for (string param : requestedDerivs)
-                bonded->addEnergyParameterDerivative(param);
-            replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
+            string derivIndices = bonded->addArgument(sliceDerivIndices, "int");
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = bonded->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? tempEnergy : 0;"<<endl;
+            }
         }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         bonded->addInteraction(exclusionPairs, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExclusions, replacements), force.getForceGroup());
     }
 
@@ -516,17 +521,20 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
         baseExceptionChargeProds.upload(baseExceptionChargeProdsVec);
         CudaBondedUtilities* bonded = &cu.getBondedUtilities();
         map<string, string> replacements;
-        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
-        replacements["NUM_ALL_DERIVS"] = cu.intToString(numAllDerivs);
         replacements["APPLY_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
         replacements["CHARGE_PRODS"] = bonded->addArgument(exceptionChargeProds.getDevicePointer(), "float");
         replacements["SLICES"] = bonded->addArgument(exceptionSlices.getDevicePointer(), "int");
         replacements["LAMBDAS"] = bonded->addArgument(sliceLambda.getDevicePointer(), "real");
+        stringstream code;
         if (hasDerivatives) {
-            for (string param : requestedDerivs)
-                bonded->addEnergyParameterDerivative(param);
-            replacements["DERIV_INDICES"] = bonded->addArgument(sliceDerivIndices, "int");
+            string derivIndices = bonded->addArgument(sliceDerivIndices, "int");
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
+            for (int i = 0; i < requestedDerivs.size(); i++) {
+                string paramDeriv = bonded->addEnergyParameterDerivative(requestedDerivs[i]);
+                code<<paramDeriv<<" += which == "<<i<<" ? tempEnergy : 0;"<<endl;
+            }
         }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         bonded->addInteraction(exceptionPairs, cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPmeExceptions, replacements), force.getForceGroup());
     }
 

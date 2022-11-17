@@ -140,6 +140,7 @@ private:
     OpenCLArray sliceLambda;
     OpenCLArray sliceDerivIndices;
     OpenCLArray pmeEnergyParamDerivs;
+    std::vector<std::string> requestedDerivs;
     std::vector<double> sliceLambdaVec;
     std::vector<std::string> switchParamNames;
     std::vector<double> switchParamValues;
