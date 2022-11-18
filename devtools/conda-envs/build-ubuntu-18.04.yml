@@ -9,7 +9,7 @@ dependencies:
   - make
   - nvcc_linux-64 @NVCC_VERSION@
   - ocl-icd-system
-  - openmm 8.*
+  - openmm @OPENMM_VERSION@
   - pip >=22.2
   - pytest
   - python
