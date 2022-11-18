@@ -1,3 +1,7 @@
 build/
 .vscode/
 profiling/
+
+# Sphinx documentation
+docs/_build/
+
