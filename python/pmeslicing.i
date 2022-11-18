@@ -84,22 +84,22 @@ namespace PmeSlicing {
 /**
  * This class implements a Coulomb force to represent electrostatic interactions between particles
  * under periodic boundary conditions. The computation is done using the smooth Particle Mesh Ewald
- * (PME) method.
+ * (PME) method :cite:`Essmann_1995`.
  *
  * The total Coulomb potential can be divided into slices depending on which pairs of particles are
  * involved. After distributing all particles among disjoint subsets, each slice is distinguished
- * by two indices I and J. U[I][J] is the sum of the interactions of all particles in subset I with
- * all particles in subset J.
+ * by two indices I and J. :math:`U_{I,J}` is the sum of the Coulomb interactions of all particles
+ * in subset I with all particles in subset J.
  *
- * To use this class, create a SlicedPmeForce object, then call addParticle() once for each
+ * To use this class, create a SlicedPmeForce object, then call :func:`addParticle` once for each
  * particle in the System to define its electric charge and its subset. The number of particles
  * for which you define these parameters must be exactly equal to the number of particles in the
- * System, or else an exception will be thrown when you try to create a Context. After a particle
- * has been added, you can modify its electric charge by calling setParticleCharge() or its subset
- * by calling setParticleSubset(). This will have no effect on Contexts that already exist unless
- * you call updateParametersInContext().
+ * System, or else an exception will be thrown when you try to create an :OpenMM:`Context`. After
+ * a particle has been added, you can modify its electric charge by calling :func:`setParticleCharge`
+ * or its subset by calling :func:`setParticleSubset`. This will have no effect on Contexts that
+ * already exist unless you call :func:`updateParametersInContext`.
  *
- * SlicedPmeForce also lets you specify "exceptions", particular pairs of particles whose
+ * :class:`SlicedPmeForce` also lets you specify "exceptions", particular pairs of particles whose
  * interactions should be computed based on a product of charges other than those defined for the
  * individual particles. This can be used to completely exclude certain interactions from the
  * force calculation.
@@ -107,7 +107,7 @@ namespace PmeSlicing {
  * Many molecular force fields omit Coulomb interactions between particles separated by one
  * or two bonds, while using modified parameters for those separated by three bonds (known as
  * "1-4 interactions"). This class provides a convenience method for this case called
- * createExceptionsFromBonds().  You pass to it a list of bonds and the scale factor to use
+ * :func:`createExceptionsFromBonds`.  You pass to it a list of bonds and the scale factor to use
  * for 1-4 interactions.  It identifies all pairs of particles which are separated by 1, 2, or
  * 3 bonds, then automatically creates exceptions for them.
  *
@@ -115,44 +115,46 @@ namespace PmeSlicing {
  * groups of particles. Usually this is done to interpolate between two sets of parameters. For
  * example, a titratable group might have two states it can exist in, each described by a
  * different set of parameters for the atoms that make up the group. You might then want to
- * smoothly interpolate between the two states. This is done by first calling addGlobalParameter()
- * to define a Context parameter, then addParticleChargeOffset() to create a "charge offset"
- * that depends on the Context parameter. Each offset defines the following:
+ * smoothly interpolate between the two states. This is done by first calling addGlobalParameter`
+ * to define a Context parameter, then :func:`addParticleChargeOffset` to create a "charge offset"
+ * that depends on the :OpenMM:`Context` parameter. Each offset defines the following:
  *
- * <ul>
- * <li>A Context parameter used to interpolate between the states.</li>
- * <li>A single particle whose parameters are influenced by the Context parameter.</li>
- * <li>A scale factor (chargeScale) that specifies how the Context parameter affects the
- * particle.</li>
- * </ul>
+ * * A Context parameter used to interpolate between the states.
+ * * A single particle whose parameters are influenced by the :OpenMM:`Context` parameter.
+ * * A scale factor (chargeScale) that specifies how the :OpenMM:`Context` parameter affects the particle.
  *
  * The "effective" charge of a particle (that used to compute forces) is given by
  *
- * \verbatim embed:rst:leading-asterisk
- * .. code-block:: cpp
+ * .. code-block:: python
  *
  *    charge = baseCharge + param*chargeScale
  *
- * \endverbatim
- *
- * where the "base" values are the ones specified by addParticle() and "param" is the current value
- * of the Context parameter. A single Context parameter can apply offsets to multiple particles,
- * and multiple parameters can be used to apply offsets to the same particle.  Parameters can also
- * be used to modify exceptions in exactly the same way by calling addExceptionChargeOffset().
+ * where the "base" values are the ones specified by :func:`addParticle` and "param" is the current
+ * value of the :OpenMM:`Context` parameter. A single :OpenMM:`Context` parameter can apply offsets
+ * to multiple particles, and multiple parameters can be used to apply offsets to the same
+ * particle. Parameters can also be used to modify exceptions in exactly the same way by calling
+ * :func:`addExceptionChargeOffset`.
  */
 class SlicedPmeForce : public OpenMM::Force {
 public:
     /**
      * Create a SlicedPmeForce.
      *
-     * @param numSubsets the number of particle subsets.
+     * Parameters
+     * ----------
+     *     numSubsets : int, optional
+     *         the number of particle subsets (default=1)
      */
     SlicedPmeForce(int numSubsets=1);
     /**
      * Create a SlicedPmeForce whose properties are imported from an existing NonbondedForce.
      *
-     * @param nonbondedForce the NonbondedForce whose properties will be imported.
-     * @param numSubsets the number of particle subsets.
+     * Parameters
+     * ----------
+     *     nonbondedForce : :Openmm:`NonbondedForce`
+     *         the NonbondedForce whose properties will be imported
+     *     numSubsets : int, optional
+     *         the number of particle subsets (default=1)
      */
     SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets=1);
     /**
@@ -181,15 +183,21 @@ public:
      */
     int getNumExceptionChargeOffsets() const;
     /**
-     * Get the cutoff distance (in nm) being used for nonbonded interactions.
+     * Get the cutoff distance (in :math:`nm`) being used for nonbonded interactions.
      *
-     * @return the cutoff distance, measured in nm
+     * Returns
+     * -------
+     *     cutoff : double
+     *         the cutoff distance, measured in :math:`nm`
      */
     double getCutoffDistance() const;
     /**
-     * Set the cutoff distance (in nm) being used for nonbonded interactions.
+     * Set the cutoff distance (in :math:`nm`) being used for nonbonded interactions.
      *
-     * @param distance    the cutoff distance, measured in nm
+     * Parameters
+     * ----------
+     *      distance : double
+     *          the cutoff distance, measured in :math:`nm`
      */
     void setCutoffDistance(double distance);
     /**
@@ -199,7 +207,7 @@ public:
      * There is not a rigorous guarantee that all forces on all atoms will be less than the
      * tolerance, however.
      *
-     * For PME calculations, if setPMEParameters() is used to set alpha to something other than 0,
+     * For PME calculations, if :func:`setPMEParameters` is used to set alpha to something other than 0,
      * this value is ignored.
      */
     double getEwaldErrorTolerance() const;
@@ -210,8 +218,13 @@ public:
      * There is not a rigorous guarantee that all forces on all atoms will be less than the
      * tolerance, however.
      *
-     * For PME calculations, if setPMEParameters() is used to set alpha to something other than 0,
-     * this value is ignored.
+     * For PME calculations, if :func:`setPMEParameters` is used to set alpha to something other
+     * than 0, this value is ignored.
+     *
+     * Parameters
+     * ----------
+     *     tol : double
+     *         the fractional error tolerance for Ewald summation
      */
     void setEwaldErrorTolerance(double tol);
     /**
@@ -219,10 +232,16 @@ public:
      * these parameters are ignored and instead their values are chosen based on the Ewald error
      * tolerance.
      *
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
+     * Returns
+     * -------
+     *     alpha : double
+     *         the separation parameter, measured in :math:`nm^{-1}`
+     *     nx : int
+     *         the number of grid points along the X axis
+     *     ny : int
+     *         the number of grid points along the Y axis
+     *     nz : int
+     *         the number of grid points along the Z axis
      */
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     /**
@@ -230,23 +249,39 @@ public:
      * parameters are ignored and instead their values are chosen based on the Ewald error
      * tolerance.
      *
-     * @param alpha   the separation parameter
-     * @param nx      the number of grid points along the X axis
-     * @param ny      the number of grid points along the Y axis
-     * @param nz      the number of grid points along the Z axis
+     * Parameters
+     * ----------
+     *     alpha : double
+     *         the separation parameter, measured in :math:`nm^{-1}`
+     *     nx : int
+     *         the number of grid points along the X axis
+     *     ny : int
+     *         the number of grid points along the Y axis
+     *     nz : int
+     *         the number of grid points along the Z axis
      */
     void setPMEParameters(double alpha, int nx, int ny, int nz);
     /**
      * Get the parameters being used for PME in a particular Context.  Because some platforms have
      * restrictions on the allowed grid sizes, the values that are actually used may be slightly
-     * different from those specified with setPMEParameters(), or the standard values calculated
+     * different from those specified with :func:`setPMEParameters`, or the standard values calculated
      * based on the Ewald error tolerance. See the manual for details.
      *
-     * @param context      the Context for which to get the parameters
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
+     * Parameters
+     * ----------
+     *     context : :OpenMM:`Context`
+     *         the Context for which to get the parameters
+     *
+     * Returns
+     * -------
+     *     alpha : double
+     *         the separation parameter, measured in :math:`nm^{-1}`
+     *     nx : int
+     *         the number of grid points along the X axis
+     *     ny : int
+     *         the number of grid points along the Y axis
+     *     nz : int
+     *         the number of grid points along the Z axis
      */
     void getPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
@@ -254,36 +289,62 @@ public:
      * for each particle in the System.  When it is called for the i'th time, it specifies the
      * charge for the i'th particle.
      *
-     * @param charge    the charge of the particle, measured in units of the proton charge
-     * @param subset    the subset to which this particle belongs (default=0)
-     * @return the index of the particle that was added
+     * Parameters
+     * ----------
+     *     charge : double
+     *         the charge of the particle, measured in units of the proton charge
+     *     subset : int, optional
+     *         the subset to which this particle belongs (default=0)
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of the particle that was added
      */
     int addParticle(double charge, int subset=0);
     /**
      * Get the subset to which a particle belongs.
      *
-     * @param index          the index of the particle for which to get the subset
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to get the subset
      */
     int getParticleSubset(int index) const;
     /**
      * Set the subset for a particle.
      *
-     * @param index     the index of the particle for which to set the subset
-     * @param subset    the subset to which this particle belongs
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to set the subset
+     *     subset : int
+     *         the subset to which this particle belongs
      */
     void setParticleSubset(int index, int subset);
     /**
      * Get the charge of a particle.
      *
-     * @param index          the index of the particle for which to get parameters
-     * @param[out] charge    the charge of the particle, measured in units of the proton charge
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to get parameters
+     *
+     * Returns
+     * -------
+     *     charge : double
+     *         the charge of the particle, measured in units of the proton charge
      */
     double getParticleCharge(int index) const;
     /**
      * Set the charge for a particle.
      *
-     * @param index     the index of the particle for which to set parameters
-     * @param charge    the charge of the particle, measured in units of the proton charge
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to set parameters
+     *     charge : double
+     *         the charge of the particle, measured in units of the proton charge
      */
     void setParticleCharge(int index, double charge);
     /**
@@ -295,28 +356,47 @@ public:
      * interactions, which are really a type of bonded interaction and are parametrized together
      * with the other bonded interactions.
      *
-     * In many cases, you can use createExceptionsFromBonds() rather than adding each exception
+     * In many cases, you can use :func:`createExceptionsFromBonds` rather than adding each exception
      * explicitly.
      *
-     * @param particle1  the index of the first particle involved in the interaction
-     * @param particle2  the index of the second particle involved in the interaction
-     * @param chargeProd the scaled product of the atomic charges (i.e. the strength of the Coulomb
-     *                   interaction), measured in units of the proton charge squared
-     * @param replace    determines the behavior if there is already an exception for the same two
-     *                   particles. If true, the existing one is replaced. If false, an exception
-     *                   is thrown.
-     * @return the index of the exception that was added
+     * Parameters
+     * ----------
+     *     particle1 : int
+     *         the index of the first particle involved in the interaction
+     *     particle2 : int
+     *         the index of the second particle involved in the interaction
+     *     chargeProd : double
+     *         the scaled product of the atomic charges (i.e. the strength of the Coulomb
+     *         interaction), measured in units of the proton charge squared
+     *     replace : bool, optional
+     *         determines the behavior if there is already an exception for the same two
+     *         particles. If `True`, the existing one is replaced. If `False`, an exception
+     *         is thrown.
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of the exception that was added
      */
     int addException(int particle1, int particle2, double chargeProd, bool replace = false);
     /**
      * Get the particle indices and charge product for an interaction that should be calculated
      * differently from others.
      *
-     * @param index           the index of the interaction for which to get parameters
-     * @param[out] particle1  the index of the first particle involved in the interaction
-     * @param[out] particle2  the index of the second particle involved in the interaction
-     * @param[out] chargeProd the scaled product of the atomic charges (i.e. the strength of the
-     *                        Coulomb interaction), measured in units of the proton charge squared
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the interaction for which to get parameters
+     *
+     * Returns
+     * -------
+     *     particle1 : int
+     *         the index of the first particle involved in the interaction
+     *     particle2 : int
+     *         the index of the second particle involved in the interaction
+     *     chargeProd : double
+     *         the scaled product of the atomic charges (i.e. the strength of the
+     *         Coulomb interaction), measured in units of the proton charge squared
      */
     void getExceptionParameters(int index, int& particle1, int& particle2, double& chargeProd) const;
     /**
@@ -328,11 +408,17 @@ public:
      * interactions, which are really a type of bonded interaction and are parametrized together
      * with the other bonded interactions.
      *
-     * @param index      the index of the interaction for which to get parameters
-     * @param particle1  the index of the first particle involved in the interaction
-     * @param particle2  the index of the second particle involved in the interaction
-     * @param chargeProd the scaled product of the atomic charges (i.e. the strength of the Coulomb
-     *                   interaction), measured in units of the proton charge squared
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the interaction for which to get parameters
+     *     particle1 : int
+     *         the index of the first particle involved in the interaction
+     *     particle2 : int
+     *         the index of the second particle involved in the interaction
+     *     chargeProd : double
+     *         the scaled product of the atomic charges (i.e. the strength of the Coulomb
+     *         interaction), measured in units of the proton charge squared
      */
     void setExceptionParameters(int index, int particle1, int particle2, double chargeProd);
     /**
@@ -341,50 +427,83 @@ public:
      * bonds (known as "1-4 interactions") have their Coulomb and Lennard-Jones interactions
      * reduced by a fixed factor.
      *
-     * @param bonds           the set of bonds based on which to construct exceptions. Each element
-     *                        specifies the indices of two particles that are bonded to each other.
-     * @param coulomb14Scale  pairs of particles separated by three bonds will have the strength of
-     *                        their Coulomb interaction multiplied by this factor
-     * @param lj14Scale       pairs of particles separated by three bonds will have the strength of
-     *                        their Lennard-Jones interaction multiplied by this factor
+     * Parameters
+     * ----------
+     *     bonds : list of (int, int) tuples
+     *         the set of bonds based on which to construct exceptions. Each element
+     *         specifies the indices of two particles that are bonded to each other.
+     *     coulomb14Scale : double
+     *         pairs of particles separated by three bonds will have the strength of
+     *         their Coulomb interaction multiplied by this factor
+     *     lj14Scale : double
+     *         pairs of particles separated by three bonds will have the strength of
+     *         their Lennard-Jones interaction multiplied by this factor
      */
     void createExceptionsFromBonds(const std::vector<std::pair<int, int> >& bonds, double coulomb14Scale, double lj14Scale);
     /**
      * Add a new global parameter that charge offsets may depend on.  The default value provided
      * to this method is the initial value of the parameter in newly created Contexts.  You can
-     * change the value at any time by calling setParameter() on the Context.
+     * change the value at any time by calling `setParameter()` on the :OpenMM:`Context`.
      *
-     * @param name             the name of the parameter
-     * @param defaultValue     the default value of the parameter
-     * @return the index of the parameter that was added
+     * Parameters
+     * ----------
+     *     name             the name of the parameter
+     *     defaultValue     the default value of the parameter
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of the parameter that was added
      */
     int addGlobalParameter(const std::string& name, double defaultValue);
     /**
      * Get the name of a global parameter.
      *
-     * @param index     the index of the parameter for which to get the name
-     * @return the parameter name
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter for which to get the name
+     *
+     * Returns
+     * -------
+     *     name : str
+     *         the parameter name
      */
     const std::string& getGlobalParameterName(int index) const;
     /**
      * Set the name of a global parameter.
      *
-     * @param index          the index of the parameter for which to set the name
-     * @param name           the name of the parameter
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter for which to set the name
+     *     name : str
+     *         the name of the parameter
      */
     void setGlobalParameterName(int index, const std::string& name);
     /**
      * Get the default value of a global parameter.
      *
-     * @param index     the index of the parameter for which to get the default value
-     * @return the parameter default value
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter for which to get the default value
+     *
+     * Returns
+     * -------
+     *     defaultValue : double
+     *         the parameter default value
      */
     double getGlobalParameterDefaultValue(int index) const;
     /**
      * Set the default value of a global parameter.
      *
-     * @param index          the index of the parameter for which to set the default value
-     * @param defaultValue   the default value of the parameter
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter for which to set the default value
+     *     defaultValue: double
+     *         the default value of the parameter
      */
     void setGlobalParameterDefaultValue(int index, double defaultValue);
  	/**
@@ -392,12 +511,23 @@ public:
      * interactions between particles of a subset with those of another (or the same) subset.
      * The order of subset definition is irrelevant.
      *
-     * @param parameter the name of the global parameter.  It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter()
-     * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
-     * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
-     * @return          the index of switching parameter that was added
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of switching parameter that was added
      */
     int addSwitchingParameter(const std::string& parameter, int subset1, int subset2);
     /**
@@ -407,31 +537,54 @@ public:
   	/**
      * Get the switching parameter applied to a particular nonbonded slice.
      *
-     * @param index     the index of the switching parameter to query, as returned by
-     *                      addSwitchingParameter()
-     * @param parameter the name of the global parameter
-     * @param subset1   the smallest index of the two particle subsets
-     * @param subset2   the largest index of the two particle subsets
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the switching parameter to query, as returned by :func:`addSwitchingParameter`
+     *
+     * Returns
+     * -------
+     *     parameter : str
+     *         the name of the global parameter
+     *     subset1 : int
+     *         the smallest index of the two particle subsets
+     *     subset2 : int
+     *         the largest index of the two particle subsets
      */
     void getSwitchingParameter(int index, std::string& parameter, int& subset1, int& subset2) const;
  	/**
      * Modify an added switching parameter.
      *
-     * @param index     the index of the switching parameter to modify, as returned by
-     *                        addExceptionChargeOffset()
-     * @param parameter the name of the global parameter.  It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter()
-     * @param subset1   the index of a particle subset.  Legal values are between 0 and numSubsets
-     * @param subset2   the index of a particle subset.  Legal values are between 0 and numSubsets
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the switching parameter to modify, as returned by
+     *         :func:`addExceptionChargeOffset`
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
      */
     void setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
      * Request that this Force compute the derivative of its energy with respect to a switching parameter.
-     * The parameter must have already been added with addGlobalParameter() and addSwithingParameter().
+     * The parameter must have already been added with :func:`addGlobalParameter` and :func:`addSwithingParameter`.
      *
-     * @param parameter   the name of the parameter
-     * @return the index of switching parameter derivative that was added
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the parameter
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of switching parameter derivative that was added
      */
     int addSwitchingParameterDerivative(const std::string& parameter);
     /**
@@ -443,110 +596,162 @@ public:
      * Get the name of a global parameter with respect to which this Force should compute the
      * derivative of the energy.
      *
-     * @param index     the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives()
-     * @return the parameter name
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter derivative, between 0 and the result of
+     *         :func:`getNumSwitchingParameterDerivatives`
+     *
+     * Returns
+     * -------
+     *     parameter : str
+     *         the parameter name
      */
     const std::string& getSwitchingParameterDerivativeName(int index) const;
     /**
      * Set the name of the global parameter with respect to which this Force should compute the
      * derivative of the energy.
      *
-     * @param index     the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives()
-     * @param parameter the name of the parameter
-     * @return the parameter name
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter derivative, between 0 and getNumSwitchingParameterDerivatives`
+     *     parameter : str
+     *         the name of the parameter
      */
     void setSwitchingParameterDerivative(int index, const std::string& parameter);
     /**
      * Add an offset to the charge of a particular particle, based on a global parameter.
      *
-     * @param parameter       the name of the global parameter. It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter().
-     * @param particleIndex   the index of the particle whose parameters are affected
-     * @param chargeScale     this value multiplied by the parameter value is added to the
-     *                        particle's charge
-     * @return the index of the offset that was added
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the global parameter. It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`.
+     *     particleIndex : int
+     *         the index of the particle whose parameters are affected
+     *     chargeScale : double
+     *         this value multiplied by the parameter value is added to the particle's charge
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of the offset that was added
      */
     int addParticleChargeOffset(const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Get the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
      *
-     * @param index           the index of the offset to query, as returned by
-     *                        addParticleChargeOffset()
-     * @param parameter       the name of the global parameter
-     * @param particleIndex   the index of the particle whose parameters are affected
-     * @param chargeScale     this value multiplied by the parameter value is added to the
-     *                        particle's charge
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the offset to query, as returned by :func:`addParticleChargeOffset`
+     *
+     * Returns
+     * -------
+     *     parameter : str
+     *         the name of the global parameter
+     *     particleIndex : int
+     *         the index of the particle whose parameters are affected
+     *     chargeScale : double
+     *         this value multiplied by the parameter value is added to the particle's charge
      */
     void getParticleChargeOffset(int index, std::string& parameter, int& particleIndex, double& chargeScale) const;
     /**
      * Set the offset added to the per-particle parameters of a particular particle, based on a
      * global parameter.
      *
-     * @param index           the index of the offset to modify, as returned by
-     *                        addParticleChargeOffset()
-     * @param parameter       the name of the global parameter. It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter().
-     * @param particleIndex   the index of the particle whose parameters are affected
-     * @param chargeScale     this value multiplied by the parameter value is added to the
-     *                        particle's charge
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the offset to query, as returned by :func:`addParticleChargeOffset`
+     *     parameter : str
+     *         the name of the global parameter. It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`.
+     *     particleIndex : int
+     *         the index of the particle whose parameters are affected
+     *     chargeScale : double
+     *         this value multiplied by the parameter value is added to the particle's charge
      */
     void setParticleChargeOffset(int index, const std::string& parameter, int particleIndex, double chargeScale);
     /**
      * Add an offset to the parameters of a particular exception, based on a global parameter.
      *
-     * @param parameter       the name of the global parameter.  It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter().
-     * @param exceptionIndex  the index of the exception whose parameters are affected
-     * @param chargeProdScale this value multiplied by the parameter value is added to the
-     *                        exception's charge product
-     * @return the index of the offset that was added
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`.
+     *     exceptionIndex : int
+     *         the index of the exception whose parameters are affected
+     *     chargeProdScale : double
+     *         this value multiplied by the parameter value is added to the exception's charge product
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of the offset that was added
      */
     int addExceptionChargeOffset(const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get the offset added to the parameters of a particular exception, based on a global
      * parameter.
      *
-     * @param index           the index of the offset to query, as returned by
-     *                        addExceptionChargeOffset()
-     * @param parameter       the name of the global parameter
-     * @param exceptionIndex  the index of the exception whose parameters are affected
-     * @param chargeProdScale this value multiplied by the parameter value is added to the
-     *                        exception's charge product
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the offset to query, as returned by :func:`addExceptionChargeOffset`
+     *
+     * Returns
+     * -------
+     *     parameter : str
+     *         the name of the global parameter
+     *     exceptionIndex : int
+     *         the index of the exception whose parameters are affected
+     *     chargeProdScale : double
+     *         this value multiplied by the parameter value is added to the exception's charge product
      */
     void getExceptionChargeOffset(int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const;
     /**
      * Set the offset added to the parameters of a particular exception, based on a global
      * parameter.
      *
-     * @param index           the index of the offset to modify, as returned by
-     *                        addExceptionChargeOffset()
-     * @param parameter       the name of the global parameter.  It must have already been added
-     *                        with addGlobalParameter(). Its value can be modified at any time by
-     *                        calling Context::setParameter().
-     * @param exceptionIndex  the index of the exception whose parameters are affected
-     * @param chargeProdScale this value multiplied by the parameter value is added to the
-     *                        exception's charge product
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the offset to modify, as returned by :func:`addExceptionChargeOffset`
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`.
+     *     exceptionIndex : int
+     *         the index of the exception whose parameters are affected
+     *     chargeProdScale : double
+     *         this value multiplied by the parameter value is added to the exception's charge product
      */
     void setExceptionChargeOffset(int index, const std::string& parameter, int exceptionIndex, double chargeProdScale);
     /**
      * Get the force group that reciprocal space interactions for Ewald or PME are included in.  This allows multiple
-     * time step integrators to evaluate direct and reciprocal space interactions at different intervals: getForceGroup()
-     * specifies the group for direct space, and getReciprocalSpaceForceGroup() specifies the group for reciprocal space.
+     * time step integrators to evaluate direct and reciprocal space interactions at different intervals: getForceGroup`
+     * specifies the group for direct space, and :func:`getReciprocalSpaceForceGroup` specifies the group for reciprocal space.
      * If this is -1 (the default value), the same force group is used for reciprocal space as for direct space.
      */
     int getReciprocalSpaceForceGroup() const;
     /**
      * Set the force group that reciprocal space interactions for Ewald or PME are included in.  This allows multiple
-     * time step integrators to evaluate direct and reciprocal space interactions at different intervals: setForceGroup()
-     * specifies the group for direct space, and setReciprocalSpaceForceGroup() specifies the group for reciprocal space.
+     * time step integrators to evaluate direct and reciprocal space interactions at different intervals: setForceGroup`
+     * specifies the group for direct space, and :func:`setReciprocalSpaceForceGroup` specifies the group for reciprocal space.
      * If this is -1 (the default value), the same force group is used for reciprocal space as for direct space.
      *
-     * @param group    the group index.  Legal values are between 0 and 31 (inclusive), or -1 to use the same force group
-     *                 that is specified for direct space.
+     * Parameters
+     * ----------
+     *     group : int
+     *         the group index.  Legal values are between 0 and 31 (inclusive), or -1 to use the same force group
+     *         that is specified for direct space.
      */
     void setReciprocalSpaceForceGroup(int group);
     /**
@@ -564,14 +769,19 @@ public:
     /**
      * Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
      * provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
-     * Simply call setParticleCharge() and setExceptionParameters() to modify this object's parameters, then call
-     * updateParametersInContext() to copy them over to the Context.
+     * Simply call :func:`setParticleCharge` and :func:`setExceptionParameters` to modify this object's parameters, then call
+     * :func:`updateParametersInContext` to copy them over to the :OpenMM:`Context`.
      *
      * This method has several limitations.  The only information it updates is the parameters of particles and exceptions.
      * All other aspects of the Force (the nonbonded method, the cutoff distance, etc.) are unaffected and can only be
-     * changed by reinitializing the Context.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
+     * changed by reinitializing the :OpenMM:`Context`.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
      * can be changed; the pair of particles involved in the exception cannot change.  Finally, this method cannot be used
      * to add new particles or exceptions, only to change the parameters of existing ones.
+     *
+     * Parameters
+     * ----------
+     *     context : :OpenMM:`Context`
+     *         the Context whose parameters should be updated
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**
@@ -598,6 +808,11 @@ public:
      * they also get applied to other interactions.  If the nonbonded method is NoCutoff or
      * CutoffNonPeriodic, this value is ignored.  Also note that cutoffs are never applied to
      * exceptions, again because they are normally used to represent bonded interactions.
+     *
+     * Parameters
+     * ----------
+     *     periodic : bool
+     *         whether to apply periodic boundary conditions to exceptions
      */
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
  	/**
@@ -606,9 +821,14 @@ public:
      */
     bool getUseCudaFFT() const;
  	/**
-     * Set whether to use CUDA Toolkit's cuFFT library to compute fast Fourier transform when
-     * executing in the CUDA platform. The default value is 'DEFAULT_USE_CUDA_FFT'. This choice
+     * Set whether to use CUDA Toolkit's  to compute fast Fourier transform when
+     * executing in the CUDA platform. The default value is `False`. This choice
      * has no effect when using other platforms or when the CUDA Toolkit is version 7.0 or older.
+     *
+     * Parameters
+     * ----------
+     *     use : bool
+     *         whether to use the cuFFT library
      */
     void setUseCuFFT(bool use);
 
