@@ -60,6 +60,7 @@ jobs:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
           NVCC_VERSION: ${{ matrix.nvcc-version }}
+          OPENMM_VERSION: ${{ matrix.openmm-version }}
 
       - uses: conda-incubator/setup-miniconda@v2
         name: "Install dependencies with conda"
