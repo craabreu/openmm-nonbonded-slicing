@@ -71,7 +71,7 @@ Once you do that, you can use the plugin from your Python scripts:
     import openmm as mm
     import pmeslicing as plugin
     system = mm.System()
-    force = plugin.SlicedPmeForce()
+    force = plugin.SlicedPmeForce(2)
     system.addForce(force)
 ```
 

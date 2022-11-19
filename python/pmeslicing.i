@@ -142,10 +142,10 @@ public:
      *
      * Parameters
      * ----------
-     *     numSubsets : int, optional
-     *         the number of particle subsets (default=1)
+     *     numSubsets : int
+     *         the number of particle subsets
      */
-    SlicedPmeForce(int numSubsets=1);
+    SlicedPmeForce(int numSubsets);
     /**
      * Create a SlicedPmeForce whose properties are imported from an existing NonbondedForce.
      *
@@ -153,10 +153,10 @@ public:
      * ----------
      *     nonbondedForce : :Openmm:`NonbondedForce`
      *         the NonbondedForce whose properties will be imported
-     *     numSubsets : int, optional
-     *         the number of particle subsets (default=1)
+     *     numSubsets : int
+     *         the number of particle subsets
      */
-    SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets=1);
+    SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets);
     /**
      * Get the specified number of particle subsets.
      */

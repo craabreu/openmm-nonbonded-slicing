@@ -22,7 +22,7 @@ void testParallelComputation() {
     const int numParticles = 200;
     for (int i = 0; i < numParticles; i++)
         system.addParticle(1.0);
-    SlicedPmeForce* force = new SlicedPmeForce();
+    SlicedPmeForce* force = new SlicedPmeForce(1);
     for (int i = 0; i < numParticles; i++)
         force->addParticle(i%2-0.5);
     system.addForce(force);
@@ -90,7 +90,7 @@ void testReordering() {
     const int numParticles = 200;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(6, 0, 0), Vec3(2.1, 6, 0), Vec3(-1.5, -0.5, 6));
-    SlicedPmeForce *nonbonded = new SlicedPmeForce();
+    SlicedPmeForce *nonbonded = new SlicedPmeForce(1);
     system.addForce(nonbonded);
     vector<Vec3> positions;
     OpenMM_SFMT::SFMT sfmt;

@@ -8,7 +8,7 @@ To use the plugin from your Python script:
     import openmm as mm
     import pmeslicing as plugin
     system = mm.System()
-    force = plugin.SlicedPmeForce()
+    force = plugin.SlicedPmeForce(1)
     system.addForce(force)
 
 Implemented subclass of :OpenMM:`Force`:

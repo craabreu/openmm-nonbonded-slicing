@@ -29,8 +29,8 @@ namespace PmeSlicing {
 
 class OPENMM_EXPORT_PMESLICING SlicedPmeForce : public OpenMM::Force {
 public:
-    SlicedPmeForce(int numSubsets=1);
-    SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets=1);
+    SlicedPmeForce(int numSubsets);
+    SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets);
     int getNumSubsets() const {
         return numSubsets;
     }

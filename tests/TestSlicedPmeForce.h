@@ -79,7 +79,7 @@ void testInstantiateFromNonbondedForce(Platform& platform) {
     lennardJones->addExceptionParameterOffset("p1", 1, 0.0, 0.5, 1.5);
     lennardJones->setForceGroup(1);
 
-    SlicedPmeForce* coulomb = new SlicedPmeForce(*force);
+    SlicedPmeForce* coulomb = new SlicedPmeForce(*force, 1);
     coulomb->setForceGroup(1);
 
     System system;
@@ -112,7 +112,7 @@ void testCoulomb(Platform& platform) {
     system.addParticle(1.0);
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
 
-    SlicedPmeForce* force = new SlicedPmeForce();
+    SlicedPmeForce* force = new SlicedPmeForce(1);
     force->setForceGroup(1);
     force->addParticle(1.5);
     force->addParticle(-1.5);
@@ -166,7 +166,7 @@ void testExclusionsAnd14(Platform& platform) {
     }
     system.addForce(nonbonded);
 
-    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded);
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 1);
     slicedNonbonded->setForceGroup(1);
     system.addForce(slicedNonbonded);
 
@@ -217,7 +217,7 @@ void testPeriodic(Platform& platform) {
     system.addForce(nonbonded);
     ASSERT(system.usesPeriodicBoundaryConditions());
 
-    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded);
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 1);
     slicedNonbonded->setForceGroup(1);
     system.addForce(slicedNonbonded);
 
@@ -246,7 +246,7 @@ void testPeriodicExceptions(Platform& platform) {
     nonbonded->setCutoffDistance(cutoff);
     system.addForce(nonbonded);
 
-    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded);
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 1);
     slicedNonbonded->setForceGroup(1);
     system.addForce(slicedNonbonded);
 
@@ -283,7 +283,7 @@ void testTriclinic(Platform& platform) {
     nonbonded->setCutoffDistance(cutoff);
     system.addForce(nonbonded);
 
-    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded);
+    SlicedPmeForce* slicedNonbonded = new SlicedPmeForce(*nonbonded, 1);
     slicedNonbonded->setForceGroup(1);
     system.addForce(slicedNonbonded);
 
@@ -364,8 +364,8 @@ void testChangingParameters(Platform& platform) {
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
     for (int i = 0; i < numParticles; i++)
         system.addParticle(1.0);
-    SlicedPmeForce* nonbonded0 = new SlicedPmeForce();
-    SlicedPmeForce* nonbonded1 = new SlicedPmeForce();
+    SlicedPmeForce* nonbonded0 = new SlicedPmeForce(1);
+    SlicedPmeForce* nonbonded1 = new SlicedPmeForce(1);
     nonbonded1->setForceGroup(1);
     vector<Vec3> positions(numParticles);
     OpenMM_SFMT::SFMT sfmt;
@@ -433,7 +433,7 @@ void testChargeOffsets(Platform& platform) {
     nonbonded->addExceptionParameterOffset("p1", 1, 0.5, 0.0, 0.0);
     system.addForce(nonbonded);
 
-    SlicedPmeForce* force = new SlicedPmeForce();
+    SlicedPmeForce* force = new SlicedPmeForce(1);
     force->setForceGroup(1);
     force->addParticle(0.0);
     force->addParticle(1.0);
@@ -470,7 +470,7 @@ void testEwaldExceptions(Platform& platform) {
     for (int i = 0; i < 4; i++)
         system.addParticle(1.0);
     system.setDefaultPeriodicBoxVectors(Vec3(2, 0, 0), Vec3(0, 2, 0), Vec3(0, 0, 2));
-    SlicedPmeForce* force = new SlicedPmeForce();
+    SlicedPmeForce* force = new SlicedPmeForce(1);
     system.addForce(force);
     force->setCutoffDistance(1.0);
     force->addParticle(1.0);
@@ -509,7 +509,7 @@ void testDirectAndReciprocal(Platform& platform) {
     for (int i = 0; i < 4; i++)
         system.addParticle(1.0);
     system.setDefaultPeriodicBoxVectors(Vec3(2, 0, 0), Vec3(0, 2, 0), Vec3(0, 0, 2));
-    SlicedPmeForce* force = new SlicedPmeForce();
+    SlicedPmeForce* force = new SlicedPmeForce(1);
     system.addForce(force);
     force->setCutoffDistance(1.0);
     force->setReciprocalSpaceForceGroup(1);

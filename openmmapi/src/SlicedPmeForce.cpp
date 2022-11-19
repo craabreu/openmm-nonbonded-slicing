@@ -34,6 +34,8 @@ using std::vector;
 SlicedPmeForce::SlicedPmeForce(int numSubsets) : numSubsets(numSubsets), cutoffDistance(1.0),
         ewaldErrorTol(5e-4), alpha(0.0), dalpha(0.0), exceptionsUsePeriodic(false), recipForceGroup(-1),
         includeDirectSpace(true), nx(0), ny(0), nz(0), dnx(0), dny(0), dnz(0), useCudaFFT(false) {
+    if (numSubsets <= 0)
+        throw OpenMMException("Invalid number of subsets");
     for (int j = 0; j < numSubsets*(numSubsets+1)/2; j++)
         switchingParameter.push_back(1.0);
 }

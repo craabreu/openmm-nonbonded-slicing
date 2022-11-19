@@ -56,7 +56,7 @@ def testParameterClash(platformName):
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
     system.addParticle(1.0)
     system.addParticle(1.0)
-    force = plugin.SlicedPmeForce()
+    force = plugin.SlicedPmeForce(1)
     force.addParticle(1.5)
     force.addParticle(-1.5)
     force.addGlobalParameter("param", 1)
@@ -82,7 +82,7 @@ def testCoulomb(platformName, precision):
     system.addForce(nonbonded)
     assert system.usesPeriodicBoundaryConditions()
 
-    slicedNonbonded = plugin.SlicedPmeForce(nonbonded)
+    slicedNonbonded = plugin.SlicedPmeForce(nonbonded, 1)
     slicedNonbonded.setForceGroup(1)
     system.addForce(slicedNonbonded)
 
