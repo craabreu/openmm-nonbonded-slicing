@@ -1,2 +1,0 @@
-conda:
-    file: devtools/conda-envs/rtd_env.yml

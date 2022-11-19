@@ -1,0 +1,11 @@
+mkdir build
+cd build
+cmake .. \
+-DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX} \
+-DOPENMM_DIR=${CONDA_PREFIX} \
+-DPMESLICING_BUILD_OPENCL_LIB=OFF \
+-DPMESLICING_BUILD_CUDA_LIB=OFF
+make
+make install
+make PythonInstall
