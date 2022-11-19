@@ -117,34 +117,6 @@ private:
     int forceGroup;
 };
 
-// class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
-// public:
-//     AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& sliceLambda, OpenCLArray& sliceDerivIndices, bool hasDerivatives, int bufferSize, int forceGroup) :
-//         cl(cl), pmeEnergyBuffer(pmeEnergyBuffer), sliceLambda(sliceLambda), sliceDerivIndices(sliceDerivIndices), hasDerivatives(hasDerivatives), bufferSize(bufferSize), forceGroup(forceGroup) {}
-//     void setKernel(cl::Kernel kernel) {
-//         addEnergyKernel = kernel;
-//         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-//         addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-//         addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
-//         addEnergyKernel.setArg<cl::Buffer>(3, sliceLambda.getDeviceBuffer());
-//         addEnergyKernel.setArg<cl::Buffer>(4, sliceDerivIndices.getDeviceBuffer());
-//         addEnergyKernel.setArg<cl_int>(5, bufferSize);
-//     }
-//     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-//         if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
-//             cl.executeKernel(addEnergyKernel, bufferSize);
-//         return 0.0;
-//     }
-// private:
-//     OpenCLContext& cl;
-//     cl::Kernel addEnergyKernel;
-//     OpenCLArray& pmeEnergyBuffer;
-//     OpenCLArray& sliceLambda;
-//     OpenCLArray& sliceDerivIndices;
-//     bool hasDerivatives;
-//     int bufferSize;
-//     int forceGroup;
-// };
 class OpenCLCalcSlicedPmeForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
     AddEnergyPostComputation(OpenCLContext& cl, int forceGroup) : cl(cl), forceGroup(forceGroup), initialized(false) { }
@@ -196,6 +168,18 @@ private:
     int bufferSize;
     int forceGroup;
     bool initialized;
+};
+
+OpenCLCalcSlicedPmeForceKernel::OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
+    CalcSlicedPmeForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
+    string version = Platform::getOpenMMVersion();
+    stringstream code;
+    if (stoi(version.substr(0, version.find("."))) < 8) {
+        code<<"inline long realToFixedPoint(real x) {"<<endl;
+        code<<"    return (long) (x * 0x100000000);"<<endl;
+        code<<"}"<<endl;
+    }
+    realToFixedPoint = code.str();
 };
 
 OpenCLCalcSlicedPmeForceKernel::~OpenCLCalcSlicedPmeForceKernel() {
@@ -704,7 +688,7 @@ double OpenCLCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includ
 
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            cl::Program program = cl.createProgram(cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
+            cl::Program program = cl.createProgram(realToFixedPoint+cl.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
             pmeGridIndexKernel = cl::Kernel(program, "findAtomGridIndex");
             pmeSpreadChargeKernel = cl::Kernel(program, "gridSpreadCharge");
             pmeConvolutionKernel = cl::Kernel(program, "reciprocalConvolution");

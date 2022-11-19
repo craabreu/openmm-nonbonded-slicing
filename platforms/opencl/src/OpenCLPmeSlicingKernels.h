@@ -27,9 +27,7 @@ namespace PmeSlicing {
  */
 class OpenCLCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
-        CalcSlicedPmeForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
-    };
+    OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system);
     ~OpenCLCalcSlicedPmeForceKernel();
     /**
      * Initialize the kernel.
@@ -126,6 +124,7 @@ private:
     cl::Kernel pmeAddSelfEnergyKernel;
     cl::Kernel pmeConvolutionKernel;
     cl::Kernel pmeInterpolateForceKernel;
+    std::string realToFixedPoint;
     std::map<std::string, std::string> pmeDefines;
     std::vector<std::vector<int>> exclusionPairs, exceptionPairs;
     std::vector<std::string> paramNames;

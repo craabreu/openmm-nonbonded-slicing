@@ -148,6 +148,18 @@ private:
     bool initialized;
 };
 
+CudaCalcSlicedPmeForceKernel::CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
+        CalcSlicedPmeForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
+    string version = Platform::getOpenMMVersion();
+    stringstream code;
+    if (stoi(version.substr(0, version.find("."))) < 8) {
+        code<<"__device__ inline long long realToFixedPoint(real x) {"<<endl;
+        code<<"return static_cast<long long>(x * 0x100000000);"<<endl;
+        code<<"}"<<endl;
+    }
+    realToFixedPoint = code.str();
+};
+
 CudaCalcSlicedPmeForceKernel::~CudaCalcSlicedPmeForceKernel() {
     ContextSelector selector(cu);
     if (sort != NULL)
@@ -322,7 +334,7 @@ void CudaCalcSlicedPmeForceKernel::initialize(const System& system, const Sliced
             pmeDefines["USE_PME_STREAM"] = "1";
         map<string, string> replacements;
         replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-        CUmodule module = cu.createModule(CudaPmeSlicingKernelSources::vectorOps+
+        CUmodule module = cu.createModule(realToFixedPoint+CudaPmeSlicingKernelSources::vectorOps+
                                           cu.replaceStrings(CommonPmeSlicingKernelSources::slicedPme, replacements), pmeDefines);
 
         pmeGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");

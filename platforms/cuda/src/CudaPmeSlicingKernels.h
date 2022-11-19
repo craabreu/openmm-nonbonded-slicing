@@ -32,9 +32,7 @@ namespace PmeSlicing {
  */
 class CudaCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
-        CalcSlicedPmeForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
-    };
+    CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system);
     ~CudaCalcSlicedPmeForceKernel();
     /**
      * Initialize the kernel.
@@ -126,6 +124,7 @@ private:
     CUfunction pmeAddSelfEnergyKernel;
     CUfunction pmeConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
+    string realToFixedPoint;
     std::vector<std::vector<int>> exclusionPairs, exceptionPairs;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
