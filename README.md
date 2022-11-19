@@ -1,17 +1,18 @@
-WIP: OpenMM PME Slicing Plugin
-==============================
+OpenMM PME Slicing Plugin
+=========================
 
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3ALinux)
 [![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation Status](https://readthedocs.org/projects/openmm-pme-slicing/badge/?version=latest)](https://openmm-pme-slicing.readthedocs.io/en/latest/?badge=latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-This [OpenMM] plugin implements a variant of the smooth Particle Mesh Ewald (PME) method that
+This [OpenMM] plugin implements a smooth Particle Mesh Ewald (PME) method variant that
 slices the total Coulomb potential and applies a different switching constant to each slice.
 
 By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
 becomes
 
-![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=0}^{n-1}&space;h_{I,J}&space;U_{I,J})
+![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;h_{I,J}&space;U_{I,J})
 
 where $h_{I,J}$ is a switching constant and $U_{I,J}$ is the sum over every pair interaction
 involving a particle in subset I and a particle in subset J.
@@ -19,6 +20,12 @@ involving a particle in subset I and a particle in subset J.
 **Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
 by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
 alternatives for lattice-sum Coulomb interactions.
+
+
+Documentation
+=============
+
+https://openmm-pme-slicing.readthedocs.io/en/latest
 
 Building the Plugin
 ===================

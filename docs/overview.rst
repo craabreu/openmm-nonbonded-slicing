@@ -2,27 +2,6 @@
 Overview
 ========
 
-.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
-   :target: https://opensource.org/licenses/MIT
-
-The `OpenMM PME Slicing plugin <https://github.com/craabreu/openmm-pme-slicing>`_ implements a
-variant of the smooth Particle Mesh Ewald (PME) method that slices the total Coulomb potential
-and applies a different switching constant to each slice.
-
-By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
-becomes
-
-.. math::
-
-    U = \sum_{I=0}^{n-1} \sum_{J=0}^{n-1} h_{I,J} U_{I,J}
-
-where :math:`h_{I,J}` is a switching constant and :math:`U_{I,J}` is the sum over every pair interaction
-involving a particle in subset I and a particle in subset J.
-
-**Note**: In OpenMM_, Lennard-Jones and other pairwise potentials can undergo similar slicing
-by means of the `addInteractionGroup` method of :OpenMM:`CustomNonbondedForce`. There are no built-in
-alternatives for lattice-sum Coulomb interactions.
-
 Building the Plugin
 ===================
 
