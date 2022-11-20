@@ -77,7 +77,7 @@ pygments_style = 'sphinx'
 html_theme = 'alabaster'
 html_static_path = ['_static']
 html_theme_options = {
-    'logo': 'logo.png',
+    'logo': 'logo_small.png',
     'logo_name': True,
     'github_button': False,
     'github_user': 'craabreu',
