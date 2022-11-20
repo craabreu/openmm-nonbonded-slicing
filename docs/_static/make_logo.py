@@ -5,8 +5,7 @@ plt.rcParams["hatch.linewidth"] = 4
 colors = ['#e4b388', '#2279ab', '#072044']
 n = len(colors)
 
-# fig, ax = plt.subplots(figsize=(3, 3), frameon=False)
-fig = plt.figure(figsize=(3, 3), frameon=False)
+fig = plt.figure(figsize=(2, 2), frameon=False)
 ax = fig.add_axes([0, 0, 1, 1])
 
 for i in range(n):
