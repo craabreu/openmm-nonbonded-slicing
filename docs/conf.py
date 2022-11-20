@@ -1,8 +1,36 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-
 import os
+import pmeslicing
+import openmm
 
+
+def valid_method(method):
+    return not (method.startswith('_') or method in ['cast', 'thisown', 'isinstance'])
+
+
+def create_rst_file(cls):
+    name = cls.__name__
+    methods = list(filter(valid_method, dir(cls)))
+    with open(f'pythonapi/{name}.rst', 'w') as f:
+        f.writelines([
+            f'{name}\n',
+            f'='*len(name)+'\n',
+            f'\n',
+            f'.. autoclass:: {cls.__module__}.{name}\n',
+            f'    :members:\n',
+            f'    :inherited-members:\n',
+            f'    :member-order: alphabetical\n',
+            f'    :show-inheritance:\n',
+            f'    :exclude-members: thisown\n',
+            f'    :special-members: __init__\n',
+            f'\n',
+            f'    .. autosummary::\n',
+        ])
+        f.writelines([' '*8 + method + '\n' for method in methods])
+
+
+create_rst_file(pmeslicing.SlicedPmeForce)
 
 extensions = [
     'sphinx.ext.autodoc',
@@ -25,7 +53,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 project = 'OpenMM PME Slicing'
-copyright = ("2022, Charlles Abreu. Project based on OpenMM")
+copyright = ('2022, Charlles Abreu. Project based on OpenMM')
 author = 'Charlles Abreu'
 
 # The short X.Y version
@@ -44,16 +72,23 @@ extlinks = {
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
 # if not on_rtd:  # only set the theme if we're building docs locally
-pygments_style = "sphinx"
+pygments_style = 'sphinx'
 
-html_theme = "alabaster"
-
+html_theme = 'alabaster'
+html_static_path = ['_static']
+html_theme_options = {
+    'logo': 'logo.png',
+    'logo_name': True,
+    'github_button': False,
+    'github_user': 'craabreu',
+    'github_repo': 'openmm-pme-slicing',
+}
+html_sidebars = {
+   '**': ['about.html', 'globaltoc.html', 'searchbox.html'],
+}
 html_use_smartypants = True
 html_last_updated_fmt = '%b %d, %Y'
 html_split_index = False
-html_sidebars = {
-   '**': ['searchbox.html', 'globaltoc.html'],
-}
 html_short_title = '%s-%s' % (project, version)
 
 # Bibliography file

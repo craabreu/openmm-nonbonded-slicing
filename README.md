@@ -17,6 +17,8 @@ becomes
 where $h_{I,J}$ is a switching constant and $U_{I,J}$ is the sum over every pair interaction
 involving a particle in subset I and a particle in subset J.
 
+![logo](docs/_static/logo.png)
+
 **Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
 by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
 alternatives for lattice-sum Coulomb interactions.
