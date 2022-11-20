@@ -507,9 +507,9 @@ public:
      */
     void setGlobalParameterDefaultValue(int index, double defaultValue);
  	/**
-     * Add a switching parameter to multiply a particular Coulomb slice, that is, the Coulomb
-     * interactions between particles of a subset with those of another (or the same) subset.
-     * The order of subset definition is irrelevant.
+     * Add a switching parameter to multiply a particular Coulomb slice. Its value will scale the
+     * Coulomb interactions between particles of a subset 1 with those of another (or the same)
+     * subset 2. The order of subset definition is irrelevant.
      *
      * Parameters
      * ----------
@@ -573,8 +573,9 @@ public:
      */
     void setSwitchingParameter(int index, const std::string& parameter, int subset1, int subset2);
     /**
-     * Request that this Force compute the derivative of its energy with respect to a switching parameter.
-     * The parameter must have already been added with :func:`addGlobalParameter` and :func:`addSwithingParameter`.
+     * Request the derivative of this Force's energy with respect to a switching parameter. This
+     * can be used to obtain the sum of particular energy slices. The parameter must have already
+     * been added with :func:`addGlobalParameter` and :func:`addSwithingParameter`.
      *
      * Parameters
      * ----------
@@ -588,13 +589,12 @@ public:
      */
     int addSwitchingParameterDerivative(const std::string& parameter);
     /**
-     * Get the number of global parameters with respect to which the derivative of the Coulomb energy
-     * should be computed.
+     * Get the number of requested switching parameter derivatives.
      */
     int getNumSwitchingParameterDerivatives() const;
     /**
-     * Get the name of a global parameter with respect to which this Force should compute the
-     * derivative of the energy.
+     * Get the name of the global parameter associated with a requested switching parameter
+     * derivative.
      *
      * Parameters
      * ----------
@@ -609,8 +609,8 @@ public:
      */
     const std::string& getSwitchingParameterDerivativeName(int index) const;
     /**
-     * Set the name of the global parameter with respect to which this Force should compute the
-     * derivative of the energy.
+     * Set the name of the global parameter to associate with a requested switching parameter
+     * derivative.
      *
      * Parameters
      * ----------
@@ -816,14 +816,14 @@ public:
      */
     void setExceptionsUsePeriodicBoundaryConditions(bool periodic);
  	/**
-     * Get whether to use CUDA Toolkit's cuFFT library to compute fast Fourier transform when
-     * executing in the CUDA platform.
+     * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
+     * The default value is `False`.
      */
     bool getUseCudaFFT() const;
  	/**
-     * Set whether to use CUDA Toolkit's  to compute fast Fourier transform when
-     * executing in the CUDA platform. The default value is `False`. This choice
-     * has no effect when using other platforms or when the CUDA Toolkit is version 7.0 or older.
+     * Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
+     * This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0
+     * or older.
      *
      * Parameters
      * ----------
