@@ -76,6 +76,7 @@ pygments_style = 'sphinx'
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+html_css_files = ['custom.css']
 html_theme_options = {
     'logo': 'logo_small.png',
     'logo_name': True,

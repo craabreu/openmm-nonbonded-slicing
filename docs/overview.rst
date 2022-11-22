@@ -2,9 +2,9 @@
 Overview
 ========
 
-This `OpenMM <https://openmm.org>`_ plugin implements a sliced variant of the smooth Particle Mesh
-Ewald (PME) method :cite:`Essmann_1995`. By partitioning all particles among *n* disjoint subsets,
-the total potential energy becomes a sum of contributions from subset pairs, that is,
+This OpenMM_ plugin implements a sliced variant of the smooth Particle Mesh Ewald (PME) method
+:cite:`Essmann_1995`. By partitioning all particles among *n* disjoint subsets, the total potential
+energy becomes a sum of contributions from subset pairs, that is,
 
 .. math::
    E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} E_{I,J},

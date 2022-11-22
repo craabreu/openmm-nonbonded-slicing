@@ -20,7 +20,7 @@ of subset *I* and a particle of another (or the same) subset *J*.
 
 .. figure:: _static/logo.png
 
-    Example: particle three colors (:subset1:`●`:subset2:`●`:subset3:`●`) form six energy slices
+    Example: three particle subsets (:subset1:`●`:subset2:`●`:subset3:`●`) form six energy slices
 
 It is straightforward to slice the direct-space, self-energy, and exclusion/exception parts of the
 Ewald summation. Therefore, the present section focuses on the reciprocal-space part. The goal of
@@ -110,4 +110,7 @@ Therefore, in a single serial processor and for a fixed number of particles, the
 of :class:`~pmeslicing.SlicedPmeForce` scales approximately linearly with the number of subsets,
 rather than the number of slices. In the OpenCL and CUDA instances of :OpenMM:`Platform`, it takes
 advantage the vkFFT_ or cuFFT_ package capability to speed-up parallel FFT calculations via batched
-planning.
+transforms.
+
+.. _vkFFT:                https://github.com/DTolm/VkFFT
+.. _cuFFT:                https://docs.nvidia.com/cuda/cufft
