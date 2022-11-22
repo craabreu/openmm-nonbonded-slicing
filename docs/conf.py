@@ -76,7 +76,6 @@ pygments_style = 'sphinx'
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
-html_css_files = ['custom.css']
 html_theme_options = {
     'logo': 'logo_small.png',
     'logo_name': True,
@@ -91,6 +90,9 @@ html_use_smartypants = True
 html_last_updated_fmt = '%b %d, %Y'
 html_split_index = False
 html_short_title = '%s-%s' % (project, version)
+
+def setup(app):
+    app.add_css_file('css/custom.css')
 
 # Bibliography file
 bibtex_bibfiles = ['refs.bib']

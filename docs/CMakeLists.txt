@@ -1,8 +1,9 @@
 find_program(SPHINX_EXECUTABLE sphinx-build)
 
 file(GLOB STAGING_INPUT_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "_static/logo.png"
     "_static/logo_small.png"
-    "_static/custom.css"
+    "_static/css/custom.css"
     "authors.rst"
     "changelog.rst"
     "conf.py"
