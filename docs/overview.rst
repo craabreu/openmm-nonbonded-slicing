@@ -2,6 +2,21 @@
 Overview
 ========
 
+This `OpenMM <https://openmm.org>`_ plugin implements a sliced variant of the smooth Particle Mesh
+Ewald (PME) method :cite:`Essmann_1995`. By partitioning all particles among *n* disjoint subsets,
+the total potential energy becomes a sum of contributions from subset pairs, that is,
+
+.. math::
+   E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} E_{I,J},
+
+where :math:`E_{I,J}` is the sum over every pair formed by a particle in subset *I* and particle in
+subset *J*.
+
+With the :class:`~pmeslicing.SlicedPmeForce` class, the user can change *E* from a simple sum into
+a linear combination of energy slices, with coefficients being the values of :OpenMM:`Context`
+global parameters. Derivatives with respect to these parameters can be requested as a way of
+reporting individual energy slices or sums thereof.
+
 Building the Plugin
 ===================
 

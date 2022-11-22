@@ -12,6 +12,7 @@ file(GLOB STAGING_INPUT_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "pythonapi/index.rst"
     "references.rst"
     "refs.bib"
+    "theory.rst"
 )
 
 include(CMakePrintHelpers)

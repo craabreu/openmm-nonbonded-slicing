@@ -6,23 +6,23 @@ OpenMM PME Slicing Plugin
 [![Documentation Status](https://readthedocs.org/projects/openmm-pme-slicing/badge/?version=latest)](https://openmm-pme-slicing.readthedocs.io/en/latest/?badge=latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-This [OpenMM] plugin implements a smooth Particle Mesh Ewald (PME) method variant that
-slices the total Coulomb potential and applies a different switching constant to each slice.
+This [OpenMM] plugin implements the **SlicedPmeForce** class, a variant of the smooth Particle Mesh
+Ewald (PME) method. By partitioning all particles among _n_ disjoint subsets, the total potential
+energy becomes a sum of contributions from subset pairs, that is,
 
-By partitioning all particles among $n$ non-interesecting subsets, the total Coulomb potential
-becomes
+![equation](https://latex.codecogs.com/svg.image?E&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;E_{I,J})
 
-![equation](https://latex.codecogs.com/svg.image?U&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;h_{I,J}&space;U_{I,J})
+where $E_{I,J}$ is an energy slice defined as the sum over every pair formed by a particle in
+subset _I_ and particle in subset _J_.
 
-where $h_{I,J}$ is a switching constant and $U_{I,J}$ is the sum over every pair interaction
-involving a particle in subset I and a particle in subset J.
-
-![logo](docs/_static/logo.png)
+With the SlicedPmeForce_ class, the user can change _E_ from a simple sum into a linear combination
+of energy slices, with coefficients being the values of [Context] global parameters. Derivatives
+with respect to these parameters can be requested as a way of reporting individual energy slices or
+sums thereof.
 
 **Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
 by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
 alternatives for lattice-sum Coulomb interactions.
-
 
 Documentation
 =============
@@ -87,6 +87,6 @@ To run the Python test cases, build the "PythonTest" target by typing `make Pyth
 
 [CMake]:                http://www.cmake.org
 [CustomNonbondedForce]: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html
-[NonbondedForce]:       http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
+[Context]:              http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html
 [OpenMM]:               https://openmm.org
 [SWIG]:                 http://www.swig.org
