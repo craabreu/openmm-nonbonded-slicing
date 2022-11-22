@@ -15,7 +15,7 @@ energy becomes a sum of contributions from subset pairs, that is,
 where $E_{I,J}$ is an energy slice defined as the sum over every pair formed by a particle in
 subset _I_ and particle in subset _J_.
 
-With the SlicedPmeForce_ class, the user can change _E_ from a simple sum into a linear combination
+With the SlicedPmeForce class, the user can change _E_ from a simple sum into a linear combination
 of energy slices, with coefficients being the values of [Context] global parameters. Derivatives
 with respect to these parameters can be requested as a way of reporting individual energy slices or
 sums thereof.
