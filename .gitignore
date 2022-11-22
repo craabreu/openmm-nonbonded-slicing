@@ -4,4 +4,5 @@ profiling/
 
 # Sphinx documentation
 docs/_build/
-
+docs/pythonapi/*.rst
+!docs/pythonapi/index.rst

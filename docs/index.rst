@@ -8,17 +8,6 @@ OpenMM PME Slicing Plugin
 .. image:: https://img.shields.io/badge/License-MIT-green.svg
    :target: https://github.com/craabreu/openmm-pme-slicing/blob/main/LICENSE.md
 
-This `OpenMM <https://openmm.org>`_ plugin implements a sliced variant of the smooth Particle Mesh Ewald (PME) method.
-By partitioning all particles among :math:`n` non-interesecting subsets, the total Coulomb potential
-becomes
-
-.. math::
-
-    U = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} h_{I,J} U_{I,J}
-
-where :math:`h_{I,J}` is a switching constant and :math:`U_{I,J}` is the sum over every pair of a
-particle in subset I and another particle in subset J.
-
 ========
 Contents
 ========
@@ -27,6 +16,7 @@ Contents
    :maxdepth: 2
 
    overview
+   theory
    pythonapi/index
    contributing
    authors
