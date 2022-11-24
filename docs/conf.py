@@ -5,32 +5,38 @@ import pmeslicing
 import openmm
 
 
-def valid_method(method):
-    return not (method.startswith('_') or method in ['cast', 'thisown', 'isinstance'])
-
-
 def create_rst_file(cls):
     name = cls.__name__
-    methods = list(filter(valid_method, dir(cls)))
+    attributes = [name for name in dir(cls)
+        if not (name.startswith('_') or name in ['isinstance', 'cast'])]
+    methods = [name for name in attributes if callable(getattr(cls, name))]
+    properties = [name for name in attributes if not callable(getattr(cls, name))]
     with open(f'pythonapi/{name}.rst', 'w') as f:
         f.writelines([
             f'{name}\n',
-            f'='*len(name)+'\n',
-            f'\n',
-            f'.. autoclass:: {cls.__module__}.{name}\n',
+            f'='*len(name)+'\n\n',
+            f'.. currentmodule:: {cls.__module__}\n',
+            f'.. autoclass:: {name}\n',
             f'    :members:\n',
             f'    :inherited-members:\n',
             f'    :member-order: alphabetical\n',
             f'    :show-inheritance:\n',
-            f'    :exclude-members: thisown\n',
-            f'    :special-members: __init__\n',
-            f'\n',
+            f'    :exclude-members: thisown, isinstance\n\n',
+            f'    .. automethod:: __init__\n\n',
+            f'    .. rubric:: Methods\n\n',
             f'    .. autosummary::\n',
+        ] + [
+            ' '*8 + method + '\n' for method in methods
+        ] + [
+            f'\n    .. rubric:: Attributes\n\n',
+            f'    .. autosummary::\n',
+        ] + [
+            ' '*8 + property + '\n' for property in properties
         ])
-        f.writelines([' '*8 + method + '\n' for method in methods])
 
 
 create_rst_file(pmeslicing.SlicedPmeForce)
+create_rst_file(pmeslicing.SlicedNonbondedForce)
 
 extensions = [
     'sphinx.ext.autodoc',

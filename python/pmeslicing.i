@@ -6,6 +6,7 @@
 
 %{
 #include "SlicedPmeForce.h"
+#include "SlicedNonbondedForce.h"
 #include "OpenMM.h"
 #include "OpenMMAmoeba.h"
 #include "OpenMMDrude.h"
@@ -866,5 +867,92 @@ public:
 %clear int& exceptionIndex;
 %clear double& chargeProdScale;
 
+
+
+/**
+ * This class implements nonbonded interactions between particles, including a Coulomb force to represent
+ * electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
+ * periodic boundary conditions and cutoffs for long range interactions.  Lennard-Jones interactions are
+ * calculated with the Lorentz-Berthelot combining rule: it uses the arithmetic mean of the sigmas and the
+ * geometric mean of the epsilons for the two interacting particles.
+ *
+ * To use this class, create a NonbondedForce object, then call :func:`addParticle` once for each particle in the
+ * System to define its parameters.  The number of particles for which you define nonbonded parameters must
+ * be exactly equal to the number of particles in the System, or else an exception will be thrown when you
+ * try to create a Context.  After a particle has been added, you can modify its force field parameters
+ * by calling :func:`setParticleParameters`.  This will have no effect on Contexts that already exist unless you
+ * call :func:`updateParametersInContext`.
+ *
+ * NonbondedForce also lets you specify "exceptions", particular pairs of particles whose interactions should be
+ * computed based on different parameters than those defined for the individual particles.  This can be used to
+ * completely exclude certain interactions from the force calculation, or to alter how they interact with each other.
+ *
+ * Many molecular force fields omit Coulomb and Lennard-Jones interactions between particles separated by one
+ * or two bonds, while using modified parameters for those separated by three bonds (known as "1-4 interactions").
+ * This class provides a convenience method for this case called :func:`createExceptionsFromBonds`.  You pass to it
+ * a list of bonds and the scale factors to use for 1-4 interactions.  It identifies all pairs of particles which
+ * are separated by 1, 2, or 3 bonds, then automatically creates exceptions for them.
+ *
+ * When using a cutoff, by default Lennard-Jones interactions are sharply truncated at the cutoff distance.
+ * Optionally you can instead use a switching function to make the interaction smoothly go to zero over a finite
+ * distance range.  To enable this, call :func:`setUseSwitchingFunction`.  You must also call :func:`setSwitchingDistance`
+ * to specify the distance at which the interaction should begin to decrease.  The switching distance must be
+ * less than the cutoff distance.
+ *
+ * Another optional feature of this class (enabled by default) is to add a contribution to the energy which approximates
+ * the effect of all Lennard-Jones interactions beyond the cutoff in a periodic system.  When running a simulation
+ * at constant pressure, this can improve the quality of the result.  Call :func:`setUseDispersionCorrection` to set whether
+ * this should be used.
+ *
+ * In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
+ * Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
+ * two states it can exist in, each described by a different set of parameters for the atoms that make up the
+ * group.  You might then want to smoothly interpolate between the two states.  This is done by first calling
+ * :func:`addGlobalParameter` to define a Context parameter, then :func:`addParticleParameterOffset` to create a "parameter offset"
+ * that depends on the Context parameter.  Each offset defines the following:
+ *
+ * * A Context parameter used to interpolate between the states.
+ * * A single particle whose parameters are influenced by the Context parameter.
+ * * Three scale factors (chargeScale, sigmaScale, and epsilonScale) that specify how the Context parameter affects the particle.
+ *
+ * The "effective" parameters for a particle (those used to compute forces) are given by
+ *
+ * .. code-block:: python
+ *
+ *    charge = baseCharge + param*chargeScale
+ *    sigma = baseSigma + param*sigmaScale
+ *    epsilon = baseEpsilon + param*epsilonScale
+ *
+ * where the "base" values are the ones specified by :func:`addParticle` and "oaram" is the current value
+ * of the Context parameter.  A single Context parameter can apply offsets to multiple particles,
+ * and multiple parameters can be used to apply offsets to the same particle.  Parameters can also be used
+ * to modify exceptions in exactly the same way by calling :func:`addExceptionParameterOffset`.
+ */
+class SlicedNonbondedForce : public OpenMM::NonbondedForce {
+public:
+    /**
+     * Create a SlicedNonbondedForce.
+     *
+     * Parameters
+     * ----------
+     *     numSubsets : int
+     *         the number of particle subsets
+     */
+    SlicedNonbondedForce(int numSubsets);
+
+    /*
+     * Add methods for casting a Force to a SlicedNonbondedForce.
+    */
+
+    %extend {
+        static PmeSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
+            return dynamic_cast<PmeSlicing::SlicedNonbondedForce&>(force);
+        }
+
+        static bool isinstance(OpenMM::Force& force) {
+            return (dynamic_cast<PmeSlicing::SlicedNonbondedForce*>(&force) != NULL);
+        }
+    }
+};
 
 }
