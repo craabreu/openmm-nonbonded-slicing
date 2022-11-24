@@ -1,5 +1,12 @@
 /* -------------------------------------------------------------------------- *
- *                                OpenMMPmeSlicing                                 *
+ *                             OpenMM PME Slicing                             *
+ *                             ==================                             *
+ *                                                                            *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
+ *                                                                            *
+ * Copyright (c) 2022 Charlles Abreu                                          *
+ * https://github.com/craabreu/openmm-pme-slicing                             *
  * -------------------------------------------------------------------------- */
 
 #ifdef WIN32
@@ -13,6 +20,8 @@
 
 #include "SlicedPmeForce.h"
 #include "SlicedPmeForceProxy.h"
+#include "SlicedNonbondedForce.h"
+#include "SlicedNonbondedForceProxy.h"
 #include "openmm/serialization/SerializationProxy.h"
 
 #if defined(WIN32)
@@ -32,4 +41,5 @@ using namespace OpenMM;
 
 extern "C" OPENMM_EXPORT_PMESLICING void registerPmeSlicingSerializationProxies() {
     SerializationProxy::registerProxy(typeid(SlicedPmeForce), new SlicedPmeForceProxy());
+    SerializationProxy::registerProxy(typeid(SlicedNonbondedForce), new SlicedNonbondedForceProxy());
 }

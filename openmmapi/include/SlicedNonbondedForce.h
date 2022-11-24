@@ -12,14 +12,9 @@
  * https://github.com/craabreu/openmm-pme-slicing                             *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/Context.h"
 #include "openmm/NonbondedForce.h"
-#include "openmm/Force.h"
-#include <map>
-#include <set>
-#include <utility>
-#include <vector>
 #include "internal/windowsExportPmeSlicing.h"
+#include <map>
 
 using namespace OpenMM;
 
@@ -27,14 +22,17 @@ namespace PmeSlicing {
 
 class OPENMM_EXPORT_PMESLICING SlicedNonbondedForce : public NonbondedForce {
 public:
-    /**
-     * Create a SlicedNonbondedForce.
-     */
     SlicedNonbondedForce(int numSubsets);
+    int getNumSubsets() const {
+        return numSubsets;
+    }
+    void setParticleSubset(int index, int subset);
+    int getParticleSubset(int index) const;
 protected:
     ForceImpl* createImpl() const;
 private:
     int numSubsets;
+    std::map<int, int> subsets;
 };
 
 } // namespace PmeSlicing
