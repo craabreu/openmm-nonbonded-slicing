@@ -13,6 +13,7 @@
 #include "internal/SlicedNonbondedForceImpl.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include <string.h>
+#include <algorithm>
 
 using namespace std;
 using namespace OpenMM;
@@ -20,7 +21,8 @@ using namespace PmeSlicing;
 
 #define ASSERT_VALID(name, value, number) {if (value < 0 || value >= number) throwException(__FILE__, __LINE__, name " out of range");};
 
-SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets) {
+SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) :
+    NonbondedForce(), numSubsets(numSubsets), useCudaFFT(false) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) {
@@ -72,7 +74,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
 
 void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
     ASSERT_VALID("Index", index, getNumParticles());
-    ASSERT_VALID("Subset", subset, getNumSubsets());
+    ASSERT_VALID("Subset", subset, numSubsets);
     subsets[index] = subset;
 }
 
@@ -80,6 +82,89 @@ int SlicedNonbondedForce::getParticleSubset(int index) const {
     ASSERT_VALID("Index", index, getNumParticles());
     auto element = subsets.find(index);
     return element == subsets.end() ? 0 : element->second;
+}
+
+int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const {
+    for (int i = 0; i < getNumGlobalParameters(); i++)
+        if (getGlobalParameterName(i) == parameter)
+            return i;
+    throw OpenMMException("There is no global parameter called '"+parameter+"'");
+}
+
+int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb) {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    if (!(includeLJ || includeCoulomb))
+        throwException(__FILE__, __LINE__, "At least one contribution must be included");
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
+    int slice = info.getSlice();
+    for (auto parameter : scalingParameters)
+        if (parameter.getSlice() == slice)
+            throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice");
+    scalingParameters.push_back(info);
+    return scalingParameters.size()-1;
+}
+
+void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeLJ, bool& includeCoulomb) const {
+    ASSERT_VALID("Index", index, scalingParameters.size());
+    ScalingParameterInfo* info = (ScalingParameterInfo*) &scalingParameters[index];
+    parameter = getGlobalParameterName(info->globalParamIndex);
+    subset1 = info->subset1;
+    subset2 = info->subset2;
+    includeLJ = info->includeLJ;
+    includeCoulomb = info->includeCoulomb;
+}
+
+void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb) {
+    ASSERT_VALID("Index", index, scalingParameters.size());
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    if (!(includeLJ || includeCoulomb))
+        throwException(__FILE__, __LINE__, "At least one contribution must be included");
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
+    int slice = info.getSlice();
+    if (scalingParameters[index].getSlice() != slice)
+        for (auto parameter : scalingParameters)
+            if (parameter.getSlice() == slice)
+                throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice");
+    scalingParameters[index] = info;
+}
+
+int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) const {
+    for (int i = 0; i < scalingParameters.size(); i++) {
+        int index = scalingParameters[i].globalParamIndex;
+        if (getGlobalParameterName(index) == parameter)
+            return i;
+    }
+    throw OpenMMException("There is no scaling parameter called '"+parameter+"'");
+}
+
+int SlicedNonbondedForce::addScalingParameterDerivative(const string& parameter) {
+    int scalingParameterIndex = getScalingParameterIndex(parameter);
+    auto begin = scalingParameterDerivatives.begin();
+    auto end = scalingParameterDerivatives.end();
+    if (find(begin, end, scalingParameterIndex) != end)
+        throwException(__FILE__, __LINE__, "This scaling parameter derivative has already been requested");
+    scalingParameterDerivatives.push_back(scalingParameterIndex);
+    return scalingParameterDerivatives.size()-1;
+}
+
+const string& SlicedNonbondedForce::getScalingParameterDerivativeName(int index) const {
+    ASSERT_VALID("Index", index, scalingParameterDerivatives.size());
+    int globalParamIndex = scalingParameters[scalingParameterDerivatives[index]].globalParamIndex;
+    return getGlobalParameterName(globalParamIndex);
+}
+
+void SlicedNonbondedForce::setScalingParameterDerivative(int index, const string& parameter) {
+    ASSERT_VALID("Index", index, scalingParameterDerivatives.size());
+    int scalingParameterIndex = getScalingParameterIndex(parameter);
+    if (scalingParameterDerivatives[index] != scalingParameterIndex) {
+        auto begin = scalingParameterDerivatives.begin();
+        auto end = scalingParameterDerivatives.end();
+        if (find(begin, end, scalingParameterIndex) != end)
+            throwException(__FILE__, __LINE__, "This scaling parameter derivative has already been requested");
+        scalingParameterDerivatives[index] = scalingParameterIndex;
+    }
 }
 
 ForceImpl* SlicedNonbondedForce::createImpl() const {
