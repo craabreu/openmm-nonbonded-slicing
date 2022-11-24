@@ -15,7 +15,6 @@
 #include "internal/SlicedNonbondedForceImpl.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
-#include "openmm/internal/Messages.h"
 #include "PmeSlicingKernels.h"
 #include <cmath>
 #include <map>
@@ -109,7 +108,7 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
         double cutoff = owner.getCutoffDistance();
         if (cutoff > 0.5*boxVectors[0][0] || cutoff > 0.5*boxVectors[1][1] || cutoff > 0.5*boxVectors[2][2])
-            throw OpenMMException("SlicedNonbondedForce: "+Messages::cutoffTooLarge);
+            throw OpenMMException("SlicedPmeForce: The cutoff distance cannot be greater than half the periodic box size.");
         if (owner.getNonbondedMethod() == SlicedNonbondedForce::Ewald && (boxVectors[1][0] != 0.0 || boxVectors[2][0] != 0.0 || boxVectors[2][1] != 0))
             throw OpenMMException("SlicedNonbondedForce: Ewald is not supported with non-rectangular boxes.  Use PME instead.");
     }
