@@ -43,15 +43,15 @@ namespace PmeSlicing {
 typedef double rvec[3];
 
 
-typedef struct pme *
-pme_t;
+typedef struct sliced_pme *
+sliced_pme_t;
 
 /*
  * Initialize a PME calculation and set up data structures
  *
  * Arguments:
  *
- * ppme        Pointer to an opaque pme_t object
+ * ppme        Pointer to an opaque sliced_pme_t object
  * ewaldcoeff  Coefficient derived from the beta factor to participate
  *             direct/reciprocal space. See gromacs code for documentation!
  *             We assume that you are using nm units...
@@ -61,7 +61,7 @@ pme_t;
  * epsilon_r   Dielectric coefficient, typically 1.0.
  */
 int
-pme_init(pme_t* ppme,
+pme_init(sliced_pme_t* ppme,
          double ewaldcoeff,
          int natoms,
          int nsubsets,
@@ -74,7 +74,7 @@ pme_init(pme_t* ppme,
  *
  * Args:
  *
- * pme         Opaque pme_t object, must have been initialized with pme_init()
+ * pme         Opaque sliced_pme_t object, must have been initialized with pme_init()
  * x           Pointer to coordinate data array (nm)
  * f           Pointer to force data array (will be written as kJ/mol/nm)
  * charge      Array of charges (units of e)
@@ -82,7 +82,7 @@ pme_init(pme_t* ppme,
  * energy      Total energy (will be written in units of kJ/mol)
  */
 int
-pme_exec(pme_t pme,
+pme_exec(sliced_pme_t pme,
          const std::vector<OpenMM::Vec3>& atomCoordinates,
          const std::vector<int>& subsets,
          const std::vector<double>& sliceLambda,
@@ -95,8 +95,8 @@ pme_exec(pme_t pme,
 
 /* Release all memory in pme structure */
 int
-pme_destroy(pme_t    pme);
+pme_destroy(sliced_pme_t    pme);
 
-} // namespace OpenMM
+} // namespace PmeSlicing
 
 #endif // __ReferenceSlicedPME_H__
