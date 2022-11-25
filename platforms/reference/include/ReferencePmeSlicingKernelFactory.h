@@ -15,7 +15,9 @@
 #include "openmm/KernelFactory.h"
 #include <string.h>
 
-namespace OpenMM {
+using namespace OpenMM;
+
+namespace PmeSlicing {
 
 /**
  * This KernelFactory creates kernels for the reference implementation of the PmeSlicing plugin.
@@ -26,6 +28,6 @@ public:
     KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
 };
 
-} // namespace OpenMM
+} // namespace PmeSlicing
 
 #endif /*OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_*/
