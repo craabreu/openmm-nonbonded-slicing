@@ -12,8 +12,9 @@
  * https://github.com/craabreu/openmm-pme-slicing                             *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/NonbondedForce.h"
 #include "internal/windowsExportPmeSlicing.h"
+#include "openmm/NonbondedForce.h"
+#include "openmm/internal/AssertionUtilities.h"
 #include <map>
 
 using namespace OpenMM;
@@ -73,15 +74,19 @@ public:
         globalParamIndex = subset1 = subset2 = -1;
         includeLJ = includeCoulomb = false;
     }
-    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2,
-                          bool includeLJ, bool includeCoulomb) :
-        globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
-        includeLJ(includeLJ), includeCoulomb(includeCoulomb) {
+    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeLJ, bool includeCoulomb) :
+            globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
+            includeLJ(includeLJ), includeCoulomb(includeCoulomb) {
+        if (!(includeLJ || includeCoulomb))
+            throwException(__FILE__, __LINE__, "Scaling at least one contribution, LJ or Coulomb, is mandatory");
     }
     int getSlice() const {
         int i = min(subset1, subset2);
         int j = max(subset1, subset2);
         return j*(j+1)/2+i;
+    }
+    bool clashesWith(const ScalingParameterInfo& info) {
+        return getSlice() == info.getSlice() && (includeLJ && info.includeLJ || includeCoulomb && info.includeCoulomb);
     }
 };
 

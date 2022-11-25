@@ -94,13 +94,10 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const
 int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb) {
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    if (!(includeLJ || includeCoulomb))
-        throwException(__FILE__, __LINE__, "At least one contribution must be included");
     ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
-    int slice = info.getSlice();
-    for (auto parameter : scalingParameters)
-        if (parameter.getSlice() == slice)
-            throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice");
+    for (auto param : scalingParameters)
+        if (param.clashesWith(info))
+            throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters.push_back(info);
     return scalingParameters.size()-1;
 }
@@ -119,14 +116,12 @@ void SlicedNonbondedForce::setScalingParameter(int index, const string& paramete
     ASSERT_VALID("Index", index, scalingParameters.size());
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    if (!(includeLJ || includeCoulomb))
-        throwException(__FILE__, __LINE__, "At least one contribution must be included");
     ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
-    int slice = info.getSlice();
-    if (scalingParameters[index].getSlice() != slice)
-        for (auto parameter : scalingParameters)
-            if (parameter.getSlice() == slice)
-                throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice");
+    ScalingParameterInfo old = scalingParameters[index];
+    if (!old.clashesWith(info))
+        for (auto param : scalingParameters)
+            if (param.clashesWith(info))
+                throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters[index] = info;
 }
 

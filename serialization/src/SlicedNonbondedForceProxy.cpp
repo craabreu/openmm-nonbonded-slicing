@@ -75,12 +75,6 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
         force.getParticleParameters(i, charge, sigma, epsilon);
         particles.createChildNode("Particle").setDoubleProperty("q", charge).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon);
     }
-    SerializationNode& subsets = node.createChildNode("Subsets");
-    for (int i = 0; i < force.getNumParticles(); i++) {
-        int subset = force.getParticleSubset(i);
-        if (subset)
-            subsets.createChildNode("Subset").setIntProperty("index", i).setIntProperty("subset", subset);
-    }
     SerializationNode& exceptions = node.createChildNode("Exceptions");
     for (int i = 0; i < force.getNumExceptions(); i++) {
         int particle1, particle2;
@@ -88,6 +82,23 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
         force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
         exceptions.createChildNode("Exception").setIntProperty("p1", particle1).setIntProperty("p2", particle2).setDoubleProperty("q", chargeProd).setDoubleProperty("sig", sigma).setDoubleProperty("eps", epsilon);
     }
+    SerializationNode& subsets = node.createChildNode("Subsets");
+    for (int i = 0; i < force.getNumParticles(); i++) {
+        int subset = force.getParticleSubset(i);
+        if (subset != 0)
+            subsets.createChildNode("Subset").setIntProperty("index", i).setIntProperty("subset", subset);
+    }
+    SerializationNode& scalingParameters = node.createChildNode("scalingParameters");
+    for (int i = 0; i < force.getNumScalingParameters(); i++) {
+        string parameter;
+        int subset1, subset2;
+        bool includeLJ, includeCoulomb;
+        force.getScalingParameter(i, parameter, subset1, subset2, includeLJ, includeCoulomb);
+        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeLJ", includeLJ).setBoolProperty("includeCoulomb", includeCoulomb);
+    }
+    SerializationNode& scalingParameterDerivatives = node.createChildNode("scalingParameterDerivatives");
+    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
+        scalingParameterDerivatives.createChildNode("scalingParameterDerivative").setStringProperty("parameter", force.getScalingParameterDerivativeName(i));
 }
 
 void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) const {
@@ -131,12 +142,18 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())
             force->addParticle(particle.getDoubleProperty("q"), particle.getDoubleProperty("sig"), particle.getDoubleProperty("eps"));
-        const SerializationNode& subsets = node.getChildNode("Subsets");
-        for (auto& subset : subsets.getChildren())
-            force->setParticleSubset(subset.getIntProperty("index"), subset.getIntProperty("subset"));
         const SerializationNode& exceptions = node.getChildNode("Exceptions");
         for (auto& exception : exceptions.getChildren())
             force->addException(exception.getIntProperty("p1"), exception.getIntProperty("p2"), exception.getDoubleProperty("q"), exception.getDoubleProperty("sig"), exception.getDoubleProperty("eps"));
+        const SerializationNode& subsets = node.getChildNode("Subsets");
+        for (auto& subset : subsets.getChildren())
+            force->setParticleSubset(subset.getIntProperty("index"), subset.getIntProperty("subset"));
+        const SerializationNode& scalingParameters = node.getChildNode("scalingParameters");
+        for (auto& param : scalingParameters.getChildren())
+            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeLJ"), param.getBoolProperty("includeCoulomb"));
+        const SerializationNode& scalingParameterDerivatives = node.getChildNode("scalingParameterDerivatives");
+        for (auto& param : scalingParameterDerivatives.getChildren())
+            force->addScalingParameterDerivative(param.getStringProperty("parameter"));
     }
     catch (...) {
         delete force;

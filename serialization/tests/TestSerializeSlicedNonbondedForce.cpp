@@ -52,6 +52,10 @@ void testSerialization() {
     force.addGlobalParameter("scale2", 2.0);
     force.addParticleParameterOffset("scale1", 2, 1.5, 2.0, 2.5);
     force.addExceptionParameterOffset("scale2", 1, -0.1, -0.2, -0.3);
+    force.addGlobalParameter("lambda", 0.5);
+    force.addScalingParameter("lambda", 0, 1, true, true);
+    force.addScalingParameter("lambda", 1, 1, false, true);
+    force.addScalingParameterDerivative("lambda");
 
     // Serialize and then deserialize it.
 
@@ -147,6 +151,22 @@ void testSerialization() {
         ASSERT_EQUAL(sigma1, sigma2);
         ASSERT_EQUAL(epsilon1, epsilon2);
     }
+    ASSERT_EQUAL(force.getNumScalingParameters(), force2.getNumScalingParameters());
+    for (int i = 0; i < force.getNumScalingParameters(); i++) {
+        string parameter1, parameter2;
+        int subset11, subset21, subset12, subset22;
+        bool includeLJ1, includeCoulomb1, includeLJ2, includeCoulomb2;
+        force.getScalingParameter(i, parameter1, subset11, subset21, includeLJ1, includeCoulomb1);
+        force2.getScalingParameter(i, parameter2, subset12, subset22, includeLJ2, includeCoulomb2);
+        ASSERT_EQUAL(parameter1, parameter2);
+        ASSERT_EQUAL(subset11, subset12);
+        ASSERT_EQUAL(subset21, subset22);
+        ASSERT_EQUAL(includeLJ1, includeLJ2);
+        ASSERT_EQUAL(includeCoulomb1, includeCoulomb2);
+    }
+    ASSERT_EQUAL(force.getNumScalingParameterDerivatives(), force2.getNumScalingParameterDerivatives());
+    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
+        ASSERT_EQUAL(force.getScalingParameterDerivativeName(i), force2.getScalingParameterDerivativeName(i))
 }
 
 int main() {
