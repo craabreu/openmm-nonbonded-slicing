@@ -25,7 +25,7 @@ using namespace PmeSlicing;
 using namespace OpenMM;
 using namespace std;
 
-SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : owner(owner) {
+SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : NonbondedForceImpl(owner), owner(owner) {
 }
 
 SlicedNonbondedForceImpl::~SlicedNonbondedForceImpl() {
@@ -124,12 +124,12 @@ double SlicedNonbondedForceImpl::calcForcesAndEnergy(ContextImpl& context, bool 
     return kernel.getAs<CalcSlicedNonbondedForceKernel>().execute(context, includeForces, includeEnergy, includeDirect, includeReciprocal);
 }
 
-map<string, double> SlicedNonbondedForceImpl::getDefaultParameters() {
-    map<string, double> parameters;
-    for (int i = 0; i < owner.getNumGlobalParameters(); i++)
-        parameters[owner.getGlobalParameterName(i)] = owner.getGlobalParameterDefaultValue(i);
-    return parameters;
-}
+// map<string, double> SlicedNonbondedForceImpl::getDefaultParameters() {
+//     map<string, double> parameters;
+//     for (int i = 0; i < owner.getNumGlobalParameters(); i++)
+//         parameters[owner.getGlobalParameterName(i)] = owner.getGlobalParameterDefaultValue(i);
+//     return parameters;
+// }
 
 std::vector<std::string> SlicedNonbondedForceImpl::getKernelNames() {
     std::vector<std::string> names;
@@ -137,77 +137,77 @@ std::vector<std::string> SlicedNonbondedForceImpl::getKernelNames() {
     return names;
 }
 
-class SlicedNonbondedForceImpl::ErrorFunction {
-public:
-    virtual double getValue(int arg) const = 0;
-};
+// class SlicedNonbondedForceImpl::ErrorFunction {
+// public:
+//     virtual double getValue(int arg) const = 0;
+// };
 
-class SlicedNonbondedForceImpl::EwaldErrorFunction : public ErrorFunction {
-public:
-    EwaldErrorFunction(double width, double alpha, double target) : width(width), alpha(alpha), target(target) {
-    }
-    double getValue(int arg) const {
-        double temp = arg*M_PI/(width*alpha);
-        return target-0.05*sqrt(width*alpha)*arg*exp(-temp*temp);
-    }
-private:
-    double width, alpha, target;
-};
+// class SlicedNonbondedForceImpl::EwaldErrorFunction : public ErrorFunction {
+// public:
+//     EwaldErrorFunction(double width, double alpha, double target) : width(width), alpha(alpha), target(target) {
+//     }
+//     double getValue(int arg) const {
+//         double temp = arg*M_PI/(width*alpha);
+//         return target-0.05*sqrt(width*alpha)*arg*exp(-temp*temp);
+//     }
+// private:
+//     double width, alpha, target;
+// };
 
-void SlicedNonbondedForceImpl::calcEwaldParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& kmaxx, int& kmaxy, int& kmaxz) {
-    Vec3 boxVectors[3];
-    system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
-    double tol = force.getEwaldErrorTolerance();
-    alpha = (1.0/force.getCutoffDistance())*std::sqrt(-log(2.0*tol));
-    kmaxx = findZero(EwaldErrorFunction(boxVectors[0][0], alpha, tol), 10);
-    kmaxy = findZero(EwaldErrorFunction(boxVectors[1][1], alpha, tol), 10);
-    kmaxz = findZero(EwaldErrorFunction(boxVectors[2][2], alpha, tol), 10);
-    if (kmaxx%2 == 0)
-        kmaxx++;
-    if (kmaxy%2 == 0)
-        kmaxy++;
-    if (kmaxz%2 == 0)
-        kmaxz++;
-}
+// void SlicedNonbondedForceImpl::calcEwaldParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& kmaxx, int& kmaxy, int& kmaxz) {
+//     Vec3 boxVectors[3];
+//     system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
+//     double tol = force.getEwaldErrorTolerance();
+//     alpha = (1.0/force.getCutoffDistance())*std::sqrt(-log(2.0*tol));
+//     kmaxx = findZero(EwaldErrorFunction(boxVectors[0][0], alpha, tol), 10);
+//     kmaxy = findZero(EwaldErrorFunction(boxVectors[1][1], alpha, tol), 10);
+//     kmaxz = findZero(EwaldErrorFunction(boxVectors[2][2], alpha, tol), 10);
+//     if (kmaxx%2 == 0)
+//         kmaxx++;
+//     if (kmaxy%2 == 0)
+//         kmaxy++;
+//     if (kmaxz%2 == 0)
+//         kmaxz++;
+// }
 
-void SlicedNonbondedForceImpl::calcPMEParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& xsize, int& ysize, int& zsize, bool lj) {
-    if (lj)
-        force.getLJPMEParameters(alpha, xsize, ysize, zsize);
-    else
-        force.getPMEParameters(alpha, xsize, ysize, zsize);
-    if (alpha == 0.0) {
-        Vec3 boxVectors[3];
-        system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
-        double tol = force.getEwaldErrorTolerance();
-        alpha = (1.0/force.getCutoffDistance())*std::sqrt(-log(2.0*tol));
-        if (lj) {
-            xsize = (int) ceil(alpha*boxVectors[0][0]/(3*pow(tol, 0.2)));
-            ysize = (int) ceil(alpha*boxVectors[1][1]/(3*pow(tol, 0.2)));
-            zsize = (int) ceil(alpha*boxVectors[2][2]/(3*pow(tol, 0.2)));
-        }
-        else {
-            xsize = (int) ceil(2*alpha*boxVectors[0][0]/(3*pow(tol, 0.2)));
-            ysize = (int) ceil(2*alpha*boxVectors[1][1]/(3*pow(tol, 0.2)));
-            zsize = (int) ceil(2*alpha*boxVectors[2][2]/(3*pow(tol, 0.2)));
-        }
-        xsize = max(xsize, 6);
-        ysize = max(ysize, 6);
-        zsize = max(zsize, 6);
-    }
-}
+// void SlicedNonbondedForceImpl::calcPMEParameters(const System& system, const SlicedNonbondedForce& force, double& alpha, int& xsize, int& ysize, int& zsize, bool lj) {
+//     if (lj)
+//         force.getLJPMEParameters(alpha, xsize, ysize, zsize);
+//     else
+//         force.getPMEParameters(alpha, xsize, ysize, zsize);
+//     if (alpha == 0.0) {
+//         Vec3 boxVectors[3];
+//         system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
+//         double tol = force.getEwaldErrorTolerance();
+//         alpha = (1.0/force.getCutoffDistance())*std::sqrt(-log(2.0*tol));
+//         if (lj) {
+//             xsize = (int) ceil(alpha*boxVectors[0][0]/(3*pow(tol, 0.2)));
+//             ysize = (int) ceil(alpha*boxVectors[1][1]/(3*pow(tol, 0.2)));
+//             zsize = (int) ceil(alpha*boxVectors[2][2]/(3*pow(tol, 0.2)));
+//         }
+//         else {
+//             xsize = (int) ceil(2*alpha*boxVectors[0][0]/(3*pow(tol, 0.2)));
+//             ysize = (int) ceil(2*alpha*boxVectors[1][1]/(3*pow(tol, 0.2)));
+//             zsize = (int) ceil(2*alpha*boxVectors[2][2]/(3*pow(tol, 0.2)));
+//         }
+//         xsize = max(xsize, 6);
+//         ysize = max(ysize, 6);
+//         zsize = max(zsize, 6);
+//     }
+// }
 
-int SlicedNonbondedForceImpl::findZero(const SlicedNonbondedForceImpl::ErrorFunction& f, int initialGuess) {
-    int arg = initialGuess;
-    double value = f.getValue(arg);
-    if (value > 0.0) {
-        while (value > 0.0 && arg > 0)
-            value = f.getValue(--arg);
-        return arg+1;
-    }
-    while (value < 0.0)
-        value = f.getValue(++arg);
-    return arg;
-}
+// int SlicedNonbondedForceImpl::findZero(const SlicedNonbondedForceImpl::ErrorFunction& f, int initialGuess) {
+//     int arg = initialGuess;
+//     double value = f.getValue(arg);
+//     if (value > 0.0) {
+//         while (value > 0.0 && arg > 0)
+//             value = f.getValue(--arg);
+//         return arg+1;
+//     }
+//     while (value < 0.0)
+//         value = f.getValue(++arg);
+//     return arg;
+// }
 
 double SlicedNonbondedForceImpl::evalIntegral(double r, double rs, double rc, double sigma) {
     // Compute the indefinite integral of the LJ interaction multiplied by the switching function.

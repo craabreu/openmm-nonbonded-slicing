@@ -165,3 +165,15 @@ void SlicedNonbondedForce::setScalingParameterDerivative(int index, const string
 ForceImpl* SlicedNonbondedForce::createImpl() const {
     return new SlicedNonbondedForceImpl(*this);
 }
+
+void SlicedNonbondedForce::getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const {
+    dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getPMEParameters(alpha, nx, ny, nz);
+}
+
+void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const {
+    dynamic_cast<const SlicedNonbondedForceImpl&>(getImplInContext(context)).getLJPMEParameters(alpha, nx, ny, nz);
+}
+
+void SlicedNonbondedForce::updateParametersInContext(Context& context) {
+    dynamic_cast<SlicedNonbondedForceImpl&>(getImplInContext(context)).updateParametersInContext(getContextImpl(context));
+}
