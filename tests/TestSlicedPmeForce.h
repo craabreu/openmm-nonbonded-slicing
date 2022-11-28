@@ -47,7 +47,7 @@ const double TOL = 1e-3;
     assertForces(state0, state1); \
 }
 
-void testInstantiateFromNonbondedForce(Platform& platform) {
+void testInstantiateFromNonbondedForce() {
     NonbondedForce* force = new NonbondedForce();
     force->setNonbondedMethod(NonbondedForce::PME);
     force->addParticle(0.0, 1.0, 0.5);
@@ -104,7 +104,7 @@ void testInstantiateFromNonbondedForce(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testCoulomb(Platform& platform) {
+void testCoulomb() {
     double L = 5.0;
 
     System system;
@@ -136,7 +136,7 @@ void testCoulomb(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testExclusionsAnd14(Platform& platform) {
+void testExclusionsAnd14() {
     double L = 5.0;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
@@ -201,7 +201,7 @@ void testExclusionsAnd14(Platform& platform) {
     }
 }
 
-void testPeriodic(Platform& platform) {
+void testPeriodic() {
     const double L = 4.0;
     const double cutoff = 2.0;
     System system;
@@ -231,7 +231,7 @@ void testPeriodic(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testPeriodicExceptions(Platform& platform) {
+void testPeriodicExceptions() {
     const double L = 4.0;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
@@ -266,7 +266,7 @@ void testPeriodicExceptions(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testTriclinic(Platform& platform) {
+void testTriclinic() {
     System system;
     system.addParticle(1.0);
     system.addParticle(1.0);
@@ -304,7 +304,7 @@ void testTriclinic(Platform& platform) {
     }
 }
 
-void testLargeSystem(Platform& platform) {
+void testLargeSystem() {
     const int numMolecules = 600;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
@@ -354,7 +354,7 @@ void testLargeSystem(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testChangingParameters(Platform& platform) {
+void testChangingParameters() {
     const int numMolecules = 600;
     const int numParticles = numMolecules*2;
     const double cutoff = 2.0;
@@ -410,7 +410,7 @@ void testChangingParameters(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testChargeOffsets(Platform& platform) {
+void testChargeOffsets() {
     const double L = 20.0;
     System system;
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
@@ -465,7 +465,7 @@ void testChargeOffsets(Platform& platform) {
     assertForcesAndEnergy(context);
 }
 
-void testEwaldExceptions(Platform& platform) {
+void testEwaldExceptions() {
     System system;
     for (int i = 0; i < 4; i++)
         system.addParticle(1.0);
@@ -502,7 +502,7 @@ void testEwaldExceptions(Platform& platform) {
     ASSERT_EQUAL_TOL(expectedChange, e2-e1, 1e-5);
 }
 
-void testDirectAndReciprocal(Platform& platform) {
+void testDirectAndReciprocal() {
     // Create a minimal system with direct space and reciprocal space in different force groups.
 
     System system;
@@ -545,7 +545,7 @@ void testDirectAndReciprocal(Platform& platform) {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
-void testNonbondedSwitchingParameters(Platform& platform, bool exceptions) {
+void testNonbondedSwitchingParameters(bool exceptions) {
     const int numMolecules = 600;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
@@ -685,19 +685,19 @@ extern "C" OPENMM_EXPORT void registerPmeSlicingReferenceKernelFactories();
 int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
-        testInstantiateFromNonbondedForce(platform);
-        testCoulomb(platform);
-        testExclusionsAnd14(platform);
-        testPeriodic(platform);
-        testPeriodicExceptions(platform);
-        testTriclinic(platform);
-        testLargeSystem(platform);
-        testChangingParameters(platform);
-        testChargeOffsets(platform);
-        testEwaldExceptions(platform);
-        testDirectAndReciprocal(platform);
-        testNonbondedSwitchingParameters(platform, false);
-        testNonbondedSwitchingParameters(platform, true);
+        testInstantiateFromNonbondedForce();
+        testCoulomb();
+        testExclusionsAnd14();
+        testPeriodic();
+        testPeriodicExceptions();
+        testTriclinic();
+        testLargeSystem();
+        testChangingParameters();
+        testChargeOffsets();
+        testEwaldExceptions();
+        testDirectAndReciprocal();
+        testNonbondedSwitchingParameters(false);
+        testNonbondedSwitchingParameters(true);
         runPlatformTests();
     }
     catch(const exception& e) {

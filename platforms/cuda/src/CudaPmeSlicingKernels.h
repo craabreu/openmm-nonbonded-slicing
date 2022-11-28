@@ -151,6 +151,138 @@ private:
     }
 };
 
+/**
+ * This kernel is invoked by SlicedNonbondedForce to calculate the forces acting on the system.
+ */
+class CudaCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
+public:
+    CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system);
+    ~CudaCalcSlicedNonbondedForceKernel();
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the SlicedNonbondedForce this kernel will be used for
+     */
+    void initialize(const System& system, const SlicedNonbondedForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @param includeDirect  true if direct space interactions should be included
+     * @param includeReciprocal  true if reciprocal space interactions should be included
+     * @return the potential energy due to the force
+     */
+    double execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the SlicedNonbondedForce to copy the parameters from
+     */
+    void copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force);
+    /**
+     * Get the parameters being used for PME.
+     *
+     * @param alpha   the separation parameter
+     * @param nx      the number of grid points along the X axis
+     * @param ny      the number of grid points along the Y axis
+     * @param nz      the number of grid points along the Z axis
+     */
+    void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+    /**
+     * Get the dispersion parameters being used for the dispersion term in LJPME.
+     *
+     * @param alpha   the separation parameter
+     * @param nx      the number of grid points along the X axis
+     * @param ny      the number of grid points along the Y axis
+     * @param nz      the number of grid points along the Z axis
+     */
+    void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+private:
+    class SortTrait : public CudaSort::SortTrait {
+        int getDataSize() const {return 8;}
+        int getKeySize() const {return 4;}
+        const char* getDataType() const {return "int2";}
+        const char* getKeyType() const {return "int";}
+        const char* getMinKey() const {return "(-2147483647-1)";}
+        const char* getMaxKey() const {return "2147483647";}
+        const char* getMaxValue() const {return "make_int2(2147483647, 2147483647)";}
+        const char* getSortKey() const {return "value.y";}
+    };
+    class ForceInfo;
+    class PmeIO;
+    class PmePreComputation;
+    class PmePostComputation;
+    class SyncStreamPreComputation;
+    class SyncStreamPostComputation;
+    CudaContext& cu;
+    ForceInfo* info;
+    bool hasInitializedFFT;
+    CudaArray charges;
+    CudaArray sigmaEpsilon;
+    CudaArray exceptionParams;
+    CudaArray exclusionAtoms;
+    CudaArray exclusionParams;
+    CudaArray baseParticleParams;
+    CudaArray baseExceptionParams;
+    CudaArray particleParamOffsets;
+    CudaArray exceptionParamOffsets;
+    CudaArray particleOffsetIndices;
+    CudaArray exceptionOffsetIndices;
+    CudaArray globalParams;
+    CudaArray cosSinSums;
+    CudaArray pmeGrid1;
+    CudaArray pmeGrid2;
+    CudaArray pmeBsplineModuliX;
+    CudaArray pmeBsplineModuliY;
+    CudaArray pmeBsplineModuliZ;
+    CudaArray pmeDispersionBsplineModuliX;
+    CudaArray pmeDispersionBsplineModuliY;
+    CudaArray pmeDispersionBsplineModuliZ;
+    CudaArray pmeAtomGridIndex;
+    CudaArray pmeEnergyBuffer;
+    CudaSort* sort;
+    Kernel cpuPme;
+    PmeIO* pmeio;
+    CUstream pmeStream;
+    CUevent pmeSyncEvent, paramsSyncEvent;
+    CudaFFT3D* fft;
+    cufftHandle fftForward;
+    cufftHandle fftBackward;
+    CudaFFT3D* dispersionFft;
+    cufftHandle dispersionFftForward;
+    cufftHandle dispersionFftBackward;
+    CUfunction computeParamsKernel, computeExclusionParamsKernel;
+    CUfunction ewaldSumsKernel;
+    CUfunction ewaldForcesKernel;
+    CUfunction pmeGridIndexKernel;
+    CUfunction pmeDispersionGridIndexKernel;
+    CUfunction pmeSpreadChargeKernel;
+    CUfunction pmeDispersionSpreadChargeKernel;
+    CUfunction pmeFinishSpreadChargeKernel;
+    CUfunction pmeDispersionFinishSpreadChargeKernel;
+    CUfunction pmeEvalEnergyKernel;
+    CUfunction pmeEvalDispersionEnergyKernel;
+    CUfunction pmeConvolutionKernel;
+    CUfunction pmeDispersionConvolutionKernel;
+    CUfunction pmeInterpolateForceKernel;
+    CUfunction pmeInterpolateDispersionForceKernel;
+    string realToFixedPoint;
+    std::vector<std::pair<int, int> > exceptionAtoms;
+    std::vector<std::string> paramNames;
+    std::vector<double> paramValues;
+    double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha;
+    int interpolateForceThreads;
+    int gridSizeX, gridSizeY, gridSizeZ;
+    int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
+    bool hasCoulomb, hasLJ, usePmeStream, useCudaFFT, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
+    NonbondedMethod nonbondedMethod;
+    static const int PmeOrder = 5;
+};
+
 } // namespace PmeSlicing
 
 #endif /*CUDA_PMESLICING_KERNELS_H_*/

@@ -12,5 +12,5 @@
 #include "ReferencePmeSlicingTests.h"
 #include "TestSlicedNonbondedForce.h"
 
-void runPlatformTests(Platform& platform) {
+void runPlatformTests() {
 }

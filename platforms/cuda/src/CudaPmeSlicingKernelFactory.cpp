@@ -24,6 +24,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         Platform& platform = Platform::getPlatformByName("CUDA");
         CudaPmeSlicingKernelFactory* factory = new CudaPmeSlicingKernelFactory();
         platform.registerKernelFactory(CalcSlicedPmeForceKernel::Name(), factory);
+        platform.registerKernelFactory(CalcSlicedNonbondedForceKernel::Name(), factory);
     }
     catch (std::exception ex) {
         // Ignore
@@ -46,9 +47,13 @@ KernelImpl* CudaPmeSlicingKernelFactory::createKernelImpl(std::string name, cons
         // We are running in parallel on multiple devices, so we may want to create a parallel kernel.
         if (name == CalcSlicedPmeForceKernel::Name())
             return new CudaParallelCalcSlicedPmeForceKernel(name, platform, data, context.getSystem());
+        else if (name == CalcSlicedNonbondedForceKernel::Name())
+            return new CudaParallelCalcSlicedNonbondedForceKernel(name, platform, data, context.getSystem());
     }
     CudaContext& cu = *data.contexts[0];
     if (name == CalcSlicedPmeForceKernel::Name())
         return new CudaCalcSlicedPmeForceKernel(name, platform, cu, context.getSystem());
+    else if (name == CalcSlicedNonbondedForceKernel::Name())
+        return new CudaCalcSlicedNonbondedForceKernel(name, platform, cu, context.getSystem());
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }
