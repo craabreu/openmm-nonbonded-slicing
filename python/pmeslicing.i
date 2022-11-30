@@ -52,6 +52,16 @@ from openmm import unit
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
 %}
 
+%pythonappend PmeSlicing::SlicedNonbondedForce::getPMEParametersInContext(
+        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
+    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
+%}
+
+%pythonappend PmeSlicing::SlicedNonbondedForce::getLJPMEParametersInContext(
+        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
+    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
+%}
+
 /*
  * Convert C++ exceptions to Python exceptions.
 */
@@ -848,10 +858,6 @@ public:
     }
 };
 
-%clear std::string& parameter;
-%clear int& exceptionIndex;
-%clear double& chargeProdScale;
-
 %clear double& alpha;
 %clear int& nx;
 %clear int& ny;
@@ -867,7 +873,15 @@ public:
 %clear int& exceptionIndex;
 %clear double& chargeProdScale;
 
-
+%apply double& OUTPUT {double& alpha};
+%apply int& OUTPUT {int& nx};
+%apply int& OUTPUT {int& ny};
+%apply int& OUTPUT {int& nz};
+%apply const std::string& OUTPUT {const std::string& parameter};
+%apply int& OUTPUT {int& subset1};
+%apply int& OUTPUT {int& subset2};
+%apply bool& OUTPUT {bool& includeLJ};
+%apply bool& OUTPUT {bool& includeCoulomb};
 
 /**
  * This class implements nonbonded interactions between particles, including a Coulomb force to represent
@@ -940,16 +954,37 @@ public:
      */
     SlicedNonbondedForce(int numSubsets);
     /**
+     * Create a SlicedNonbondedForce having the properties of an existing :OpenMM:`NonbondedForce`.
+     *
+     * Parameters
+     * ----------
+     *     force : :OpenMM:`NonbondedForce`
+     *         the NonbondedForce object from which to instantiate this SlicedNonbondedForce
+     *     numSubsets : int
+     *         the number of particle subsets
+     */
+    SlicedNonbondedForce(const OpenMM::NonbondedForce& force, int numSubsets);
+    /**
      * Get the parameters being used for PME in a particular Context.  Because some platforms have restrictions
      * on the allowed grid sizes, the values that are actually used may be slightly different from those
      * specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
      * See the manual for details.
      *
-     * @param context      the Context for which to get the parameters
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
+     * Parameters
+     * ----------
+     *     context : Context
+     *         the Context for which to get the parameters
+     *
+     * Returns
+     * -------
+     *     alpha : double
+     *         the separation parameter, measured in :math:`nm^{-1}`
+     *     nx : int
+     *         the number of grid points along the X axis
+     *     ny : int
+     *         the number of grid points along the Y axis
+     *     nz : int
+     *         the number of grid points along the Z axis
      */
     void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
@@ -958,11 +993,21 @@ public:
      * from those specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
      * See the manual for details.
      *
-     * @param context      the Context for which to get the parameters
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
+     * Parameters
+     * ----------
+     *     context : Context
+     *         the Context for which to get the parameters
+     *
+     * Returns
+     * -------
+     *     alpha : double
+     *         the separation parameter, measured in :math:`nm^{-1}`
+     *     nx : int
+     *         the number of grid points along the X axis
+     *     ny : int
+     *         the number of grid points along the Y axis
+     *     nz : int
+     *         the number of grid points along the Z axis
      */
     void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
@@ -976,8 +1021,174 @@ public:
      * changed by reinitializing the Context.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
      * can be changed; the pair of particles involved in the exception cannot change.  Finally, this method cannot be used
      * to add new particles or exceptions, only to change the parameters of existing ones.
+     *
+     * Parameters
+     * ----------
+     *     context : Context
+     *         the Context in which to update the parameters
      */
     void updateParametersInContext(Context& context);
+    /**
+     * Get the specified number of particle subsets.
+     */
+    int getNumSubsets() const;
+    /**
+     * Get the subset to which a particle belongs.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to get the subset
+     */
+    int getParticleSubset(int index) const;
+    /**
+     * Set the subset of a particle.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the particle for which to set the subset
+     *     subset : int
+     *         the subset to which this particle belongs
+     */
+    void setParticleSubset(int index, int subset);
+  	/**
+     * Add a scaling parameter to multiply a particular Coulomb slice. Its value will scale the
+     * Coulomb interactions between particles of a subset 1 with those of another (or the same)
+     * subset 2. The order of subset definition is irrelevant.
+     *
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
+     *     includeCoulomb : bool
+     *         whether this scaling parameter applies to Coulomb interactions
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of scaling parameter that was added
+     */
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
+    /**
+     * Get the number of scaling parameters.
+     */
+    int getNumScalingParameters() const;
+  	/**
+     * Get the scaling parameter applied to a particular nonbonded slice.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the scaling parameter to query, as returned by :func:`addScalingParameter`
+     *
+     * Returns
+     * -------
+     *     parameter : str
+     *         the name of the global parameter
+     *     subset1 : int
+     *         the smallest index of the two particle subsets
+     *     subset2 : int
+     *         the largest index of the two particle subsets
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
+     *     includeCoulomb : bool
+     *         whether this scaling parameter applies to Coulomb interactions
+     */
+    void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeLJ, bool& includeCoulomb) const;
+ 	/**
+     * Modify an added scaling parameter.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the scaling parameter to modify, as returned by
+     *         :func:`addExceptionChargeOffset`
+     *     parameter : str
+     *         the name of the global parameter.  It must have already been added
+     *         with :func:`addGlobalParameter`. Its value can be modified at any time by
+     *         calling `setParameter()` on the :OpenMM:`Context`
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
+     *     includeCoulomb : bool
+     *         whether this scaling parameter applies to Coulomb interactions
+     */
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
+    /**
+     * Request the derivative of this Force's energy with respect to a scaling parameter. This
+     * can be used to obtain the sum of particular energy slices. The parameter must have already
+     * been added with :func:`addGlobalParameter` and :func:`addSwithingParameter`.
+     *
+     * Parameters
+     * ----------
+     *     parameter : str
+     *         the name of the parameter
+     *
+     * Returns
+     * -------
+     *     index : int
+     *         the index of scaling parameter derivative that was added
+     */
+    int addScalingParameterDerivative(const std::string& parameter);
+    /**
+     * Get the number of requested scaling parameter derivatives.
+     */
+    int getNumScalingParameterDerivatives() const;
+    /**
+     * Get the name of the global parameter associated with a requested scaling parameter
+     * derivative.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter derivative, between 0 and the result of
+     *         :func:`getNumScalingParameterDerivatives`
+     */
+    const std::string& getScalingParameterDerivativeName(int index) const;
+    /**
+     * Set the name of the global parameter to associate with a requested scaling parameter
+     * derivative.
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the parameter derivative, between 0 and getNumScalingParameterDerivatives`
+     *     parameter : str
+     *         the name of the parameter
+     */
+    void setScalingParameterDerivative(int index, const std::string& parameter);
+	/**
+     * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
+     * The default value is `False`.
+     */
+    bool getUseCudaFFT() const;
+ 	/**
+     * Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
+     * This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0
+     * or older.
+     *
+     * Parameters
+     * ----------
+     *     use : bool
+     *         whether to use the cuFFT library
+     */
+    void setUseCuFFT(bool use);
 
     /*
      * Add methods for casting a Force to a SlicedNonbondedForce.
@@ -993,5 +1204,15 @@ public:
         }
     }
 };
+
+%clear double& alpha;
+%clear int& nx;
+%clear int& ny;
+%clear int& nz;
+%clear std::string& parameter;
+%clear int& subset1;
+%clear int& subset2;
+%clear bool& includeLJ;
+%clear bool& includeCoulomb;
 
 }

@@ -26,44 +26,8 @@ class OPENMM_EXPORT_PMESLICING SlicedNonbondedForce : public NonbondedForce {
 public:
     SlicedNonbondedForce(int numSubsets);
     SlicedNonbondedForce(const OpenMM::NonbondedForce& force, int numSubsets);
-    /**
-     * Get the parameters being used for PME in a particular Context.  Because some platforms have restrictions
-     * on the allowed grid sizes, the values that are actually used may be slightly different from those
-     * specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
-     * See the manual for details.
-     *
-     * @param context      the Context for which to get the parameters
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
-     */
     void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
-    /**
-     * Get the PME parameters being used for the dispersion term for LJPME in a particular Context.  Because some
-     * platforms have restrictions on the allowed grid sizes, the values that are actually used may be slightly different
-     * from those specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
-     * See the manual for details.
-     *
-     * @param context      the Context for which to get the parameters
-     * @param[out] alpha   the separation parameter
-     * @param[out] nx      the number of grid points along the X axis
-     * @param[out] ny      the number of grid points along the Y axis
-     * @param[out] nz      the number of grid points along the Z axis
-     */
     void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
-    /**
-     * Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
-     * provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
-     * Simply call setParticleParameters() and setExceptionParameters() to modify this object's parameters, then call
-     * updateParametersInContext() to copy them over to the Context.
-     *
-     * This method has several limitations.  The only information it updates is the parameters of particles and exceptions.
-     * All other aspects of the Force (the nonbonded method, the cutoff distance, etc.) are unaffected and can only be
-     * changed by reinitializing the Context.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
-     * can be changed; the pair of particles involved in the exception cannot change.  Finally, this method cannot be used
-     * to add new particles or exceptions, only to change the parameters of existing ones.
-     */
     void updateParametersInContext(Context& context);
     int getNumSubsets() const {
         return numSubsets;
