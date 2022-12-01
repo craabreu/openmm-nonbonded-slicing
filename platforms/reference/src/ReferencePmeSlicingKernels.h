@@ -155,6 +155,13 @@ private:
     std::vector<std::set<int> > exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;
+
+    int numSubsets, numSlices;
+    vector<int> subsets;
+    vector<string> scalingParams;
+    vector<vector<double>> sliceLambdas;
+    vector<vector<int>> sliceScalingParams;
+    vector<vector<int>> sliceScalingParamDerivs;
 };
 
 } // namespace PmeSlicing

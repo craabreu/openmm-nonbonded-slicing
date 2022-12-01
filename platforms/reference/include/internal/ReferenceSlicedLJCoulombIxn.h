@@ -15,6 +15,7 @@
 #include "openmm/reference/ReferencePairIxn.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 
+using namespace std;
 using namespace OpenMM;
 
 namespace PmeSlicing {
@@ -49,15 +50,17 @@ class ReferenceSlicedLJCoulombIxn {
          @param atom1            the index of the first atom
          @param atom2            the index of the second atom
          @param atomCoordinates  atom coordinates
+         @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
          @param forces           force array (forces added)
-         @param totalEnergy      total energy
+         @param sliceEnergies    the energy of each slice
 
          --------------------------------------------------------------------------------------- */
 
-      void calculateOneIxn(int atom1, int atom2, std::vector<OpenMM::Vec3>& atomCoordinates,
-                           std::vector<std::vector<double> >& atomParameters, std::vector<OpenMM::Vec3>& forces,
-                           double* totalEnergy) const;
+      void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
+                           vector<vector<double>>& sliceEnergies) const;
 
 
    public:
@@ -162,19 +165,21 @@ class ReferenceSlicedLJCoulombIxn {
 
          @param numberOfAtoms    number of atoms
          @param atomCoordinates  atom coordinates
+         @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
          @param exclusions       atom exclusion indices
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
-         @param totalEnergy      total energy
+         @param sliceEnergies    the energy of each slice
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
          --------------------------------------------------------------------------------------- */
 
-      void calculatePairIxn(int numberOfAtoms, std::vector<OpenMM::Vec3>& atomCoordinates,
-                            std::vector<std::vector<double> >& atomParameters, std::vector<std::set<int> >& exclusions,
-                            std::vector<OpenMM::Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const;
+      void calculatePairIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+                            vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 
 private:
       /**---------------------------------------------------------------------------------------
@@ -183,19 +188,21 @@ private:
 
          @param numberOfAtoms    number of atoms
          @param atomCoordinates  atom coordinates
+         @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
          @param exclusions       atom exclusion indices
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
-         @param totalEnergy      total energy
+         @param sliceEnergies    the energy of each slice
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
          --------------------------------------------------------------------------------------- */
 
-      void calculateEwaldIxn(int numberOfAtoms, std::vector<OpenMM::Vec3>& atomCoordinates,
-                             std::vector<std::vector<double> >& atomParameters, std::vector<std::set<int> >& exclusions,
-                             std::vector<OpenMM::Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const;
+      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 };
 
 } // namespace OpenMM

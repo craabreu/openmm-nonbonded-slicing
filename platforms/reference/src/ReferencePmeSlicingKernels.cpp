@@ -71,10 +71,10 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
 
-    vector<string> requestedDerivatives;
+    vector<string> derivs;
     for (int index = 0; index < force.getNumSwitchingParameterDerivatives(); index++) {
         string parameter = force.getSwitchingParameterDerivativeName(index);
-        requestedDerivatives.push_back(parameter);
+        derivs.push_back(parameter);
     }
 
     sliceSwitchParamIndices.resize(numSlices, -1);
@@ -86,8 +86,8 @@ void ReferenceCalcSlicedPmeForceKernel::initialize(const System& system, const S
         switchParamName.push_back(parameter);
         int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         sliceSwitchParamIndices[slice] = index;
-        auto begin = requestedDerivatives.begin();
-        auto end = requestedDerivatives.end();
+        auto begin = derivs.begin();
+        auto end = derivs.end();
         auto position = find(begin, end, parameter);
         if (position != end)
             sliceSwitchParamDerivative[slice] = position-begin;
@@ -320,6 +320,34 @@ ReferenceCalcSlicedNonbondedForceKernel::~ReferenceCalcSlicedNonbondedForceKerne
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
+    numParticles = force.getNumParticles();
+    numSubsets = force.getNumSubsets();
+    numSlices = numSubsets*(numSubsets+1)/2;
+    sliceLambdas.resize(numSlices, (vector<double>){1, 1});
+    sliceScalingParams.resize(numSlices, (vector<int>){-1, -1});
+    sliceScalingParamDerivs.resize(numSlices, (vector<int>){-1, -1});
+
+    subsets.resize(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        subsets[i] = force.getParticleSubset(i);
+
+    int numDerivs = force.getNumScalingParameterDerivatives();
+    vector<string> derivs(numDerivs);
+    for (int i = 0; i < numDerivs; i++)
+        derivs[i] = force.getScalingParameterDerivativeName(i);
+
+    int numScalingParams = force.getNumScalingParameters();
+    scalingParams.resize(numScalingParams);
+    for (int index = 0; index < numScalingParams; index++) {
+        int i, j;
+        bool includeLJ, includeCoulomb;
+        force.getScalingParameter(index, scalingParams[index], i, j, includeLJ, includeCoulomb);
+        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        sliceScalingParams[slice] = {includeLJ ? index : -1, includeCoulomb ? index : -1};
+        int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
+        if (pos < numDerivs)
+            sliceScalingParamDerivs[slice] = {includeLJ ? pos : -1, includeCoulomb ? pos : -1};
+    }
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -331,7 +359,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
         exceptionsWithOffsets.insert(exception);
     }
-    numParticles = force.getNumParticles();
     exclusions.resize(numParticles);
     vector<int> nb14s;
     map<int, int> nb14Index;
@@ -352,7 +379,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     num14 = nb14s.size();
     bonded14IndexArray.resize(num14, vector<int>(2));
     bonded14ParamArray.resize(num14, vector<double>(3));
-    particleParamArray.resize(numParticles, vector<double>(3));
+    particleParamArray.resize(numParticles, vector<double>(4));
     baseParticleParams.resize(numParticles);
     baseExceptionParams.resize(num14);
     for (int i = 0; i < numParticles; ++i)
@@ -447,9 +474,14 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUsePME(ewaldAlpha, gridSize);
         clj.setUseLJPME(ewaldDispersionAlpha, dispersionGridSize);
     }
+    vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
-    clj.calculatePairIxn(numParticles, posData, particleParamArray, exclusions, forceData, includeEnergy ? &energy : NULL, includeDirect, includeReciprocal);
+    clj.calculatePairIxn(numParticles, posData, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
+
+    if (includeEnergy)
+        energy = sliceEnergies[0][0];
+
     if (includeDirect) {
         ReferenceBondForce refBondForce;
         ReferenceSlicedLJCoulomb14 nonbonded14;
@@ -469,6 +501,11 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
 void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force) {
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+
+    // Get particle subsets.
+
+    for (int i = 0; i < numParticles; i++)
+        subsets[i] = force.getParticleSubset(i);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -528,6 +565,19 @@ void ReferenceCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, 
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& context) {
+
+    // Compute scaling parameter values.
+
+    for (int slice = 0; slice < numSlices; slice++) {
+        vector<int> indices = sliceScalingParams[slice];
+        int index = max(indices[0], indices[1]);
+        if (index != -1) {
+            double paramValue = context.getParameter(scalingParams[index]);
+            for (int i = 0; i < 2; i++)
+                sliceLambdas[slice][i] = indices[i] == -1 ? 1.0 : paramValue;
+        }
+    }
+
     // Compute particle parameters.
 
     vector<double> charges(numParticles), sigmas(numParticles), epsilons(numParticles);

@@ -37,7 +37,8 @@ using namespace OpenMM;
 
    --------------------------------------------------------------------------------------- */
 
-ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false), periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
+ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false),
+            periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -60,7 +61,6 @@ ReferenceSlicedLJCoulombIxn::~ReferenceSlicedLJCoulombIxn() {
      --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulombIxn::setUseCutoff(double distance, const OpenMM::NeighborList& neighbors, double solventDielectric) {
-
     cutoff = true;
     cutoffDistance = distance;
     neighborList = &neighbors;
@@ -92,7 +92,6 @@ void ReferenceSlicedLJCoulombIxn::setUseSwitchingFunction(double distance) {
      --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulombIxn::setPeriodic(OpenMM::Vec3* vectors) {
-
     assert(cutoff);
     assert(vectors[0][0] >= 2.0*cutoffDistance);
     assert(vectors[1][1] >= 2.0*cutoffDistance);
@@ -166,19 +165,21 @@ void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
 
    @param numberOfAtoms    number of atoms
    @param atomCoordinates  atom coordinates
-   @param atomParameters   atom parameters                             atomParameters[atomIndex][paramterIndex]
+   @param atomSubsets      atom subsets
+   @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+   @param sliceLambda      LJ and Coulomb scaling parameters for each slice
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
-   @param totalEnergy      total energy
+   @param sliceEnergies    the energy of each slice
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates,
-                                              vector<vector<double> >& atomParameters, vector<set<int> >& exclusions,
-                                              vector<Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const {
+void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                                            vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+                                            vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
     typedef std::complex<double> d_complex;
 
     static const double epsilon     =  1.0;
@@ -217,9 +218,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
         }
     }
 
-    if (totalEnergy) {
-        *totalEnergy += totalSelfEwaldEnergy;
-    }
+    sliceEnergies[0][0] += totalSelfEwaldEnergy;
 
     // **************************************************************************************
     // RECIPROCAL SPACE EWALD ENERGY AND FORCES
@@ -236,8 +235,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             charges[i] = atomParameters[i][QIndex];
         pme_exec(pmedata,atomCoordinates,forces,charges,periodicBoxVectors,&recipEnergy);
 
-        if (totalEnergy)
-            *totalEnergy += recipEnergy;
+        sliceEnergies[0][0] += recipEnergy;
 
         pme_destroy(pmedata);
 
@@ -251,8 +249,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             pme_exec_dpme(pmedata,atomCoordinates,dpmeforces,charges,periodicBoxVectors,&recipDispersionEnergy);
             for (int i = 0; i < numberOfAtoms; i++)
                 forces[i] += dpmeforces[i];
-            if (totalEnergy)
-                *totalEnergy += recipDispersionEnergy;
+            sliceEnergies[0][0] += recipDispersionEnergy;
             pme_destroy(pmedata);
         }
     }
@@ -345,8 +342,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                     recipEnergy       = recipCoeff * ak * (cs * cs + ss * ss);
                     totalRecipEnergy += recipEnergy;
 
-                    if (totalEnergy)
-                        *totalEnergy += recipEnergy;
+                    sliceEnergies[0][0] += recipEnergy;
 
                     lowrz = 1 - numRz;
                 }
@@ -445,8 +441,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
     }
 
-    if (totalEnergy)
-        *totalEnergy += totalRealSpaceEwaldEnergy + totalVdwEnergy;
+    sliceEnergies[0][0] += totalRealSpaceEwaldEnergy + totalVdwEnergy;
 
     // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
 
@@ -508,8 +503,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             }
         }
 
-    if (totalEnergy)
-        *totalEnergy -= totalExclusionEnergy;
+    sliceEnergies[0][0] -= totalExclusionEnergy;
 }
 
 
@@ -519,30 +513,32 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
    @param numberOfAtoms    number of atoms
    @param atomCoordinates  atom coordinates
-   @param atomParameters   atom parameters                             atomParameters[atomIndex][paramterIndex]
+   @param atomSubsets      atom subsets
+   @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+   @param sliceLambda      LJ and Coulomb scaling parameters for each slice
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
-   @param totalEnergy      total energy
+   @param sliceEnergies    the energy of each slice
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates,
-                                             vector<vector<double> >& atomParameters, vector<set<int> >& exclusions,
-                                             vector<Vec3>& forces, double* totalEnergy, bool includeDirect, bool includeReciprocal) const {
+void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+                                             vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
 
     if (ewald || pme || ljpme) {
-        calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomParameters, exclusions, forces,
-                          totalEnergy, includeDirect, includeReciprocal);
+        calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
+                          sliceEnergies, includeDirect, includeReciprocal);
         return;
     }
     if (!includeDirect)
         return;
     if (cutoff) {
         for (auto& pair : *neighborList)
-            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomParameters, forces, totalEnergy);
+            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
     }
     else {
         for (int ii = 0; ii < numberOfAtoms; ii++) {
@@ -550,7 +546,7 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec
 
             for (int jj = ii+1; jj < numberOfAtoms; jj++)
                 if (exclusions[jj].find(ii) == exclusions[jj].end())
-                    calculateOneIxn(ii, jj, atomCoordinates, atomParameters, forces, totalEnergy);
+                    calculateOneIxn(ii, jj, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
         }
     }
 }
@@ -562,15 +558,17 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec
      @param ii               the index of the first atom
      @param jj               the index of the second atom
      @param atomCoordinates  atom coordinates
+     @param atomSubsets      atom subsets
      @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
+     @param sliceLambda      LJ and Coulomb scaling parameters for each slice
      @param forces           force array (forces added)
-     @param totalEnergy      total energy
+     @param sliceEnergies    the energy of each slice
 
      --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCoordinates,
-                                            vector<vector<double> >& atomParameters, vector<Vec3>& forces,
-                                            double* totalEnergy) const {
+void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
+                                            vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<Vec3>& forces,
+                                            vector<vector<double>>& sliceEnergies) const {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -623,7 +621,5 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& 
 
     // accumulate energies
 
-    if (totalEnergy)
-        *totalEnergy += energy;
+    sliceEnergies[0][0] += energy;
 }
-
