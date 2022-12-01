@@ -1,14 +1,14 @@
 
 /* -------------------------------------------------------------------------- *
- *                             OpenMM PME Slicing                             *
- *                             ==================                             *
- *                                                                            *
- * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
- * of atom pairs and applying a different switching parameter to each slice.  *
- *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
- * https://github.com/craabreu/openmm-pme-slicing                             *
- * -------------------------------------------------------------------------- */
+*                            OpenMM PME Slicing                             *
+*                            ==================                             *
+*                                                                           *
+*An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+*of atom pairs and applying a different switching parameter to each slice.  *
+*                                                                           *
+*Copyright (c) 2022 Charlles Abreu                                          *
+*https://github.com/craabreu/openmm-pme-slicing                             *
+*-------------------------------------------------------------------------- */
 
 #include <string.h>
 #include <sstream>
@@ -184,24 +184,21 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
     static const double epsilon     =  1.0;
 
-    int kmax                            = (ewald ? std::max(numRx, std::max(numRy,numRz)) : 0);
-    double factorEwald              = -1 / (4*alphaEwald*alphaEwald);
+    int kmax                        = (ewald ? std::max(numRx, std::max(numRy,numRz)) : 0);
+    double factorEwald              = -1/(4*alphaEwald*alphaEwald);
     double SQRT_PI                  = sqrt(PI_M);
-    double TWO_PI                   = 2.0 * PI_M;
-    double recipCoeff               = ONE_4PI_EPS0*4*PI_M/(periodicBoxVectors[0][0] * periodicBoxVectors[1][1] * periodicBoxVectors[2][2]) /epsilon;
+    double TWO_PI                   = 2.0*PI_M;
+    double recipCoeff               = ONE_4PI_EPS0*4*PI_M/(periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2]) /epsilon;
 
-    double totalSelfEwaldEnergy     = 0.0;
-    double realSpaceEwaldEnergy     = 0.0;
     double recipEnergy              = 0.0;
     double recipDispersionEnergy    = 0.0;
     double totalRecipEnergy         = 0.0;
-    double vdwEnergy                = 0.0;
 
-    // A couple of sanity checks for
-    if(ljpme && useSwitch)
+    // A couple of sanity checks
+    if (ljpme && useSwitch)
         throw OpenMMException("Switching cannot be used with LJPME");
-    if(ljpme && !pme)
-        throw OpenMMException("LJPME has been set, without PME being set");
+    if (ljpme && !pme)
+        throw OpenMMException("LJPME has been set without PME being set");
 
     // **************************************************************************************
     // SELF ENERGY
@@ -209,16 +206,13 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
     if (includeReciprocal) {
         for (int atomID = 0; atomID < numberOfAtoms; atomID++) {
-            double selfEwaldEnergy       = ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex] * alphaEwald/SQRT_PI;
-            if(ljpme) {
-                // Dispersion self term
-                selfEwaldEnergy -= pow(alphaDispersionEwald, 6.0) * 64.0*pow(atomParameters[atomID][SigIndex], 6.0) * pow(atomParameters[atomID][EpsIndex], 2.0) / 12.0;
-            }
-            totalSelfEwaldEnergy            -= selfEwaldEnergy;
+            int subset = atomSubsets[atomID];
+            int slice = subset*(subset + 3)/2;
+            sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex]*alphaEwald/SQRT_PI;
+            if (ljpme)
+                sliceEnergies[slice][vdW] -= pow(alphaDispersionEwald, 6.0)*64.0*pow(atomParameters[atomID][SigIndex], 6.0)*pow(atomParameters[atomID][EpsIndex], 2.0)/12.0;
         }
     }
-
-    sliceEnergies[0][0] += totalSelfEwaldEnergy;
 
     // **************************************************************************************
     // RECIPROCAL SPACE EWALD ENERGY AND FORCES
@@ -235,7 +229,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             charges[i] = atomParameters[i][QIndex];
         pme_exec(pmedata,atomCoordinates,forces,charges,periodicBoxVectors,&recipEnergy);
 
-        sliceEnergies[0][0] += recipEnergy;
+        sliceEnergies[0][Coul] += recipEnergy;
 
         pme_destroy(pmedata);
 
@@ -245,11 +239,11 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
             std::vector<Vec3> dpmeforces(numberOfAtoms);
             for (int i = 0; i < numberOfAtoms; i++)
-                charges[i] = 8.0*pow(atomParameters[i][SigIndex], 3.0) * atomParameters[i][EpsIndex];
+                charges[i] = 8.0*pow(atomParameters[i][SigIndex], 3.0)*atomParameters[i][EpsIndex];
             pme_exec_dpme(pmedata,atomCoordinates,dpmeforces,charges,periodicBoxVectors,&recipDispersionEnergy);
             for (int i = 0; i < numberOfAtoms; i++)
                 forces[i] += dpmeforces[i];
-            sliceEnergies[0][0] += recipDispersionEnergy;
+            sliceEnergies[0][Coul] += recipDispersionEnergy;
             pme_destroy(pmedata);
         }
     }
@@ -259,12 +253,11 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
         // setup reciprocal box
 
-        double recipBoxSize[3] = { TWO_PI / periodicBoxVectors[0][0], TWO_PI / periodicBoxVectors[1][1], TWO_PI / periodicBoxVectors[2][2]};
-
+        double recipBoxSize[3] = { TWO_PI/periodicBoxVectors[0][0], TWO_PI/periodicBoxVectors[1][1], TWO_PI/periodicBoxVectors[2][2]};
 
         // setup K-vectors
 
-#define EIR(x, y, z) eir[(x)*numberOfAtoms*3+(y)*3+z]
+        #define EIR(x, y, z) eir[(x)*numberOfAtoms*3+(y)*3+z]
         vector<d_complex> eir(kmax*numberOfAtoms*3);
         vector<d_complex> tab_xy(numberOfAtoms);
         vector<d_complex> tab_qxyz(numberOfAtoms);
@@ -282,7 +275,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
             for (int j=2; (j<kmax); j++)
                 for (int m=0; (m<3); m++)
-                    EIR(j, i, m) = EIR(j-1, i, m) * EIR(1, i, m);
+                    EIR(j, i, m) = EIR(j-1, i, m)*EIR(1, i, m);
         }
 
         // calculate reciprocal space energy and forces
@@ -292,32 +285,32 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
         for (int rx = 0; rx < numRx; rx++) {
 
-            double kx = rx * recipBoxSize[0];
+            double kx = rx*recipBoxSize[0];
 
             for (int ry = lowry; ry < numRy; ry++) {
 
-                double ky = ry * recipBoxSize[1];
+                double ky = ry*recipBoxSize[1];
 
                 if (ry >= 0) {
                     for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n] = EIR(rx, n, 0) * EIR(ry, n, 1);
+                        tab_xy[n] = EIR(rx, n, 0)*EIR(ry, n, 1);
                 }
 
                 else {
                     for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n]= EIR(rx, n, 0) * conj (EIR(-ry, n, 1));
+                        tab_xy[n]= EIR(rx, n, 0)*conj (EIR(-ry, n, 1));
                 }
 
                 for (int rz = lowrz; rz < numRz; rz++) {
 
                     if (rz >= 0) {
                         for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex] * (tab_xy[n] * EIR(rz, n, 2));
+                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*EIR(rz, n, 2));
                     }
 
                     else {
                         for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex] * (tab_xy[n] * conj(EIR(-rz, n, 2)));
+                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*conj(EIR(-rz, n, 2)));
                     }
 
                     double cs = 0.0f;
@@ -328,21 +321,21 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                         ss += tab_qxyz[n].imag();
                     }
 
-                    double kz = rz * recipBoxSize[2];
-                    double k2 = kx * kx + ky * ky + kz * kz;
-                    double ak = exp(k2*factorEwald) / k2;
+                    double kz = rz*recipBoxSize[2];
+                    double k2 = kx*kx + ky*ky + kz*kz;
+                    double ak = exp(k2*factorEwald)/k2;
 
                     for (int n = 0; n < numberOfAtoms; n++) {
-                        double force = ak * (cs * tab_qxyz[n].imag() - ss * tab_qxyz[n].real());
-                        forces[n][0] += 2 * recipCoeff * force * kx ;
-                        forces[n][1] += 2 * recipCoeff * force * ky ;
-                        forces[n][2] += 2 * recipCoeff * force * kz ;
+                        double force = ak*(cs*tab_qxyz[n].imag() - ss*tab_qxyz[n].real());
+                        forces[n][0] += 2*recipCoeff*force*kx;
+                        forces[n][1] += 2*recipCoeff*force*ky;
+                        forces[n][2] += 2*recipCoeff*force*kz;
                     }
 
-                    recipEnergy       = recipCoeff * ak * (cs * cs + ss * ss);
+                    recipEnergy       = recipCoeff*ak*(cs*cs + ss*ss);
                     totalRecipEnergy += recipEnergy;
 
-                    sliceEnergies[0][0] += recipEnergy;
+                    sliceEnergies[0][Coul] += recipEnergy;
 
                     lowrz = 1 - numRz;
                 }
@@ -357,13 +350,14 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
     if (!includeDirect)
         return;
-    double totalVdwEnergy            = 0.0f;
-    double totalRealSpaceEwaldEnergy = 0.0f;
-
 
     for (auto& pair : *neighborList) {
         int ii = pair.first;
         int jj = pair.second;
+
+        int si = atomSubsets[ii];
+        int sj = atomSubsets[jj];
+        int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
 
         double deltaR[2][ReferenceForce::LastDeltaRIndex];
         ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
@@ -375,34 +369,33 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             switchValue = 1+t*t*t*(-10+t*(15-t*6));
             switchDeriv = t*t*(-30+t*(60-t*30))/(cutoffDistance-switchingDistance);
         }
-        double alphaR = alphaEwald * r;
+        double alphaR = alphaEwald*r;
 
-
-        double dEdR = ONE_4PI_EPS0 * atomParameters[ii][QIndex] * atomParameters[jj][QIndex] * inverseR * inverseR * inverseR;
-        dEdR = dEdR * (erfc(alphaR) + 2 * alphaR * exp (- alphaR * alphaR) / SQRT_PI);
+        double dEdRCoul = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*inverseR*inverseR;
+        dEdRCoul *= erfc(alphaR) + 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI;
 
         double sig = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
         double sig2 = inverseR*sig;
         sig2 *= sig2;
         double sig6 = sig2*sig2*sig2;
         double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-        dEdR += switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
-        vdwEnergy = eps*(sig6-1.0)*sig6;
+        double dEdRvdW = switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+        double vdwEnergy = eps*(sig6-1.0)*sig6;
 
         if (ljpme) {
-            double dalphaR   = alphaDispersionEwald * r;
+            double dalphaR   = alphaDispersionEwald*r;
             double dar2 = dalphaR*dalphaR;
             double dar4 = dar2*dar2;
             double dar6 = dar4*dar2;
             double inverseR2 = inverseR*inverseR;
-            double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0) * atomParameters[ii][EpsIndex];
-            double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0) * atomParameters[jj][EpsIndex];
+            double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0)*atomParameters[ii][EpsIndex];
+            double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0)*atomParameters[jj][EpsIndex];
             // For the energies and forces, we first add the regular Lorentz−Berthelot terms.  The C12 term is treated as usual
             // but we then subtract out (remembering that the C6 term is negative) the multiplicative C6 term that has been
             // computed in real space.  Finally, we add a potential shift term to account for the difference between the LB
             // and multiplicative functional forms at the cutoff.
-            double emult = c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
-            dEdR += 6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4 + dar6/6.0));
+            double emult = c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
+            dEdRvdW += 6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4 + dar6/6.0));
 
             double inverseCut2 = 1.0/(cutoffDistance*cutoffDistance);
             double inverseCut6 = inverseCut2*inverseCut2*inverseCut2;
@@ -411,41 +404,35 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             sig6 = sig2*sig2*sig2;
             // The additive part of the potential shift
             double potentialshift = eps*(1.0-sig6*inverseCut6)*sig6*inverseCut6;
-            dalphaR   = alphaDispersionEwald * cutoffDistance;
+            dalphaR   = alphaDispersionEwald*cutoffDistance;
             dar2 = dalphaR*dalphaR;
             dar4 = dar2*dar2;
             // The multiplicative part of the potential shift
-            potentialshift -= c6i*c6j*inverseCut6*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
+            potentialshift -= c6i*c6j*inverseCut6*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
             vdwEnergy += emult + potentialshift;
         }
 
         if (useSwitch) {
-            dEdR -= vdwEnergy*switchDeriv*inverseR;
+            dEdRvdW -= vdwEnergy*switchDeriv*inverseR;
             vdwEnergy *= switchValue;
         }
 
         // accumulate forces
 
+        double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul;
         for (int kk = 0; kk < 3; kk++) {
-            double force  = dEdR*deltaR[0][kk];
-            forces[ii][kk]   += force;
-            forces[jj][kk]   -= force;
+            double force = factor*deltaR[0][kk];
+            forces[ii][kk] += force;
+            forces[jj][kk] -= force;
         }
 
         // accumulate energies
-
-        realSpaceEwaldEnergy        = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
-
-        totalVdwEnergy             += vdwEnergy;
-        totalRealSpaceEwaldEnergy  += realSpaceEwaldEnergy;
-
+        sliceEnergies[slice][vdW] += vdwEnergy;
+        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
     }
-
-    sliceEnergies[0][0] += totalRealSpaceEwaldEnergy + totalVdwEnergy;
 
     // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
 
-    double totalExclusionEnergy = 0.0f;
     const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
     for (int i = 0; i < numberOfAtoms; i++)
         for (int exclusion : exclusions[i]) {
@@ -453,57 +440,57 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                 int ii = i;
                 int jj = exclusion;
 
+                int si = atomSubsets[ii];
+                int sj = atomSubsets[jj];
+                int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
+
                 double deltaR[2][ReferenceForce::LastDeltaRIndex];
                 if (periodicExceptions)
                     ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
                 else
                     ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
-                double r         = deltaR[0][ReferenceForce::RIndex];
-                double inverseR  = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-                double alphaR    = alphaEwald * r;
+                double r        = deltaR[0][ReferenceForce::RIndex];
+                double inverseR = 1.0/(deltaR[0][ReferenceForce::RIndex]);
+                double alphaR   = alphaEwald*r;
                 if (erf(alphaR) > 1e-6) {
-                    double dEdR = ONE_4PI_EPS0 * atomParameters[ii][QIndex] * atomParameters[jj][QIndex] * inverseR * inverseR * inverseR;
-                    dEdR = dEdR * (erf(alphaR) - 2 * alphaR * exp (- alphaR * alphaR) / SQRT_PI);
+                    double dEdR = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*inverseR*inverseR;
+                    dEdR = dEdR*(erf(alphaR) - 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
 
                     // accumulate forces
-
+                    double factor = sliceLambdas[slice][Coul]*dEdR;
                     for (int kk = 0; kk < 3; kk++) {
-                        double force = dEdR*deltaR[0][kk];
+                        double force = factor*deltaR[0][kk];
                         forces[ii][kk] -= force;
                         forces[jj][kk] += force;
                     }
 
                     // accumulate energies
 
-                    realSpaceEwaldEnergy = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
+                    sliceEnergies[0][Coul] -= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
                 }
-                else {
-                    realSpaceEwaldEnergy = alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
-                }
+                else
+                    sliceEnergies[0][Coul] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
 
-                if(ljpme){
+                if (ljpme) {
                     // Dispersion terms.  Here we just back out the reciprocal space terms, and don't add any extra real space terms.
-                    double dalphaR   = alphaDispersionEwald * r;
+                    double dalphaR   = alphaDispersionEwald*r;
                     double inverseR2 = inverseR*inverseR;
                     double dar2 = dalphaR*dalphaR;
                     double dar4 = dar2*dar2;
                     double dar6 = dar4*dar2;
-                    double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0) * atomParameters[ii][EpsIndex];
-                    double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0) * atomParameters[jj][EpsIndex];
-                    realSpaceEwaldEnergy -= c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4));
-                    double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2) * (1.0 + dar2 + 0.5*dar4 + dar6/6.0));
+                    double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0)*atomParameters[ii][EpsIndex];
+                    double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0)*atomParameters[jj][EpsIndex];
+                    sliceEnergies[0][vdW] += c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
+                    double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4 + dar6/6.0));
+                    double factor = sliceLambdas[slice][vdW]*dEdR;
                     for (int kk = 0; kk < 3; kk++) {
-                        double force = dEdR*deltaR[0][kk];
+                        double force = factor*deltaR[0][kk];
                         forces[ii][kk] -= force;
                         forces[jj][kk] += force;
                     }
                 }
-
-                totalExclusionEnergy += realSpaceEwaldEnergy;
             }
         }
-
-    sliceEnergies[0][0] -= totalExclusionEnergy;
 }
 
 
@@ -526,8 +513,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
    --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
-                                             vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
+                vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+                vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
 
     if (ewald || pme || ljpme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
@@ -571,6 +558,10 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& 
                                             vector<vector<double>>& sliceEnergies) const {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
+    int si = atomSubsets[ii];
+    int sj = atomSubsets[jj];
+    int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
+
     // get deltaR, R2, and R between 2 atoms
 
     if (periodic)
@@ -595,31 +586,29 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& 
     double sig6 = sig2*sig2*sig2;
 
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-    double dEdR = switchValue*eps*(12.0*sig6 - 6.0)*sig6;
+    double dEdRvdW = switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+    double dEdRCoul = inverseR*inverseR;
     if (cutoff)
-        dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
+        dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
     else
-        dEdR += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
-    dEdR     *= inverseR*inverseR;
+        dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
     double energy = eps*(sig6-1.0)*sig6;
     if (useSwitch) {
-        dEdR -= energy*switchDeriv*inverseR;
+        dEdRvdW -= energy*switchDeriv*inverseR;
         energy *= switchValue;
     }
+    sliceEnergies[slice][vdW] += energy;
     if (cutoff)
-        energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
+        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
     else
-        energy += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+
 
     // accumulate forces
-
+    double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul;
     for (int kk = 0; kk < 3; kk++) {
-        double force  = dEdR*deltaR[0][kk];
-        forces[ii][kk]   += force;
-        forces[jj][kk]   -= force;
+        double force  = factor*deltaR[0][kk];
+        forces[ii][kk] += force;
+        forces[jj][kk] -= force;
     }
-
-    // accumulate energies
-
-    sliceEnergies[0][0] += energy;
 }

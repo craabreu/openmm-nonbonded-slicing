@@ -43,6 +43,9 @@ class ReferenceSlicedLJCoulombIxn {
       static const int EpsIndex = 1;
       static const int   QIndex = 2;
 
+      static const int   vdW = 0;
+      static const int   Coul = 1;
+
       /**---------------------------------------------------------------------------------------
 
          Calculate LJ Coulomb pair ixn between two atoms

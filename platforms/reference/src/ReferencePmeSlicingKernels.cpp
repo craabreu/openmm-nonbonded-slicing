@@ -480,7 +480,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     clj.calculatePairIxn(numParticles, posData, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
 
     if (includeEnergy)
-        energy = sliceEnergies[0][0];
+        for (int slice = 0; slice < numSlices; slice++)
+            energy = sliceEnergies[slice][0] + sliceEnergies[slice][1];
 
     if (includeDirect) {
         ReferenceBondForce refBondForce;
