@@ -479,10 +479,6 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUseSwitchingFunction(switchingDistance);
     clj.calculatePairIxn(numParticles, posData, numSubsets, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
 
-    if (includeEnergy)
-        for (int slice = 0; slice < numSlices; slice++)
-            energy = sliceEnergies[slice][0] + sliceEnergies[slice][1];
-
     if (includeDirect) {
         ReferenceBondForce refBondForce;
         ReferenceSlicedLJCoulomb14 nonbonded14;
@@ -496,6 +492,20 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
             energy += dispersionCoefficient/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
         }
     }
+
+    if (includeEnergy)
+        for (int slice = 0; slice < numSlices; slice++)
+            for (int term = 0; term < 2; term++)
+                energy += sliceLambdas[slice][term]*sliceEnergies[slice][term];
+
+    map<string, double>& energyParamDerivs = extractEnergyParameterDerivatives(context);
+    for (int slice = 0; slice < numSlices; slice++)
+        for (int term = 0; term < 2; term++) {
+            int index = sliceScalingParamDerivs[slice][term];
+            if (index != -1)
+                energyParamDerivs[scalingParams[index]] += sliceEnergies[slice][term];
+        }
+
     return energy;
 }
 

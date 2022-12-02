@@ -64,7 +64,7 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     force->addParticleParameterOffset("p2", 1, 1.0, 1.0, 2.0);
     force->addExceptionParameterOffset("p1", 1, 0.5, 0.5, 1.5);
 
-    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 1);
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 3);
     sliced->setForceGroup(1);
 
     int N = force->getNumParticles();
@@ -994,6 +994,139 @@ void testDirectAndReciprocal() {
     ASSERT_EQUAL_TOL(e3, e4, 1e-5);
 }
 
+void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool exceptions) {
+    const int numMolecules = 600;
+    const int numParticles = numMolecules*2;
+    const double cutoff = 3.5;
+    const double L = 20.0;
+    const double tol = 2e-3;
+    System system1, system2;
+    for (int i = 0; i < numParticles; i++) {
+        system1.addParticle(1.0);
+        system2.addParticle(1.0);
+    }
+    system1.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    system2.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+
+    NonbondedForce* nonbonded = new NonbondedForce();
+    nonbonded->setNonbondedMethod(method);
+    nonbonded->setCutoffDistance(cutoff);
+    vector<Vec3> positions(numParticles);
+
+    double intraChargeProd = -0.5;
+
+    int M = static_cast<int>(std::pow(numMolecules, 1.0/3.0));
+    if (M*M*M < numMolecules) M++;
+    double sqrt3 = std::sqrt(3);
+    for (int k = 0; k < numMolecules; k++) {
+        int iz = k/(M*M);
+        int iy = (k - iz*M*M)/M;
+        int ix = k - M*(iy + iz*M);
+        double x = (ix + 0.5)*L/M;
+        double y = (iy + 0.5)*L/M;
+        double z = (iz + 0.5)*L/M;
+        double dx = (0.5 - ix%2)/2;
+        double dy = (0.5 - iy%2)/2;
+        double dz = (0.5 - iz%2)/2;
+        nonbonded->addParticle(1.0, 1.0, 0.0);
+        nonbonded->addParticle(-1.0, 1.0, 0.0);
+        if (exceptions)
+            nonbonded->addException(2*k, 2*k+1, intraChargeProd, 1.0, 0.0);
+        positions[2*k] = Vec3(x+dx, y+dy, z+dz);
+        positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
+    }
+
+    double lambda = 0.5;
+
+    SlicedNonbondedForce* slicedNonbonded = new SlicedNonbondedForce(*nonbonded, 2);
+    for (int k = 0; k < numMolecules; k++)
+        slicedNonbonded->setParticleSubset(2*k, 1);
+
+    nonbonded->addGlobalParameter("lambda", lambda);
+    for (int k = 0; k < numMolecules; k++) {
+        double charge, sigma, epsilon;
+        nonbonded->getParticleParameters(2*k, charge, sigma, epsilon);
+        nonbonded->setParticleParameters(2*k, 0.0, sigma, epsilon);
+        nonbonded->addParticleParameterOffset("lambda", 2*k, charge, 0.0, 0.0);
+    }
+
+    slicedNonbonded->addGlobalParameter("lambda", lambda);
+    slicedNonbonded->addGlobalParameter("lambdaSq", lambda*lambda);
+    slicedNonbonded->addScalingParameter("lambda", 0, 1, false, true);
+    slicedNonbonded->addScalingParameter("lambdaSq", 1, 1, false, true);
+
+    if (exceptions)
+        for (int i = 0; i < nonbonded->getNumExceptions(); i++) {
+            int p1, p2;
+            double chargeProd, sigma, epsilon;
+            nonbonded->getExceptionParameters(i, p1, p2, chargeProd, sigma, epsilon);
+            nonbonded->setExceptionParameters(i, p1, p2, 0.0, sigma, epsilon);
+            nonbonded->addExceptionParameterOffset("lambda", i, chargeProd, 0.0, 0.0);
+        }
+
+    system1.addForce(nonbonded);
+    system2.addForce(slicedNonbonded);
+
+    nonbonded->setReciprocalSpaceForceGroup(1);
+    VerletIntegrator integrator1(0.01);
+    Context context1(system1, integrator1, platform);
+    context1.setPositions(positions);
+
+    slicedNonbonded->setReciprocalSpaceForceGroup(1);
+    VerletIntegrator integrator2(0.01);
+    Context context2(system2, integrator2, platform);
+    context2.setPositions(positions);
+
+    // Direct space:
+    State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
+    State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+
+    // Reciprocal space:
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+
+    // Change of switching parameter value:
+    lambda = 0.8;
+
+    context1.setParameter("lambda", lambda);
+    context2.setParameter("lambda", lambda);
+    context2.setParameter("lambdaSq", lambda*lambda);
+
+    state1 = context1.getState(State::Energy | State::Forces);
+    state2 = context2.getState(State::Energy | State::Forces);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+
+    // Derivatives:
+    context1.setParameter("lambda", 0);
+    double energy0 = context1.getState(State::Energy).getPotentialEnergy();
+    context1.setParameter("lambda", 1);
+    double energy1 = context1.getState(State::Energy).getPotentialEnergy();
+
+    slicedNonbonded->addScalingParameterDerivative("lambda");
+    slicedNonbonded->addScalingParameterDerivative("lambdaSq");
+    context2.reinitialize(true);
+    state2 = context2.getState(State::ParameterDerivatives);
+    auto derivatives = state2.getEnergyParameterDerivatives();
+    ASSERT_EQUAL_TOL(energy1-energy0, derivatives["lambda"]+derivatives["lambdaSq"], TOL);
+
+    slicedNonbonded->addGlobalParameter("remainder", 1.0);
+    slicedNonbonded->addScalingParameter("remainder", 0, 0, false, true);
+    slicedNonbonded->addScalingParameterDerivative("remainder");
+    context2.reinitialize(true);
+    context2.setParameter("lambda", 1.0);
+    context2.setParameter("lambdaSq", 1.0);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
+    double energy = state2.getPotentialEnergy();
+    derivatives = state2.getEnergyParameterDerivatives();
+    double sum = derivatives["lambda"]+derivatives["lambdaSq"]+derivatives["remainder"];
+    ASSERT_EQUAL_TOL(energy, sum, TOL);
+}
+
 void runPlatformTests();
 
 int main(int argc, char* argv[]) {
@@ -1022,6 +1155,12 @@ int main(int argc, char* argv[]) {
         testParameterOffsets();
         testEwaldExceptions();
         testDirectAndReciprocal();
+        testNonbondedCoulombSlicing(NonbondedForce::NoCutoff, false);
+        testNonbondedCoulombSlicing(NonbondedForce::CutoffNonPeriodic, false);
+        testNonbondedCoulombSlicing(NonbondedForce::CutoffPeriodic, false);
+        testNonbondedCoulombSlicing(NonbondedForce::Ewald, false);
+        testNonbondedCoulombSlicing(NonbondedForce::PME, false);
+        testNonbondedCoulombSlicing(NonbondedForce::LJPME, false);
         runPlatformTests();
     }
     catch(const exception& e) {

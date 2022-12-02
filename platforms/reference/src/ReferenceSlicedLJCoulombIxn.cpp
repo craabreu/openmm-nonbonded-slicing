@@ -1,14 +1,13 @@
-
 /* -------------------------------------------------------------------------- *
-*                            OpenMM PME Slicing                             *
-*                            ==================                             *
-*                                                                           *
-*An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
-*of atom pairs and applying a different switching parameter to each slice.  *
-*                                                                           *
-*Copyright (c) 2022 Charlles Abreu                                          *
-*https://github.com/craabreu/openmm-pme-slicing                             *
-*-------------------------------------------------------------------------- */
+ *                             OpenMM PME Slicing                             *
+ *                             ==================                             *
+ *                                                                            *
+ * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
+ * of atom pairs and applying a different switching parameter to each slice.  *
+ *                                                                            *
+ * Copyright (c) 2022 Charlles Abreu                                          *
+ * https://github.com/craabreu/openmm-pme-slicing                             *
+ * -------------------------------------------------------------------------- */
 
 #include <string.h>
 #include <sstream>
@@ -247,8 +246,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
         // setup K-vectors
 
-        #define EIR(x, y, z) eir[(x)*numberOfAtoms*3+(y)*3+z]
-        vector<d_complex> eir(kmax*numberOfAtoms*3);
+        #define EIR(subset, x, y, z) eir[(((subset)*kmax+(x))*numberOfAtoms+(y))*3+z]
+        vector<d_complex> eir(numberOfSubsets*kmax*numberOfAtoms*3);
         vector<d_complex> tab_xy(numberOfAtoms);
         vector<d_complex> tab_qxyz(numberOfAtoms);
 
@@ -256,16 +255,17 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             throw OpenMMException("kmax for Ewald summation < 1");
 
         for (int i = 0; (i < numberOfAtoms); i++) {
+            int subset = atomSubsets[i];
             for (int m = 0; (m < 3); m++)
-                EIR(0, i, m) = d_complex(1,0);
+                EIR(subset, 0, i, m) = d_complex(1,0);
 
             for (int m=0; (m<3); m++)
-                EIR(1, i, m) = d_complex(cos(atomCoordinates[i][m]*recipBoxSize[m]),
+                EIR(subset, 1, i, m) = d_complex(cos(atomCoordinates[i][m]*recipBoxSize[m]),
                                          sin(atomCoordinates[i][m]*recipBoxSize[m]));
 
             for (int j=2; (j<kmax); j++)
                 for (int m=0; (m<3); m++)
-                    EIR(j, i, m) = EIR(j-1, i, m)*EIR(1, i, m);
+                    EIR(subset, j, i, m) = EIR(subset, j-1, i, m)*EIR(subset, 1, i, m);
         }
 
         // calculate reciprocal space energy and forces
@@ -281,34 +281,37 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
                 double ky = ry*recipBoxSize[1];
 
-                if (ry >= 0) {
-                    for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n] = EIR(rx, n, 0)*EIR(ry, n, 1);
-                }
-
-                else {
-                    for (int n = 0; n < numberOfAtoms; n++)
-                        tab_xy[n]= EIR(rx, n, 0)*conj (EIR(-ry, n, 1));
-                }
+                if (ry >= 0)
+                    for (int n = 0; n < numberOfAtoms; n++) {
+                        int subset = atomSubsets[n];
+                        tab_xy[n] = EIR(subset, rx, n, 0)*EIR(subset, ry, n, 1);
+                    }
+                else
+                    for (int n = 0; n < numberOfAtoms; n++) {
+                        int subset = atomSubsets[n];
+                        tab_xy[n]= EIR(subset, rx, n, 0)*conj(EIR(subset, -ry, n, 1));
+                    }
 
                 for (int rz = lowrz; rz < numRz; rz++) {
 
-                    if (rz >= 0) {
-                        for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*EIR(rz, n, 2));
-                    }
+                    if (rz >= 0)
+                        for (int n = 0; n < numberOfAtoms; n++) {
+                            int subset = atomSubsets[n];
+                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*EIR(subset, rz, n, 2));
+                        }
+                    else
+                        for (int n = 0; n < numberOfAtoms; n++) {
+                            int subset = atomSubsets[n];
+                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*conj(EIR(subset, -rz, n, 2)));
+                        }
 
-                    else {
-                        for (int n = 0; n < numberOfAtoms; n++)
-                            tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*conj(EIR(-rz, n, 2)));
-                    }
-
-                    double cs = 0.0f;
-                    double ss = 0.0f;
+                    double cs[numberOfSubsets] = {0.0f};
+                    double ss[numberOfSubsets] = {0.0f};
 
                     for (int n = 0; n < numberOfAtoms; n++) {
-                        cs += tab_qxyz[n].real();
-                        ss += tab_qxyz[n].imag();
+                        int subset = atomSubsets[n];
+                        cs[subset] += tab_qxyz[n].real();
+                        ss[subset] += tab_qxyz[n].imag();
                     }
 
                     double kz = rz*recipBoxSize[2];
@@ -316,13 +319,21 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                     double ak = exp(k2*factorEwald)/k2;
 
                     for (int n = 0; n < numberOfAtoms; n++) {
-                        double force = ak*(cs*tab_qxyz[n].imag() - ss*tab_qxyz[n].real());
-                        forces[n][0] += 2*recipCoeff*force*kx;
-                        forces[n][1] += 2*recipCoeff*force*ky;
-                        forces[n][2] += 2*recipCoeff*force*kz;
+                        int i = atomSubsets[n];
+                        for (int j = 0; j < numberOfSubsets; j++) {
+                            int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+                            double force = 2*recipCoeff*sliceLambdas[slice][Coul]*ak*(cs[j]*tab_qxyz[n].imag() - ss[j]*tab_qxyz[n].real());
+                            forces[n][0] += force*kx;
+                            forces[n][1] += force*ky;
+                            forces[n][2] += force*kz;
+                        }
                     }
 
-                    sliceEnergies[0][Coul] += recipCoeff*ak*(cs*cs + ss*ss);
+                    for (int j = 0; j < numberOfSubsets; j++) {
+                        for (int i = 0; i < j; i++)
+                            sliceEnergies[j*(j+1)/2+i][Coul] += 2*recipCoeff*ak*(cs[i]*cs[j] + ss[i]*ss[j]);
+                        sliceEnergies[j*(j+3)/2][Coul] += recipCoeff*ak*(cs[j]*cs[j] + ss[j]*ss[j]);
+                    }
 
                     lowrz = 1 - numRz;
                 }

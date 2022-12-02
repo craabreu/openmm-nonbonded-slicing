@@ -23,7 +23,6 @@ namespace PmeSlicing {
 
 typedef double rvec[3];
 
-
 typedef struct pme *
 pme_t;
 

@@ -17,7 +17,7 @@
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 
-using std::vector;
+using namespace std;
 using namespace PmeSlicing;
 using namespace OpenMM;
 

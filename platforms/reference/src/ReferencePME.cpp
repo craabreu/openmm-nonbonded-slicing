@@ -332,7 +332,7 @@ pme_grid_spread_charge(pme_t pme, const vector<double>& charges, const vector<in
     order = pme->order;
 
     /* Reset the grid */
-    for (i=0;i<pme->ngrid[0]*pme->ngrid[1]*pme->ngrid[2];i++)
+    for (i=0;i<pme->ngrid[0]*pme->ngrid[1]*pme->ngrid[2]*pme->nsubsets;i++)
     {
         pme->grid[i] = complex<double>(0, 0);
     }
@@ -581,10 +581,10 @@ dpme_reciprocal_convolution(pme_t pme,
                     ptr->imag(d2*eterm);
 
                     /* Long-range PME contribution to the energy for this frequency */
-                    sliceEnergies[j*(j+3)/2][1] += 0.5*eterm*(d1*d1 + d2*d2);
+                    sliceEnergies[j*(j+3)/2][0] += 0.5*eterm*(d1*d1 + d2*d2);
                     for (int i = 0; i < j; i++) {
                         ptr = pme->grid + ((i*nx + kx)*ny + ky)*nz + kz;
-                        sliceEnergies[j*(j+1)/2+i][1] += d1*ptr->real() + d2*ptr->imag();
+                        sliceEnergies[j*(j+1)/2+i][0] += d1*ptr->real() + d2*ptr->imag();
                     }
                 }
             }
@@ -599,7 +599,8 @@ pme_grid_interpolate_force(pme_t pme,
                            const vector<int>& atomSubsets,
                            const vector<vector<double>>& sliceLambdas,
                            const vector<double>& charges,
-                           vector<Vec3>& forces)
+                           vector<Vec3>& forces,
+                           int term)
 {
     int       i;
     int       ix,iy,iz;
@@ -681,7 +682,7 @@ pme_grid_interpolate_force(pme_t pme,
 
                         /* Get the fft+convoluted+ifft:d data from the grid, which must be real by definition */
                         /* Checking that the imaginary part is indeed zero might be a good check :-) */
-                        gridvalue = sliceLambdas[slice][1]*pme->grid[index].real();
+                        gridvalue = sliceLambdas[slice][term]*pme->grid[index].real();
 
                         /* The d component of the force is calculated by taking the derived bspline in dimension d, normal bsplines in the other two */
                         fx += dtx*ty*tz*gridvalue;
@@ -802,7 +803,7 @@ int pme_exec(pme_t       pme,
     }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces,1);
 
     return 0;
 }
@@ -862,7 +863,7 @@ int pme_exec_dpme(pme_t       pme,
     }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces,0);
 
     return 0;
 }
