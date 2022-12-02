@@ -61,8 +61,8 @@ class ReferenceSlicedLJCoulombIxn {
 
          --------------------------------------------------------------------------------------- */
 
-      void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
+      void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, const vector<int>& atomSubsets,
+                           const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
                            vector<vector<double>>& sliceEnergies) const;
 
 
@@ -180,8 +180,8 @@ class ReferenceSlicedLJCoulombIxn {
 
          --------------------------------------------------------------------------------------- */
 
-      void calculatePairIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+      void calculatePairIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
+                           const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
                             vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 
 private:
@@ -203,8 +203,8 @@ private:
 
          --------------------------------------------------------------------------------------- */
 
-      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                           vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+      void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
+                           const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
                            vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 };
 

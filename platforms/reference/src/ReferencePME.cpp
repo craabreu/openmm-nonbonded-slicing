@@ -33,6 +33,8 @@ namespace PmeSlicing {
 struct pme
 {
     int          natoms;
+    int          nsubsets;
+    int          nslices;
     double       ewaldcoeff;
 
     complex<double>* grid;             /* Memory for the grid we spread charges on.
@@ -314,7 +316,7 @@ pme_update_bsplines(pme_t    pme)
 
 
 static void
-pme_grid_spread_charge(pme_t pme, const vector<double>& charges)
+pme_grid_spread_charge(pme_t pme, const vector<double>& charges, const vector<int>& subsets)
 {
     int       order;
     int       i;
@@ -338,6 +340,7 @@ pme_grid_spread_charge(pme_t pme, const vector<double>& charges)
     for (i=0;i<pme->natoms;i++)
     {
         q = charges[i];
+        int subset = subsets[i];
 
         /* Grid index for the actual atom position */
         x0index = pme->particleindex[i][0];
@@ -381,7 +384,7 @@ pme_grid_spread_charge(pme_t pme, const vector<double>& charges)
                     /* Can be optimized, but we keep it simple here */
                     zindex            = (z0index + iz) % pme->ngrid[2];
                     /* Calculate index in the charge grid */
-                    index             = xindex*pme->ngrid[1]*pme->ngrid[2] + yindex*pme->ngrid[2] + zindex;
+                    index = ((subset*pme->ngrid[0] + xindex)*pme->ngrid[1] + yindex)*pme->ngrid[2] + zindex;
                     /* Add the charge times the bspline spread/interpolation factors to this grid position */
                     pme->grid[index] += q*thetax[ix]*thetay[iy]*thetaz[iz];
                 }
@@ -396,18 +399,16 @@ static void
 pme_reciprocal_convolution(pme_t     pme,
                            const Vec3 periodicBoxVectors[3],
                            const Vec3 recipBoxVectors[3],
-                           double *  energy)
+                           vector<vector<double>>& sliceEnergies)
 {
     int kx,ky,kz;
     int nx,ny,nz;
     double mx,my,mz;
     double mhx,mhy,mhz,m2;
     double one_4pi_eps;
-    double virxx,virxy,virxz,viryy,viryz,virzz;
     double bx,by,bz;
     double d1,d2;
-    double eterm,vfactor,struct2,ets2;
-    double esum;
+    double eterm,vfactor;
     double factor;
     double denom;
     double boxfactor;
@@ -422,14 +423,6 @@ pme_reciprocal_convolution(pme_t     pme,
     one_4pi_eps = ONE_4PI_EPS0/pme->epsilon_r;
     factor = M_PI*M_PI/(pme->ewaldcoeff*pme->ewaldcoeff);
     boxfactor = M_PI*periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2];
-
-    esum = 0;
-    virxx = 0;
-    virxy = 0;
-    virxz = 0;
-    viryy = 0;
-    viryz = 0;
-    virzz = 0;
 
     maxkx = (nx+1)/2;
     maxky = (ny+1)/2;
@@ -468,13 +461,6 @@ pme_reciprocal_convolution(pme_t     pme,
                 mz        = (kz<maxkz) ? kz : (kz-nz);
                 mhz       = mx*recipBoxVectors[2][0]+my*recipBoxVectors[2][1]+mz*recipBoxVectors[2][2];
 
-                /* Pointer to the grid cell in question */
-                ptr       = pme->grid + kx*ny*nz + ky*nz + kz;
-
-                /* Get grid data for this frequency */
-                d1        = ptr->real();
-                d2        = ptr->imag();
-
                 /* Calculate the convolution - see the Essman/Darden paper for the equation! */
                 m2        = mhx*mhx+mhy*mhy+mhz*mhz;
                 bz        = pme->bsplines_moduli[2][kz];
@@ -482,21 +468,29 @@ pme_reciprocal_convolution(pme_t     pme,
 
                 eterm     = one_4pi_eps*exp(-factor*m2)/denom;
 
-                /* write back convolution data to grid */
-                ptr->real(d1*eterm);
-                ptr->imag(d2*eterm);
+                for (int j = 0; j < pme->nsubsets; j++) {
 
-                struct2   = (d1*d1+d2*d2);
+                    /* Pointer to the grid cell in question */
+                    ptr = pme->grid + ((j*nx + kx)*ny + ky)*nz + kz;
 
-                /* Long-range PME contribution to the energy for this frequency */
-                ets2      = eterm*struct2;
-                esum     += ets2;
+                    /* Get grid data for this frequency */
+                    d1 = ptr->real();
+                    d2 = ptr->imag();
+
+                    /* write back convolution data to grid */
+                    ptr->real(d1*eterm);
+                    ptr->imag(d2*eterm);
+
+                    /* Long-range PME contribution to the energy for this frequency */
+                    sliceEnergies[j*(j+3)/2][1] += 0.5*eterm*(d1*d1 + d2*d2);
+                    for (int i = 0; i < j; i++) {
+                        ptr = pme->grid + ((i*nx + kx)*ny + ky)*nz + kz;
+                        sliceEnergies[j*(j+1)/2+i][1] += d1*ptr->real() + d2*ptr->imag();
+                    }
+                }
             }
         }
     }
-
-    /* The factor 0.5 is nothing special, but it is better to have it here than inside the loop :-) */
-    *energy = 0.5*esum;
 }
 
 
@@ -504,7 +498,7 @@ static void
 dpme_reciprocal_convolution(pme_t pme,
                            const Vec3 periodicBoxVectors[3],
                            const Vec3 recipBoxVectors[3],
-                           double* energy)
+                           vector<vector<double>>& sliceEnergies)
 {
     int kx,ky,kz;
     int nx,ny,nz;
@@ -512,8 +506,7 @@ dpme_reciprocal_convolution(pme_t pme,
     double mhx,mhy,mhz,m2;
     double bx,by,bz;
     double d1,d2;
-    double eterm,struct2,ets2;
-    double esum;
+    double eterm;
     double denom;
     double boxfactor;
     double maxkx,maxky,maxkz;
@@ -525,8 +518,6 @@ dpme_reciprocal_convolution(pme_t pme,
     nz = pme->ngrid[2];
 
     boxfactor = -2*M_PI*sqrt(M_PI) / (6.0*periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2]);
-
-    esum = 0;
 
     maxkx = (nx+1)/2;
     maxky = (ny+1)/2;
@@ -562,13 +553,6 @@ dpme_reciprocal_convolution(pme_t pme,
                 mz        = ((kz<maxkz) ? kz : (kz-nz));
                 mhz       = mx*recipBoxVectors[2][0]+my*recipBoxVectors[2][1]+mz*recipBoxVectors[2][2];
 
-                /* Pointer to the grid cell in question */
-                ptr       = pme->grid + kx*ny*nz + ky*nz + kz;
-
-                /* Get grid data for this frequency */
-                d1        = ptr->real();
-                d2        = ptr->imag();
-
                 /* Calculate the convolution - see the Essman/Darden paper for the equation! */
                 m2        = mhx*mhx+mhy*mhy+mhz*mhz;
                 bz        = pme->bsplines_moduli[2][kz];
@@ -583,26 +567,37 @@ dpme_reciprocal_convolution(pme_t pme,
 
                 eterm     = (fac1*erfcterm*m3 + expterm*(fac2 + fac3*m2)) * denom;
 
-                /* write back convolution data to grid */
-                ptr->real(d1*eterm);
-                ptr->imag(d2*eterm);
+                for (int j = 0; j < pme->nsubsets; j++) {
 
-                struct2   = (d1*d1+d2*d2);
+                    /* Pointer to the grid cell in question */
+                    ptr = pme->grid + ((j*nx + kx)*ny + ky)*nz + kz;
 
-                /* Long-range PME contribution to the energy for this frequency */
-                ets2      = eterm*struct2;
-                esum     += ets2;
+                    /* Get grid data for this frequency */
+                    d1 = ptr->real();
+                    d2 = ptr->imag();
+
+                    /* write back convolution data to grid */
+                    ptr->real(d1*eterm);
+                    ptr->imag(d2*eterm);
+
+                    /* Long-range PME contribution to the energy for this frequency */
+                    sliceEnergies[j*(j+3)/2][1] += 0.5*eterm*(d1*d1 + d2*d2);
+                    for (int i = 0; i < j; i++) {
+                        ptr = pme->grid + ((i*nx + kx)*ny + ky)*nz + kz;
+                        sliceEnergies[j*(j+1)/2+i][1] += d1*ptr->real() + d2*ptr->imag();
+                    }
+                }
             }
         }
     }
-    // Remember the C6 energy is attractive, hence the negative sign.
-    *energy = 0.5*esum;
 }
 
 
 static void
 pme_grid_interpolate_force(pme_t pme,
                            const Vec3 recipBoxVectors[3],
+                           const vector<int>& atomSubsets,
+                           const vector<vector<double>>& sliceLambdas,
                            const vector<double>& charges,
                            vector<Vec3>& forces)
 {
@@ -638,6 +633,7 @@ pme_grid_interpolate_force(pme_t pme,
         fx = fy = fz = 0;
 
         q = charges[i];
+        int si = atomSubsets[i];
 
         /* Grid index for the actual atom position */
         x0index = pme->particleindex[i][0];
@@ -678,16 +674,20 @@ pme_grid_interpolate_force(pme_t pme,
                     /* bspline + derivative wrt z */
                     tz                   = thetaz[iz];
                     dtz                  = dthetaz[iz];
-                    index                = xindex*pme->ngrid[1]*pme->ngrid[2] + yindex*pme->ngrid[2] + zindex;
 
-                    /* Get the fft+convoluted+ifft:d data from the grid, which must be real by definition */
-                    /* Checking that the imaginary part is indeed zero might be a good check :-) */
-                    gridvalue            = pme->grid[index].real();
+                    for (int sj = 0; sj < pme->nsubsets; sj++) {
+                        index = ((sj*pme->ngrid[2] + xindex)*pme->ngrid[1] + yindex)*pme->ngrid[2] + zindex;
+                        int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
 
-                    /* The d component of the force is calculated by taking the derived bspline in dimension d, normal bsplines in the other two */
-                    fx                  += dtx*ty*tz*gridvalue;
-                    fy                  += tx*dty*tz*gridvalue;
-                    fz                  += tx*ty*dtz*gridvalue;
+                        /* Get the fft+convoluted+ifft:d data from the grid, which must be real by definition */
+                        /* Checking that the imaginary part is indeed zero might be a good check :-) */
+                        gridvalue = sliceLambdas[slice][1]*pme->grid[index].real();
+
+                        /* The d component of the force is calculated by taking the derived bspline in dimension d, normal bsplines in the other two */
+                        fx += dtx*ty*tz*gridvalue;
+                        fy += tx*dty*tz*gridvalue;
+                        fz += tx*ty*dtz*gridvalue;
+                    }
                 }
             }
         }
@@ -706,6 +706,7 @@ int
 pme_init(pme_t *       ppme,
          double        ewaldcoeff,
          int           natoms,
+         int           nsubsets,
          const int     ngrid[3],
          int           pme_order,
          double        epsilon_r)
@@ -719,6 +720,8 @@ pme_init(pme_t *       ppme,
     pme->epsilon_r   = epsilon_r;
     pme->ewaldcoeff  = ewaldcoeff;
     pme->natoms      = natoms;
+    pme->nsubsets = nsubsets;
+    pme->nslices = nsubsets*(nsubsets+1)/2;
 
     for (d=0;d<3;d++)
     {
@@ -731,7 +734,7 @@ pme_init(pme_t *       ppme,
     pme->particleindex    = (ivec *)malloc(sizeof(ivec)*natoms);
 
     /* Allocate charge grid storage */
-    pme->grid        = (complex<double> *)malloc(sizeof(complex<double>)*ngrid[0]*ngrid[1]*ngrid[2]);
+    pme->grid        = (complex<double> *)malloc(sizeof(complex<double>)*ngrid[0]*ngrid[1]*ngrid[2]*nsubsets);
 
     /* Setup bspline moduli (see Essman paper) */
     pme_calculate_bsplines_moduli(pme);
@@ -747,10 +750,12 @@ pme_init(pme_t *       ppme,
 
 int pme_exec(pme_t       pme,
              const vector<Vec3>& atomCoordinates,
+             const vector<int>& atomSubsets,
+             const vector<vector<double>>& sliceLambdas,
              vector<Vec3>& forces,
              const vector<double>& charges,
              const Vec3 periodicBoxVectors[3],
-             double* energy)
+             vector<vector<double>>& sliceEnergies)
 {
     /* Routine is called with coordinates in x, a box, and charges in q */
 
@@ -771,7 +776,7 @@ int pme_exec(pme_t       pme,
     pme_update_bsplines(pme);
 
     /* Spread the charges on grid (using newly calculated bsplines in the pme structure) */
-    pme_grid_spread_charge(pme, charges);
+    pme_grid_spread_charge(pme, charges, atomSubsets);
 
     /* do 3d-fft */
     vector<size_t> shape = {(size_t) pme->ngrid[0], (size_t) pme->ngrid[1], (size_t) pme->ngrid[2]};
@@ -782,13 +787,13 @@ int pme_exec(pme_t       pme,
     pocketfft::c2c(shape, stride, stride, axes, true, pme->grid, pme->grid, 1.0, 0);
 
     /* solve in k-space */
-    pme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,energy);
+    pme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,sliceEnergies);
 
     /* do 3d-invfft */
     pocketfft::c2c(shape, stride, stride, axes, false, pme->grid, pme->grid, 1.0, 0);
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,charges,forces);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces);
 
     return 0;
 }
@@ -796,10 +801,12 @@ int pme_exec(pme_t       pme,
 
 int pme_exec_dpme(pme_t       pme,
              const vector<Vec3>& atomCoordinates,
+             const vector<int>& atomSubsets,
+             const vector<vector<double>>& sliceLambdas,
              vector<Vec3>& forces,
              const vector<double>& c6s,
              const Vec3 periodicBoxVectors[3],
-             double* energy)
+             vector<vector<double>>& sliceEnergies)
 {
     /* Routine is called with coordinates in x, a box, and charges in q */
 
@@ -820,7 +827,7 @@ int pme_exec_dpme(pme_t       pme,
     pme_update_bsplines(pme);
 
     /* Spread the charges on grid (using newly calculated bsplines in the pme structure) */
-    pme_grid_spread_charge(pme, c6s);
+    pme_grid_spread_charge(pme, c6s, atomSubsets);
 
     /* do 3d-fft */
     vector<size_t> shape = {(size_t) pme->ngrid[0], (size_t) pme->ngrid[1], (size_t) pme->ngrid[2]};
@@ -831,13 +838,13 @@ int pme_exec_dpme(pme_t       pme,
     pocketfft::c2c(shape, stride, stride, axes, true, pme->grid, pme->grid, 1.0, 0);
 
     /* solve in k-space */
-    dpme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,energy);
+    dpme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,sliceEnergies);
 
     /* do 3d-invfft */
     pocketfft::c2c(shape, stride, stride, axes, false, pme->grid, pme->grid, 1.0, 0);
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,c6s,forces);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces);
 
     return 0;
 }

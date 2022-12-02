@@ -477,7 +477,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
-    clj.calculatePairIxn(numParticles, posData, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
+    clj.calculatePairIxn(numParticles, posData, numSubsets, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
 
     if (includeEnergy)
         for (int slice = 0; slice < numSlices; slice++)

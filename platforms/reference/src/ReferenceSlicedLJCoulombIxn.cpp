@@ -177,22 +177,20 @@ void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                                            vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
+                                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
                                             vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
     typedef std::complex<double> d_complex;
 
-    static const double epsilon     =  1.0;
+    int kmax = ewald ? std::max(numRx, std::max(numRy, numRz)) : 0;
+    double factorEwald = -1/(4*alphaEwald*alphaEwald);
+    double SQRT_PI = sqrt(PI_M);
+    double TWO_PI = 2.0*PI_M;
+    double recipCoeff = ONE_4PI_EPS0*4*PI_M/(periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2]);
 
-    int kmax                        = (ewald ? std::max(numRx, std::max(numRy,numRz)) : 0);
-    double factorEwald              = -1/(4*alphaEwald*alphaEwald);
-    double SQRT_PI                  = sqrt(PI_M);
-    double TWO_PI                   = 2.0*PI_M;
-    double recipCoeff               = ONE_4PI_EPS0*4*PI_M/(periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2]) /epsilon;
-
-    double recipEnergy              = 0.0;
-    double recipDispersionEnergy    = 0.0;
-    double totalRecipEnergy         = 0.0;
+    double recipEnergy = 0.0;
+    double recipDispersionEnergy = 0.0;
+    double totalRecipEnergy = 0.0;
 
     // A couple of sanity checks
     if (ljpme && useSwitch)
@@ -222,28 +220,28 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
     if (pme && includeReciprocal) {
         pme_t          pmedata; /* abstract handle for PME data */
 
-        pme_init(&pmedata,alphaEwald,numberOfAtoms,meshDim,5,1);
+        pme_init(&pmedata, alphaEwald, numberOfAtoms, numberOfSubsets, meshDim, 5, 1);
 
         vector<double> charges(numberOfAtoms);
         for (int i = 0; i < numberOfAtoms; i++)
             charges[i] = atomParameters[i][QIndex];
-        pme_exec(pmedata,atomCoordinates,forces,charges,periodicBoxVectors,&recipEnergy);
+        pme_exec(pmedata, atomCoordinates, atomSubsets, sliceLambdas, forces, charges, periodicBoxVectors, sliceEnergies);
 
-        sliceEnergies[0][Coul] += recipEnergy;
+        // sliceEnergies[0][Coul] += recipEnergy;
 
         pme_destroy(pmedata);
 
         if (ljpme) {
             // Dispersion reciprocal space terms
-            pme_init(&pmedata,alphaDispersionEwald,numberOfAtoms,dispersionMeshDim,5,1);
+            pme_init(&pmedata, alphaDispersionEwald, numberOfAtoms, numberOfSubsets, dispersionMeshDim, 5, 1);
 
             std::vector<Vec3> dpmeforces(numberOfAtoms);
             for (int i = 0; i < numberOfAtoms; i++)
                 charges[i] = 8.0*pow(atomParameters[i][SigIndex], 3.0)*atomParameters[i][EpsIndex];
-            pme_exec_dpme(pmedata,atomCoordinates,dpmeforces,charges,periodicBoxVectors,&recipDispersionEnergy);
+            pme_exec_dpme(pmedata, atomCoordinates, atomSubsets, sliceLambdas, dpmeforces, charges, periodicBoxVectors, sliceEnergies);
             for (int i = 0; i < numberOfAtoms; i++)
                 forces[i] += dpmeforces[i];
-            sliceEnergies[0][Coul] += recipDispersionEnergy;
+            // sliceEnergies[0][Coul] += recipDispersionEnergy;
             pme_destroy(pmedata);
         }
     }
@@ -512,12 +510,12 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
    --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<set<int> >& exclusions,
+void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
+                const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
                 vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
 
     if (ewald || pme || ljpme) {
-        calculateEwaldIxn(numberOfAtoms, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
+        calculateEwaldIxn(numberOfAtoms, atomCoordinates, numberOfSubsets, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
                           sliceEnergies, includeDirect, includeReciprocal);
         return;
     }
@@ -553,8 +551,8 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec
 
      --------------------------------------------------------------------------------------- */
 
-void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCoordinates, vector<int>& atomSubsets,
-                                            vector<vector<double> >& atomParameters, vector<vector<double>>& sliceLambdas, vector<Vec3>& forces,
+void ReferenceSlicedLJCoulombIxn::calculateOneIxn(int ii, int jj, vector<Vec3>& atomCoordinates, const vector<int>& atomSubsets,
+                                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<Vec3>& forces,
                                             vector<vector<double>>& sliceEnergies) const {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 

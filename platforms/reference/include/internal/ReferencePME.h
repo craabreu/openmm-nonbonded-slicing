@@ -16,6 +16,7 @@
 #include "internal/windowsExportPmeSlicing.h"
 #include <vector>
 
+using namespace std;
 using namespace OpenMM;
 
 namespace PmeSlicing {
@@ -44,6 +45,7 @@ int OPENMM_EXPORT_PMESLICING
 pme_init(pme_t* ppme,
          double ewaldcoeff,
          int natoms,
+         int nsubsets,
          const int ngrid[3],
          int pme_order,
          double epsilon_r);
@@ -62,11 +64,13 @@ pme_init(pme_t* ppme,
  */
 int OPENMM_EXPORT_PMESLICING
 pme_exec(pme_t pme,
-         const std::vector<OpenMM::Vec3>& atomCoordinates,
-         std::vector<OpenMM::Vec3>& forces,
-         const std::vector<double>& charges,
+         const vector<OpenMM::Vec3>& atomCoordinates,
+         const vector<int>& atomSubsets,
+         const vector<vector<double>>& sliceLambdas,
+         vector<OpenMM::Vec3>& forces,
+         const vector<double>& charges,
          const OpenMM::Vec3 periodicBoxVectors[3],
-         double* energy);
+         vector<vector<double>>& sliceEnergies);
 
 
 /**
@@ -83,11 +87,13 @@ pme_exec(pme_t pme,
  */
 int OPENMM_EXPORT_PMESLICING
 pme_exec_dpme(pme_t pme,
-              const std::vector<OpenMM::Vec3>& atomCoordinates,
-              std::vector<OpenMM::Vec3>& forces,
-              const std::vector<double>& c6s,
-              const OpenMM::Vec3 periodicBoxVectors[3],
-              double* energy);
+         const vector<OpenMM::Vec3>& atomCoordinates,
+         const vector<int>& atomSubsets,
+         const vector<vector<double>>& sliceLambdas,
+         vector<OpenMM::Vec3>& forces,
+         const vector<double>& c6s,
+         const OpenMM::Vec3 periodicBoxVectors[3],
+         vector<vector<double>>& sliceEnergies);
 
 
 
