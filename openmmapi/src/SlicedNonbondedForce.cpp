@@ -25,7 +25,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) :
     NonbondedForce(), numSubsets(numSubsets), useCudaFFT(false) {
 }
 
-SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) {
+SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : SlicedNonbondedForce(numSubsets) {
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
@@ -41,6 +41,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     force.getPMEParameters(alpha, nx, ny, nz);
     setPMEParameters(alpha, nx, ny, nz);
     force.getLJPMEParameters(alpha, nx, ny, nz);
+    setLJPMEParameters(alpha, nx, ny, nz);
     setReciprocalSpaceForceGroup(force.getReciprocalSpaceForceGroup());
     for (int i = 0; i < force.getNumParticles(); i++) {
         double charge, sigma, epsilon;

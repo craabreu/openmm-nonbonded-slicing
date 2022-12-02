@@ -29,6 +29,64 @@ using namespace std;
 
 const double TOL = 1e-5;
 
+#define assertEnergy(state0, state1) { \
+    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
+}
+
+#define assertForces(state0, state1) { \
+    const vector<Vec3>& forces0 = state0.getForces(); \
+    const vector<Vec3>& forces1 = state1.getForces(); \
+    for (int i = 0; i < forces0.size(); i++) \
+        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL); \
+}
+
+#define assertForcesAndEnergy(context) { \
+    State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \
+    State state1 = context.getState(State::Forces | State::Energy, false, 1<<1); \
+    assertEnergy(state0, state1); \
+    assertForces(state0, state1); \
+}
+
+void testInstantiateFromNonbondedForce() {
+    NonbondedForce* force = new NonbondedForce();
+    force->setNonbondedMethod(NonbondedForce::PME);
+    force->addParticle(0.0, 1.0, 0.5);
+    force->addParticle(1.0, 0.5, 0.6);
+    force->addParticle(-1.0, 2.0, 0.7);
+    force->addParticle(0.5, 2.0, 0.8);
+    force->addException(0, 3, 0.0, 1.0, 0.0);
+    force->addException(2, 3, 0.5, 1.0, 1.5);
+    force->addException(0, 1, 1.0, 1.5, 1.0);
+    force->addGlobalParameter("p1", 0.5);
+    force->addGlobalParameter("p2", 1.0);
+    force->addParticleParameterOffset("p1", 0, 3.0, 0.5, 0.5);
+    force->addParticleParameterOffset("p2", 1, 1.0, 1.0, 2.0);
+    force->addExceptionParameterOffset("p1", 1, 0.5, 0.5, 1.5);
+
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 1);
+    sliced->setForceGroup(1);
+
+    System system;
+    double L = 4.0;
+    system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    for (int i = 0; i < 4; i++)
+        system.addParticle(1.0);
+
+    system.addForce(force);
+    system.addForce(sliced);
+
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+
+    vector<Vec3> positions(4);
+    for (int i = 0; i < 4; i++)
+        positions[i] = Vec3(i, 0, 0);
+
+    context.setPositions(positions);
+
+    assertForcesAndEnergy(context);
+}
+
 void testCoulomb() {
     System system;
     system.addParticle(1.0);
@@ -958,6 +1016,7 @@ void runPlatformTests();
 int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
+        testInstantiateFromNonbondedForce();
         testCoulomb();
         testLJ();
         testExclusionsAnd14();
