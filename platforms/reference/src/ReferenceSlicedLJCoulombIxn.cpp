@@ -26,8 +26,7 @@
 // make sure that erf() and erfc() are defined.
 #include "openmm/internal/MSVC_erfc.h"
 
-using std::set;
-using std::vector;
+using namespace std;
 using namespace PmeSlicing;
 using namespace OpenMM;
 
@@ -180,17 +179,13 @@ void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
 void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
                                             const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
                                             vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const {
-    typedef std::complex<double> d_complex;
+    typedef complex<double> d_complex;
 
-    int kmax = ewald ? std::max(numRx, std::max(numRy, numRz)) : 0;
+    int kmax = ewald ? max(numRx, max(numRy, numRz)) : 0;
     double factorEwald = -1/(4*alphaEwald*alphaEwald);
     double SQRT_PI = sqrt(PI_M);
     double TWO_PI = 2.0*PI_M;
     double recipCoeff = ONE_4PI_EPS0*4*PI_M/(periodicBoxVectors[0][0]*periodicBoxVectors[1][1]*periodicBoxVectors[2][2]);
-
-    double recipEnergy = 0.0;
-    double recipDispersionEnergy = 0.0;
-    double totalRecipEnergy = 0.0;
 
     // A couple of sanity checks
     if (ljpme && useSwitch)
@@ -206,9 +201,9 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
         for (int atomID = 0; atomID < numberOfAtoms; atomID++) {
             int subset = atomSubsets[atomID];
             int slice = subset*(subset + 3)/2;
-            sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex]*alphaEwald/SQRT_PI;
+            sliceEnergies[slice][Coul] -= ONE_4PI_EPS0*atomParameters[atomID][QIndex]*atomParameters[atomID][QIndex]*alphaEwald/SQRT_PI;
             if (ljpme)
-                sliceEnergies[slice][vdW] -= pow(alphaDispersionEwald, 6.0)*64.0*pow(atomParameters[atomID][SigIndex], 6.0)*pow(atomParameters[atomID][EpsIndex], 2.0)/12.0;
+                sliceEnergies[slice][vdW] += pow(alphaDispersionEwald, 6.0)*64.0*pow(atomParameters[atomID][SigIndex], 6.0)*pow(atomParameters[atomID][EpsIndex], 2.0)/12.0;
         }
     }
 
@@ -218,7 +213,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
     // PME
 
     if (pme && includeReciprocal) {
-        pme_t          pmedata; /* abstract handle for PME data */
+        pme_t pmedata; /* abstract handle for PME data */
 
         pme_init(&pmedata, alphaEwald, numberOfAtoms, numberOfSubsets, meshDim, 5, 1);
 
@@ -227,21 +222,18 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
             charges[i] = atomParameters[i][QIndex];
         pme_exec(pmedata, atomCoordinates, atomSubsets, sliceLambdas, forces, charges, periodicBoxVectors, sliceEnergies);
 
-        // sliceEnergies[0][Coul] += recipEnergy;
-
         pme_destroy(pmedata);
 
         if (ljpme) {
             // Dispersion reciprocal space terms
             pme_init(&pmedata, alphaDispersionEwald, numberOfAtoms, numberOfSubsets, dispersionMeshDim, 5, 1);
 
-            std::vector<Vec3> dpmeforces(numberOfAtoms);
+            vector<Vec3> dpmeforces(numberOfAtoms);
             for (int i = 0; i < numberOfAtoms; i++)
                 charges[i] = 8.0*pow(atomParameters[i][SigIndex], 3.0)*atomParameters[i][EpsIndex];
             pme_exec_dpme(pmedata, atomCoordinates, atomSubsets, sliceLambdas, dpmeforces, charges, periodicBoxVectors, sliceEnergies);
             for (int i = 0; i < numberOfAtoms; i++)
                 forces[i] += dpmeforces[i];
-            // sliceEnergies[0][Coul] += recipDispersionEnergy;
             pme_destroy(pmedata);
         }
     }
@@ -330,10 +322,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                         forces[n][2] += 2*recipCoeff*force*kz;
                     }
 
-                    recipEnergy       = recipCoeff*ak*(cs*cs + ss*ss);
-                    totalRecipEnergy += recipEnergy;
-
-                    sliceEnergies[0][Coul] += recipEnergy;
+                    sliceEnergies[0][Coul] += recipCoeff*ak*(cs*cs + ss*ss);
 
                     lowrz = 1 - numRz;
                 }
@@ -464,10 +453,10 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
 
                     // accumulate energies
 
-                    sliceEnergies[0][Coul] -= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
+                    sliceEnergies[slice][Coul] -= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
                 }
                 else
-                    sliceEnergies[0][Coul] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
+                    sliceEnergies[slice][Coul] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
 
                 if (ljpme) {
                     // Dispersion terms.  Here we just back out the reciprocal space terms, and don't add any extra real space terms.
@@ -478,7 +467,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                     double dar6 = dar4*dar2;
                     double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0)*atomParameters[ii][EpsIndex];
                     double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0)*atomParameters[jj][EpsIndex];
-                    sliceEnergies[0][vdW] += c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
+                    sliceEnergies[slice][vdW] += c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
                     double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4 + dar6/6.0));
                     double factor = sliceLambdas[slice][vdW]*dEdR;
                     for (int kk = 0; kk < 3; kk++) {

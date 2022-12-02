@@ -47,13 +47,14 @@ const double TOL = 1e-5;
     assertForces(state0, state1); \
 }
 
-void testInstantiateFromNonbondedForce() {
+void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     NonbondedForce* force = new NonbondedForce();
-    force->setNonbondedMethod(NonbondedForce::PME);
+    force->setNonbondedMethod(method);
     force->addParticle(0.0, 1.0, 0.5);
     force->addParticle(1.0, 0.5, 0.6);
     force->addParticle(-1.0, 2.0, 0.7);
     force->addParticle(0.5, 2.0, 0.8);
+    force->addParticle(-0.5, 2.0, 0.8);
     force->addException(0, 3, 0.0, 1.0, 0.0);
     force->addException(2, 3, 0.5, 1.0, 1.5);
     force->addException(0, 1, 1.0, 1.5, 1.0);
@@ -66,10 +67,12 @@ void testInstantiateFromNonbondedForce() {
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 1);
     sliced->setForceGroup(1);
 
+    int N = force->getNumParticles();
+
     System system;
-    double L = 4.0;
+    double L = (double) N;
     system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < N; i++)
         system.addParticle(1.0);
 
     system.addForce(force);
@@ -78,8 +81,8 @@ void testInstantiateFromNonbondedForce() {
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
 
-    vector<Vec3> positions(4);
-    for (int i = 0; i < 4; i++)
+    vector<Vec3> positions(N);
+    for (int i = 0; i < N; i++)
         positions[i] = Vec3(i, 0, 0);
 
     context.setPositions(positions);
@@ -538,11 +541,7 @@ void testLargeSystem() {
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    State referenceState = context.getState(State::Forces | State::Energy, 1<<0);
-    State state = context.getState(State::Forces | State::Energy, 1<<1);
-    for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol);
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol);
+    assertForcesAndEnergy(context);
 
     // Now try cutoffs but not periodic boundary conditions.
 
@@ -551,22 +550,14 @@ void testLargeSystem() {
     slicedNonbonded->setNonbondedMethod(SlicedNonbondedForce::CutoffNonPeriodic);
     slicedNonbonded->setCutoffDistance(cutoff);
     context.reinitialize(true);
-    referenceState = context.getState(State::Forces | State::Energy, 1<<0);
-    state = context.getState(State::Forces | State::Energy, 1<<1);
-    for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol);
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol);
+    assertForcesAndEnergy(context);
 
     // Now do the same thing with periodic boundary conditions.
 
     nonbonded->setNonbondedMethod(NonbondedForce::CutoffPeriodic);
     slicedNonbonded->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
     context.reinitialize(true);
-    referenceState = context.getState(State::Forces | State::Energy, 1<<0);
-    state = context.getState(State::Forces | State::Energy, 1<<1);
-    for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol);
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol);
+    assertForcesAndEnergy(context);
 }
 
 void testHugeSystem(double tol=1e-5) {
@@ -734,11 +725,7 @@ void testChangingParameters() {
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    State referenceState = context.getState(State::Forces | State::Energy, 1<<0);
-    State state = context.getState(State::Forces | State::Energy, 1<<1);
-    for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol);
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol);
+    assertForcesAndEnergy(context);
 
     // Now modify parameters and see if they still agree.
 
@@ -751,11 +738,7 @@ void testChangingParameters() {
     }
     nonbonded->updateParametersInContext(context);
     slicedNonbonded->updateParametersInContext(context);
-    referenceState = context.getState(State::Forces | State::Energy, 1<<0);
-    state = context.getState(State::Forces | State::Energy, 1<<1);
-    for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol);
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol);
+    assertForcesAndEnergy(context);
 }
 
 void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
@@ -1016,7 +999,12 @@ void runPlatformTests();
 int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
-        testInstantiateFromNonbondedForce();
+        testInstantiateFromNonbondedForce(NonbondedForce::NoCutoff);
+        testInstantiateFromNonbondedForce(NonbondedForce::CutoffNonPeriodic);
+        testInstantiateFromNonbondedForce(NonbondedForce::CutoffPeriodic);
+        testInstantiateFromNonbondedForce(NonbondedForce::Ewald);
+        testInstantiateFromNonbondedForce(NonbondedForce::PME);
+        testInstantiateFromNonbondedForce(NonbondedForce::LJPME);
         testCoulomb();
         testLJ();
         testExclusionsAnd14();

@@ -779,18 +779,27 @@ int pme_exec(pme_t       pme,
     pme_grid_spread_charge(pme, charges, atomSubsets);
 
     /* do 3d-fft */
-    vector<size_t> shape = {(size_t) pme->ngrid[0], (size_t) pme->ngrid[1], (size_t) pme->ngrid[2]};
+    int nx = pme->ngrid[0];
+    int ny = pme->ngrid[1];
+    int nz = pme->ngrid[2];
+    vector<size_t> shape = {(size_t) nx, (size_t) ny, (size_t) nz};
     vector<size_t> axes = {0, 1, 2};
-    vector<ptrdiff_t> stride = {(ptrdiff_t) (pme->ngrid[1]*pme->ngrid[2]*sizeof(complex<double>)),
-                                (ptrdiff_t) (pme->ngrid[2]*sizeof(complex<double>)),
+    vector<ptrdiff_t> stride = {(ptrdiff_t) (ny*nz*sizeof(complex<double>)),
+                                (ptrdiff_t) (nz*sizeof(complex<double>)),
                                 (ptrdiff_t) sizeof(complex<double>)};
-    pocketfft::c2c(shape, stride, stride, axes, true, pme->grid, pme->grid, 1.0, 0);
+    for (int i = 0; i < pme->nsubsets; i++) {
+        int offset = i*nx*ny*nz;
+        pocketfft::c2c(shape, stride, stride, axes, true, pme->grid+offset, pme->grid+offset, 1.0, 0);
+    }
 
     /* solve in k-space */
     pme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,sliceEnergies);
 
     /* do 3d-invfft */
-    pocketfft::c2c(shape, stride, stride, axes, false, pme->grid, pme->grid, 1.0, 0);
+    for (int i = 0; i < pme->nsubsets; i++) {
+        int offset = i*nx*ny*nz;
+        pocketfft::c2c(shape, stride, stride, axes, false, pme->grid+offset, pme->grid+offset, 1.0, 0);
+    }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
     pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces);
@@ -830,18 +839,27 @@ int pme_exec_dpme(pme_t       pme,
     pme_grid_spread_charge(pme, c6s, atomSubsets);
 
     /* do 3d-fft */
-    vector<size_t> shape = {(size_t) pme->ngrid[0], (size_t) pme->ngrid[1], (size_t) pme->ngrid[2]};
+    int nx = pme->ngrid[0];
+    int ny = pme->ngrid[1];
+    int nz = pme->ngrid[2];
+    vector<size_t> shape = {(size_t) nx, (size_t) ny, (size_t) nz};
     vector<size_t> axes = {0, 1, 2};
-    vector<ptrdiff_t> stride = {(ptrdiff_t) (pme->ngrid[1]*pme->ngrid[2]*sizeof(complex<double>)),
-                                (ptrdiff_t) (pme->ngrid[2]*sizeof(complex<double>)),
+    vector<ptrdiff_t> stride = {(ptrdiff_t) (ny*nz*sizeof(complex<double>)),
+                                (ptrdiff_t) (nz*sizeof(complex<double>)),
                                 (ptrdiff_t) sizeof(complex<double>)};
-    pocketfft::c2c(shape, stride, stride, axes, true, pme->grid, pme->grid, 1.0, 0);
+    for (int i = 0; i < pme->nsubsets; i++) {
+        int offset = i*nx*ny*nz;
+        pocketfft::c2c(shape, stride, stride, axes, true, pme->grid+offset, pme->grid+offset, 1.0, 0);
+    }
 
     /* solve in k-space */
     dpme_reciprocal_convolution(pme,periodicBoxVectors,recipBoxVectors,sliceEnergies);
 
     /* do 3d-invfft */
-    pocketfft::c2c(shape, stride, stride, axes, false, pme->grid, pme->grid, 1.0, 0);
+    for (int i = 0; i < pme->nsubsets; i++) {
+        int offset = i*nx*ny*nz;
+        pocketfft::c2c(shape, stride, stride, axes, false, pme->grid+offset, pme->grid+offset, 1.0, 0);
+    }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
     pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces);
