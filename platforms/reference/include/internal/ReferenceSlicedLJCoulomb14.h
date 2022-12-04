@@ -1,6 +1,5 @@
 #ifndef __ReferenceSlicedLJCoulomb14_H__
 #define __ReferenceSlicedLJCoulomb14_H__
-
 /* -------------------------------------------------------------------------- *
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
@@ -12,14 +11,16 @@
  * https://github.com/craabreu/openmm-pme-slicing                             *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/reference/ReferenceBondIxn.h"
+#include "openmm/Vec3.h"
 #include "internal/windowsExportPmeSlicing.h"
+#include <vector>
 
+using namespace std;
 using namespace OpenMM;
 
 namespace PmeSlicing {
 
-class OPENMM_EXPORT_PMESLICING ReferenceSlicedLJCoulomb14 : public ReferenceBondIxn {
+class OPENMM_EXPORT_PMESLICING ReferenceSlicedLJCoulomb14 {
 
 public:
 
@@ -57,19 +58,20 @@ public:
        @param atomCoordinates  atom coordinates
        @param parameters       (sigma, 4*epsilon, charge product) for each pair
        @param forces           force array (forces added to current values)
-       @param totalEnergy      if not null, the energy will be added to this
+       @param sliceLambdas     the scaling parameters of the slice
+       @param sliceEnergies    the energies of the slice
 
        --------------------------------------------------------------------------------------- */
 
-    void calculateBondIxn(std::vector<int>& atomIndices, std::vector<OpenMM::Vec3>& atomCoordinates,
-                          std::vector<double>& parameters, std::vector<OpenMM::Vec3>& forces,
-                          double* totalEnergy, double* energyParamDerivs);
+    void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
+                          vector<double>& parameters, vector<OpenMM::Vec3>& forces,
+                          vector<double>& sliceLambdas, vector<double>& sliceEnergies);
 
 private:
     bool periodic;
     OpenMM::Vec3 periodicBoxVectors[3];
 };
 
-} // namespace OpenMM
+} // namespace PmeSlicing
 
 #endif // __ReferenceSlicedLJCoulomb14_H__

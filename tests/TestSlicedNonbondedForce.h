@@ -995,10 +995,10 @@ void testDirectAndReciprocal() {
 }
 
 void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool exceptions) {
-    const int numMolecules = 600;
+    const int numMolecules = 100;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
-    const double L = 20.0;
+    const double L = 10.0;
     const double tol = 2e-3;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
@@ -1161,6 +1161,12 @@ int main(int argc, char* argv[]) {
         testNonbondedCoulombSlicing(NonbondedForce::Ewald, false);
         testNonbondedCoulombSlicing(NonbondedForce::PME, false);
         testNonbondedCoulombSlicing(NonbondedForce::LJPME, false);
+        testNonbondedCoulombSlicing(NonbondedForce::NoCutoff, true);
+        testNonbondedCoulombSlicing(NonbondedForce::CutoffNonPeriodic, true);
+        testNonbondedCoulombSlicing(NonbondedForce::CutoffPeriodic, true);
+        testNonbondedCoulombSlicing(NonbondedForce::Ewald, true);
+        testNonbondedCoulombSlicing(NonbondedForce::PME, true);
+        testNonbondedCoulombSlicing(NonbondedForce::LJPME, true);
         runPlatformTests();
     }
     catch(const exception& e) {

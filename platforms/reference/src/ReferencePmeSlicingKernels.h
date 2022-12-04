@@ -80,7 +80,7 @@ private:
     double nonbondedCutoff, ewaldAlpha;
     int gridSize[3];
     bool exceptionsArePeriodic;
-    vector<set<int> > exclusions;
+    vector<set<int>> exclusions;
     OpenMM::NeighborList* neighborList;
 
     int numSubsets, numSlices;
@@ -97,7 +97,7 @@ private:
  */
 class ReferenceCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
-    ReferenceCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform) : CalcSlicedNonbondedForceKernel(name, platform) {
+    ReferenceCalcSlicedNonbondedForceKernel(string name, const Platform& platform) : CalcSlicedNonbondedForceKernel(name, platform) {
     }
     ~ReferenceCalcSlicedNonbondedForceKernel();
     /**
@@ -145,14 +145,15 @@ public:
 private:
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
-    std::vector<std::vector<int> >bonded14IndexArray;
-    std::vector<std::vector<double> > particleParamArray, bonded14ParamArray;
-    std::vector<std::array<double, 3> > baseParticleParams, baseExceptionParams;
-    std::map<std::pair<std::string, int>, std::array<double, 3> > particleParamOffsets, exceptionParamOffsets;
+    vector<vector<int>>bonded14IndexArray;
+    vector<vector<double>> particleParamArray, bonded14ParamArray;
+    vector<int> bonded14SliceArray;
+    vector<array<double, 3>> baseParticleParams, baseExceptionParams;
+    map<pair<string, int>, array<double, 3>> particleParamOffsets, exceptionParamOffsets;
     double nonbondedCutoff, switchingDistance, rfDielectric, ewaldAlpha, ewaldDispersionAlpha, dispersionCoefficient;
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic;
-    std::vector<std::set<int> > exclusions;
+    vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;
 

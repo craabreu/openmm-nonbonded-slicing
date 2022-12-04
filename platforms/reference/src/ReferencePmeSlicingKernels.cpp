@@ -379,6 +379,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     num14 = nb14s.size();
     bonded14IndexArray.resize(num14, vector<int>(2));
     bonded14ParamArray.resize(num14, vector<double>(3));
+    bonded14SliceArray.resize(num14);
     particleParamArray.resize(numParticles, vector<double>(4));
     baseParticleParams.resize(numParticles);
     baseExceptionParams.resize(num14);
@@ -389,6 +390,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0], baseExceptionParams[i][1], baseExceptionParams[i][2]);
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
+        int s1 = subsets[particle1];
+        int s2 = subsets[particle2];
+        bonded14SliceArray[i] = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
     }
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
@@ -448,7 +452,6 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     computeParameters(context);
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
-    double energy = 0;
     ReferenceSlicedLJCoulombIxn clj;
     bool periodic = (nonbondedMethod == CutoffPeriodic);
     bool ewald  = (nonbondedMethod == Ewald);
@@ -480,19 +483,23 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     clj.calculatePairIxn(numParticles, posData, numSubsets, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies, includeDirect, includeReciprocal);
 
     if (includeDirect) {
-        ReferenceBondForce refBondForce;
         ReferenceSlicedLJCoulomb14 nonbonded14;
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
         }
-        refBondForce.calculateForce(num14, bonded14IndexArray, posData, bonded14ParamArray, forceData, includeEnergy ? &energy : NULL, nonbonded14);
+        for (int k = 0; k < num14; k++) {
+            int slice = bonded14SliceArray[k];
+            nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
+                                         forceData, sliceLambdas[slice], sliceEnergies[slice]);
+        }
         if (periodic || ewald || pme) {
             Vec3* boxVectors = extractBoxVectors(context);
-            energy += dispersionCoefficient/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
+            sliceEnergies[0][0] += dispersionCoefficient/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
         }
     }
 
+    double energy = 0;
     if (includeEnergy)
         for (int slice = 0; slice < numSlices; slice++)
             for (int term = 0; term < 2; term++)
@@ -548,6 +555,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
         force.getExceptionParameters(nb14s[i], particle1, particle2, baseExceptionParams[i][0], baseExceptionParams[i][1], baseExceptionParams[i][2]);
         bonded14IndexArray[i][0] = particle1;
         bonded14IndexArray[i][1] = particle2;
+        int s1 = subsets[particle1];
+        int s2 = subsets[particle2];
+        bonded14SliceArray[i] = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
     }
 
     // Recompute the coefficient for the dispersion correction.
