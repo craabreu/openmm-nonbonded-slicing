@@ -150,7 +150,8 @@ private:
     vector<int> bonded14SliceArray;
     vector<array<double, 3>> baseParticleParams, baseExceptionParams;
     map<pair<string, int>, array<double, 3>> particleParamOffsets, exceptionParamOffsets;
-    double nonbondedCutoff, switchingDistance, rfDielectric, ewaldAlpha, ewaldDispersionAlpha, dispersionCoefficient;
+    double nonbondedCutoff, switchingDistance, rfDielectric, ewaldAlpha, ewaldDispersionAlpha;
+    vector<double> dispersionCoefficients;
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic;
     vector<set<int>> exclusions;

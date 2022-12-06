@@ -261,6 +261,87 @@ double SlicedNonbondedForceImpl::calcDispersionCorrection(const System& system, 
     return 8*numParticles*numParticles*M_PI*(sum1/(9*pow(cutoff, 9))-sum2/(3*pow(cutoff, 3))+sum3);
 }
 
+vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System& system, const SlicedNonbondedForce& force) {
+    int numSubsets = force.getNumSubsets();
+    int numSlices = numSubsets*(numSubsets+1)/2;
+    vector<double> dispersionCorrections(numSlices, 0.0);
+    if (force.getNonbondedMethod() == SlicedNonbondedForce::NoCutoff ||
+        force.getNonbondedMethod() == SlicedNonbondedForce::CutoffNonPeriodic)
+        return dispersionCorrections;
+
+    // Record sigma and epsilon for every particle, including the default value
+    // for every offset parameter.
+
+    vector<double> sigma(force.getNumParticles()), epsilon(force.getNumParticles());
+    for (int i = 0; i < force.getNumParticles(); i++) {
+        double charge;
+        force.getParticleParameters(i, charge, sigma[i], epsilon[i]);
+    }
+    map<string, double> param;
+    for (int i = 0; i < force.getNumGlobalParameters(); i++)
+        param[force.getGlobalParameterName(i)] = force.getGlobalParameterDefaultValue(i);
+    for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
+        string parameter;
+        int index;
+        double chargeScale, sigmaScale, epsilonScale;
+        force.getParticleParameterOffset(i, parameter, index, chargeScale, sigmaScale, epsilonScale);
+        sigma[index] += param[parameter]*sigmaScale;
+        epsilon[index] += param[parameter]*epsilonScale;
+    }
+
+    // Identify all particle classes (defined by sigma and epsilon), and count the number of
+    // particles in each class.
+
+    map<pair<double, double>, int> classCounts;
+    for (int i = 0; i < force.getNumParticles(); i++) {
+        pair<double, double> key = make_pair(sigma[i], epsilon[i]);
+        map<pair<double, double>, int>::iterator entry = classCounts.find(key);
+        if (entry == classCounts.end())
+            classCounts[key] = 1;
+        else
+            entry->second++;
+    }
+
+    // Loop over all pairs of classes to compute the coefficient.
+
+    double sum1 = 0, sum2 = 0, sum3 = 0;
+    bool useSwitch = force.getUseSwitchingFunction();
+    double cutoff = force.getCutoffDistance();
+    double switchDist = force.getSwitchingDistance();
+    for (map<pair<double, double>, int>::const_iterator entry = classCounts.begin(); entry != classCounts.end(); ++entry) {
+        double sigma = entry->first.first;
+        double epsilon = entry->first.second;
+        double count = (double) entry->second;
+        count *= (count + 1) / 2;
+        double sigma2 = sigma*sigma;
+        double sigma6 = sigma2*sigma2*sigma2;
+        sum1 += count*epsilon*sigma6*sigma6;
+        sum2 += count*epsilon*sigma6;
+        if (useSwitch)
+            sum3 += count*epsilon*(evalIntegral(cutoff, switchDist, cutoff, sigma)-evalIntegral(switchDist, switchDist, cutoff, sigma));
+    }
+    for (map<pair<double, double>, int>::const_iterator class1 = classCounts.begin(); class1 != classCounts.end(); ++class1)
+        for (map<pair<double, double>, int>::const_iterator class2 = classCounts.begin(); class2 != class1; ++class2) {
+            double sigma = 0.5*(class1->first.first+class2->first.first);
+            double epsilon = sqrt(class1->first.second*class2->first.second);
+            double count = (double) class1->second;
+            count *= (double) class2->second;
+            double sigma2 = sigma*sigma;
+            double sigma6 = sigma2*sigma2*sigma2;
+            sum1 += count*epsilon*sigma6*sigma6;
+            sum2 += count*epsilon*sigma6;
+            if (useSwitch)
+                sum3 += count*epsilon*(evalIntegral(cutoff, switchDist, cutoff, sigma)-evalIntegral(switchDist, switchDist, cutoff, sigma));
+        }
+    double numParticles = (double) system.getNumParticles();
+    double numInteractions = (numParticles*(numParticles+1))/2;
+    sum1 /= numInteractions;
+    sum2 /= numInteractions;
+    sum3 /= numInteractions;
+    dispersionCorrections[0] = 8*numParticles*numParticles*M_PI*(sum1/(9*pow(cutoff, 9))-sum2/(3*pow(cutoff, 3))+sum3);
+    return dispersionCorrections;
+}
+
 void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
     kernel.getAs<CalcSlicedNonbondedForceKernel>().copyParametersToContext(context, owner);
     context.systemChanged();

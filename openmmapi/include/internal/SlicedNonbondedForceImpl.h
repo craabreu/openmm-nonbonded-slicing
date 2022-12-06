@@ -41,6 +41,7 @@ public:
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     static double calcDispersionCorrection(const System& system, const SlicedNonbondedForce& force);
+    static vector<double> calcDispersionCorrections(const System& system, const SlicedNonbondedForce& force);
 private:
     static double evalIntegral(double r, double rs, double rc, double sigma);
     const SlicedNonbondedForce& owner;

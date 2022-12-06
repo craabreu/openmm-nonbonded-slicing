@@ -443,9 +443,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         exceptionsArePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
     rfDielectric = force.getReactionFieldDielectric();
     if (force.getUseDispersionCorrection())
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(system, force);
+        dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     else
-        dispersionCoefficient = 0.0;
+        dispersionCoefficients.resize(numSlices, 0.0);
 }
 
 double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
@@ -495,7 +495,9 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         }
         if (periodic || ewald || pme) {
             Vec3* boxVectors = extractBoxVectors(context);
-            sliceEnergies[0][0] += dispersionCoefficient/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
+            double volume = boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2];
+            for (int slice = 0; slice < numSlices; slice++)
+                sliceEnergies[slice][0] += dispersionCoefficients[slice]/volume;
         }
     }
 
@@ -564,7 +566,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     SlicedNonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (force.getUseDispersionCorrection() && (method == SlicedNonbondedForce::CutoffPeriodic || method == SlicedNonbondedForce::Ewald || method == SlicedNonbondedForce::PME))
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
+        dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(context.getSystem(), force);
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
