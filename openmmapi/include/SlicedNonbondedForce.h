@@ -32,6 +32,9 @@ public:
     int getNumSubsets() const {
         return numSubsets;
     }
+    int getNumSlices() const {
+        return numSubsets*(numSubsets+1)/2;
+    }
     int getNumScalingParameters() const {
         return scalingParameters.size();
     }

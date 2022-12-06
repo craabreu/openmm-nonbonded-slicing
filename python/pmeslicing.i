@@ -1033,6 +1033,10 @@ public:
      */
     int getNumSubsets() const;
     /**
+     * Get the number of slices determined by the specified number of particle subsets.
+     */
+    int getNumSlices() const;
+    /**
      * Get the subset to which a particle belongs.
      *
      * Parameters
