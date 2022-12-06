@@ -10,8 +10,8 @@
  * -------------------------------------------------------------------------- */
 
 #include "SlicedNonbondedForce.h"
+#include "internal/AssertionUtilities.h"
 #include "openmm/NonbondedForce.h"
-#include "openmm/internal/AssertionUtilities.h"
 #include "openmm/Context.h"
 #include "openmm/reference/ReferencePlatform.h"
 #include "openmm/HarmonicBondForce.h"
@@ -19,7 +19,6 @@
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "sfmt/SFMT.h"
-#include <iostream>
 #include <iomanip>
 #include <vector>
 
@@ -28,24 +27,6 @@ using namespace OpenMM;
 using namespace std;
 
 const double TOL = 1e-5;
-
-#define assertEnergy(state0, state1) { \
-    ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
-}
-
-#define assertForces(state0, state1) { \
-    const vector<Vec3>& forces0 = state0.getForces(); \
-    const vector<Vec3>& forces1 = state1.getForces(); \
-    for (int i = 0; i < forces0.size(); i++) \
-        ASSERT_EQUAL_VEC(forces0[i], forces1[i], TOL); \
-}
-
-#define assertForcesAndEnergy(context) { \
-    State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \
-    State state1 = context.getState(State::Forces | State::Energy, false, 1<<1); \
-    assertEnergy(state0, state1); \
-    assertForces(state0, state1); \
-}
 
 void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     NonbondedForce* force = new NonbondedForce();
@@ -109,9 +90,9 @@ void testCoulomb() {
     State state = context.getState(State::Forces | State::Energy);
     const vector<Vec3>& forces = state.getForces();
     double force = ONE_4PI_EPS0*(-0.75)/4.0;
-    ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[1], TOL);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(-0.75)/2.0, state.getPotentialEnergy(), TOL);
+    assertEqualVec(Vec3(-force, 0, 0), forces[0], TOL);
+    assertEqualVec(Vec3(force, 0, 0), forces[1], TOL);
+    assertEqualTo(ONE_4PI_EPS0*(-0.75)/2.0, state.getPotentialEnergy(), TOL);
 }
 
 void testLJ() {
@@ -134,10 +115,10 @@ void testLJ() {
     const vector<Vec3>& forces = state.getForces();
     double x = 1.3/2.0;
     double eps = SQRT_TWO;
-    double force = 4.0*eps*(12*std::pow(x, 12.0)-6*std::pow(x, 6.0))/2.0;
-    ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[1], TOL);
-    ASSERT_EQUAL_TOL(4.0*eps*(std::pow(x, 12.0)-std::pow(x, 6.0)), state.getPotentialEnergy(), TOL);
+    double force = 4.0*eps*(12*pow(x, 12.0)-6*pow(x, 6.0))/2.0;
+    assertEqualVec(Vec3(-force, 0, 0), forces[0], TOL);
+    assertEqualVec(Vec3(force, 0, 0), forces[1], TOL);
+    assertEqualTo(4.0*eps*(pow(x, 12.0)-pow(x, 6.0)), state.getPotentialEnergy(), TOL);
 }
 
 void testExclusionsAnd14() {
@@ -187,8 +168,8 @@ void testExclusionsAnd14() {
         const vector<Vec3>& forces = state.getForces();
         double x = 1.5/r;
         double eps = 1.0;
-        double force = 4.0*eps*(12*std::pow(x, 12.0)-6*std::pow(x, 6.0))/r;
-        double energy = 4.0*eps*(std::pow(x, 12.0)-std::pow(x, 6.0));
+        double force = 4.0*eps*(12*pow(x, 12.0)-6*pow(x, 6.0))/r;
+        double energy = 4.0*eps*(pow(x, 12.0)-pow(x, 6.0));
         if (i == 3) {
             force *= 0.5;
             energy *= 0.5;
@@ -197,9 +178,9 @@ void testExclusionsAnd14() {
             force = 0;
             energy = 0;
         }
-        ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[0], TOL);
-        ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[i], TOL);
-        ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), TOL);
+        assertEqualVec(Vec3(-force, 0, 0), forces[0], TOL);
+        assertEqualVec(Vec3(force, 0, 0), forces[i], TOL);
+        assertEqualTo(energy, state.getPotentialEnergy(), TOL);
 
         // Test Coulomb forces
 
@@ -221,9 +202,9 @@ void testExclusionsAnd14() {
             force = 0;
             energy = 0;
         }
-        ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces2[0], TOL);
-        ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces2[i], TOL);
-        ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), TOL);
+        assertEqualVec(Vec3(-force, 0, 0), forces2[0], TOL);
+        assertEqualVec(Vec3(force, 0, 0), forces2[i], TOL);
+        assertEqualTo(energy, state.getPotentialEnergy(), TOL);
     }
 }
 
@@ -257,12 +238,12 @@ void testCutoff() {
     const double crf = (1.0/cutoff)*(3.0*eps)/(2.0*eps+1.0);
     const double force1 = ONE_4PI_EPS0*(1.0)*(0.25-2.0*krf*2.0);
     const double force2 = ONE_4PI_EPS0*(1.0)*(1.0-2.0*krf*1.0);
-    ASSERT_EQUAL_VEC(Vec3(0, -force1, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(0, force1-force2, 0), forces[1], TOL);
-    ASSERT_EQUAL_VEC(Vec3(0, force2, 0), forces[2], TOL);
+    assertEqualVec(Vec3(0, -force1, 0), forces[0], TOL);
+    assertEqualVec(Vec3(0, force1-force2, 0), forces[1], TOL);
+    assertEqualVec(Vec3(0, force2, 0), forces[2], TOL);
     const double energy1 = ONE_4PI_EPS0*(1.0)*(0.5+krf*4.0-crf);
     const double energy2 = ONE_4PI_EPS0*(1.0)*(1.0+krf*1.0-crf);
-    ASSERT_EQUAL_TOL(energy1+energy2, state.getPotentialEnergy(), TOL);
+    assertEqualTo(energy1+energy2, state.getPotentialEnergy(), TOL);
 }
 
 void testCutoff14() {
@@ -321,8 +302,8 @@ void testCutoff14() {
         double r = positions[i][0];
         double x = 1.5/r;
         double e = 1.0;
-        double force = 4.0*e*(12*std::pow(x, 12.0)-6*std::pow(x, 6.0))/r;
-        double energy = 4.0*e*(std::pow(x, 12.0)-std::pow(x, 6.0));
+        double force = 4.0*e*(12*pow(x, 12.0)-6*pow(x, 6.0))/r;
+        double energy = 4.0*e*(pow(x, 12.0)-pow(x, 6.0));
         if (i == 3) {
             force *= 0.5;
             energy *= 0.5;
@@ -331,9 +312,9 @@ void testCutoff14() {
             force = 0;
             energy = 0;
         }
-        ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[0], TOL);
-        ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[i], TOL);
-        ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), TOL);
+        assertEqualVec(Vec3(-force, 0, 0), forces[0], TOL);
+        assertEqualVec(Vec3(force, 0, 0), forces[i], TOL);
+        assertEqualTo(energy, state.getPotentialEnergy(), TOL);
 
         // Test Coulomb forces
 
@@ -355,9 +336,9 @@ void testCutoff14() {
             force = 0;
             energy = 0;
         }
-        ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces2[0], TOL);
-        ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces2[i], TOL);
-        ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), TOL);
+        assertEqualVec(Vec3(-force, 0, 0), forces2[0], TOL);
+        assertEqualVec(Vec3(force, 0, 0), forces2[i], TOL);
+        assertEqualTo(energy, state.getPotentialEnergy(), TOL);
     }
 }
 
@@ -391,10 +372,10 @@ void testPeriodic() {
     const double krf = (1.0/(cutoff*cutoff*cutoff))*(eps-1.0)/(2.0*eps+1.0);
     const double crf = (1.0/cutoff)*(3.0*eps)/(2.0*eps+1.0);
     const double force = ONE_4PI_EPS0*(1.0)*(1.0-2.0*krf*1.0);
-    ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[1], TOL);
-    ASSERT_EQUAL_VEC(Vec3(0, 0, 0), forces[2], TOL);
-    ASSERT_EQUAL_TOL(2*ONE_4PI_EPS0*(1.0)*(1.0+krf*1.0-crf), state.getPotentialEnergy(), TOL);
+    assertEqualVec(Vec3(force, 0, 0), forces[0], TOL);
+    assertEqualVec(Vec3(-force, 0, 0), forces[1], TOL);
+    assertEqualVec(Vec3(0, 0, 0), forces[2], TOL);
+    assertEqualTo(2*ONE_4PI_EPS0*(1.0)*(1.0+krf*1.0-crf), state.getPotentialEnergy(), TOL);
 }
 
 void testPeriodicExceptions() {
@@ -419,9 +400,9 @@ void testPeriodicExceptions() {
     State state = context.getState(State::Forces | State::Energy);
     vector<Vec3> forces = state.getForces();
     double force = ONE_4PI_EPS0/(3*3);
-    ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[1], TOL);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0/3, state.getPotentialEnergy(), TOL);
+    assertEqualVec(Vec3(-force, 0, 0), forces[0], TOL);
+    assertEqualVec(Vec3(force, 0, 0), forces[1], TOL);
+    assertEqualTo(ONE_4PI_EPS0/3, state.getPotentialEnergy(), TOL);
 
     // Now make exceptions periodic and see if it changes correctly.
 
@@ -430,9 +411,9 @@ void testPeriodicExceptions() {
     state = context.getState(State::Forces | State::Energy);
     forces = state.getForces();
     force = ONE_4PI_EPS0/(1*1);
-    ASSERT_EQUAL_VEC(Vec3(force, 0, 0), forces[0], TOL);
-    ASSERT_EQUAL_VEC(Vec3(-force, 0, 0), forces[1], TOL);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0/1, state.getPotentialEnergy(), TOL);
+    assertEqualVec(Vec3(force, 0, 0), forces[0], TOL);
+    assertEqualVec(Vec3(-force, 0, 0), forces[1], TOL);
+    assertEqualTo(ONE_4PI_EPS0/1, state.getPotentialEnergy(), TOL);
 }
 
 void testTriclinic() {
@@ -485,14 +466,14 @@ void testTriclinic() {
         State state = context.getState(State::Forces | State::Energy);
         if (distance >= cutoff) {
             ASSERT_EQUAL(0.0, state.getPotentialEnergy());
-            ASSERT_EQUAL_VEC(Vec3(0, 0, 0), state.getForces()[0], 0);
-            ASSERT_EQUAL_VEC(Vec3(0, 0, 0), state.getForces()[1], 0);
+            assertEqualVec(Vec3(0, 0, 0), state.getForces()[0], 0);
+            assertEqualVec(Vec3(0, 0, 0), state.getForces()[1], 0);
         }
         else {
             const Vec3 force = delta*ONE_4PI_EPS0*(-1.0/(distance*distance*distance)+2.0*krf);
-            ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(1.0/distance+krf*distance*distance-crf), state.getPotentialEnergy(), 1e-4);
-            ASSERT_EQUAL_VEC(force, state.getForces()[0], 1e-4);
-            ASSERT_EQUAL_VEC(-force, state.getForces()[1], 1e-4);
+            assertEqualTo(ONE_4PI_EPS0*(1.0/distance+krf*distance*distance-crf), state.getPotentialEnergy(), 1e-4);
+            assertEqualVec(force, state.getForces()[0], 1e-4);
+            assertEqualVec(-force, state.getForces()[1], 1e-4);
         }
     }
 }
@@ -597,7 +578,7 @@ void testHugeSystem(double tol=1e-5) {
         Vec3 f = state.getForces()[i];
         norm += f[0]*f[0] + f[1]*f[1] + f[2]*f[2];
     }
-    norm = std::sqrt(norm);
+    norm = sqrt(norm);
 
     // Take a small step in the direction of the energy gradient and see whether the potential energy changes by the expected amount.
 
@@ -614,7 +595,7 @@ void testHugeSystem(double tol=1e-5) {
     State state2 = context.getState(State::Energy);
     context.setPositions(positions3);
     State state3 = context.getState(State::Energy);
-    ASSERT_EQUAL_TOL(state2.getPotentialEnergy(), state3.getPotentialEnergy()+norm*delta, tol)
+    assertEqualTo(state2.getPotentialEnergy(), state3.getPotentialEnergy()+norm*delta, tol)
 }
 
 void testDispersionCorrection() {
@@ -653,7 +634,7 @@ void testDispersionCorrection() {
     double term1 = (0.5*pow(1.1, 12)/pow(cutoff, 9))/9;
     double term2 = (0.5*pow(1.1, 6)/pow(cutoff, 3))/3;
     double expected = 8*M_PI*numParticles*numParticles*(term1-term2)/(boxSize*boxSize*boxSize);
-    ASSERT_EQUAL_TOL(expected, energy1-energy2, 1e-4);
+    assertEqualTo(expected, energy1-energy2, 1e-4);
 
     // Now modify half the particles to be different, and see if it is still correct.
 
@@ -680,7 +661,7 @@ void testDispersionCorrection() {
     term1 /= (numParticles*(numParticles+1))/2;
     term2 /= (numParticles*(numParticles+1))/2;
     expected = 8*M_PI*numParticles*numParticles*(term1-term2)/(boxSize*boxSize*boxSize);
-    ASSERT_EQUAL_TOL(expected, energy1-energy2, 1e-4);
+    assertEqualTo(expected, energy1-energy2, 1e-4);
 }
 
 void testChangingParameters() {
@@ -771,7 +752,7 @@ void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
         // See if the energy is correct.
 
         double x = 1.3/r;
-        double expectedEnergy = 4.0*eps*(std::pow(x, 12.0)-std::pow(x, 6.0));
+        double expectedEnergy = 4.0*eps*(pow(x, 12.0)-pow(x, 6.0));
         double switchValue;
         if (r <= 1.5)
             switchValue = 1;
@@ -781,7 +762,7 @@ void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
             double t = (r-1.5)/0.5;
             switchValue = 1+t*t*t*(-10+t*(15-t*6));
         }
-        ASSERT_EQUAL_TOL(switchValue*expectedEnergy, state.getPotentialEnergy(), TOL);
+        assertEqualTo(switchValue*expectedEnergy, state.getPotentialEnergy(), TOL);
 
         // See if the force is the gradient of the energy.
 
@@ -792,7 +773,7 @@ void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
         positions[1] = Vec3(r+delta, 0, 0);
         context.setPositions(positions);
         double e2 = context.getState(State::Energy).getPotentialEnergy();
-        ASSERT_EQUAL_TOL((e2-e1)/(2*delta), state.getForces()[0][0], 1e-3);
+        assertEqualTo((e2-e1)/(2*delta), state.getForces()[0][0], 1e-3);
     }
 }
 
@@ -818,11 +799,11 @@ void testTwoForces() {
     positions[1] = Vec3(1.5, 0, 0);
     context.setPositions(positions);
     State state1 = context.getState(State::Energy, false, 1<<0);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(-1.5*0.5)/1.5 + 4.0*sqrt(1.2*1.0)*(pow(1.0/1.5, 12.0)-pow(1.0/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
+    assertEqualTo(ONE_4PI_EPS0*(-1.5*0.5)/1.5 + 4.0*sqrt(1.2*1.0)*(pow(1.0/1.5, 12.0)-pow(1.0/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
     State state2 = context.getState(State::Energy, false, 1<<1);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(0.4*0.3)/1.5 + 4.0*sqrt(0.5*1.0)*(pow(1.6/1.5, 12.0)-pow(1.6/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
+    assertEqualTo(ONE_4PI_EPS0*(0.4*0.3)/1.5 + 4.0*sqrt(0.5*1.0)*(pow(1.6/1.5, 12.0)-pow(1.6/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
     State state = context.getState(State::Energy);
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL);
+    assertEqualTo(state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL);
 
     // Try modifying them and see if they're still correct.
 
@@ -831,9 +812,9 @@ void testTwoForces() {
     nb2->setParticleParameters(0, 0.5, 1.6, 0.6);
     nb2->updateParametersInContext(context);
     state1 = context.getState(State::Energy, false, 1<<0);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(-1.2*0.5)/1.5 + 4.0*sqrt(1.4*1.0)*(pow(1.05/1.5, 12.0)-pow(1.05/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
+    assertEqualTo(ONE_4PI_EPS0*(-1.2*0.5)/1.5 + 4.0*sqrt(1.4*1.0)*(pow(1.05/1.5, 12.0)-pow(1.05/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
     state2 = context.getState(State::Energy, false, 1<<1);
-    ASSERT_EQUAL_TOL(ONE_4PI_EPS0*(0.5*0.3)/1.5 + 4.0*sqrt(0.6*1.0)*(pow(1.7/1.5, 12.0)-pow(1.7/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
+    assertEqualTo(ONE_4PI_EPS0*(0.5*0.3)/1.5 + 4.0*sqrt(0.6*1.0)*(pow(1.7/1.5, 12.0)-pow(1.7/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
 
     // Make sure it also works with PME.
 
@@ -843,7 +824,7 @@ void testTwoForces() {
     state1 = context.getState(State::Energy, false, 1<<0);
     state2 = context.getState(State::Energy, false, 1<<1);
     state = context.getState(State::Energy);
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL);
+    assertEqualTo(state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL);
 }
 
 void testParameterOffsets() {
@@ -907,7 +888,7 @@ void testParameterOffsets() {
             double x = pairSigma[i][j]/dist;
             energy += ONE_4PI_EPS0*pairChargeProd[i][j]/dist + 4.0*pairEpsilon[i][j]*(pow(x, 12.0)-pow(x, 6.0));
         }
-    ASSERT_EQUAL_TOL(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-5);
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-5);
 }
 
 void testEwaldExceptions() {
@@ -947,7 +928,7 @@ void testEwaldExceptions() {
     double e2 = context.getState(State::Energy).getPotentialEnergy();
     double r = 0.5;
     double expectedChange = ONE_4PI_EPS0*(0.2-1.0)/r + 4*2.0*(pow(0.8/r, 12)-pow(0.8/r, 6)) - 4*1.0*(pow(0.5/r, 12)-pow(0.5/r, 6));
-    ASSERT_EQUAL_TOL(expectedChange, e2-e1, 1e-5);
+    assertEqualTo(expectedChange, e2-e1, 1e-5);
 }
 
 void testDirectAndReciprocal() {
@@ -982,7 +963,7 @@ void testDirectAndReciprocal() {
     double e1 = context.getState(State::Energy).getPotentialEnergy();
     double e2 = context.getState(State::Energy, true, 1<<0).getPotentialEnergy();
     double e3 = context.getState(State::Energy, true, 1<<1).getPotentialEnergy();
-    ASSERT_EQUAL_TOL(e1, e2+e3, 1e-5);
+    assertEqualTo(e1, e2+e3, 1e-5);
     ASSERT(e2 != 0);
     ASSERT(e3 != 0);
 
@@ -991,10 +972,12 @@ void testDirectAndReciprocal() {
     force->setIncludeDirectSpace(false);
     context.reinitialize(true);
     double e4 = context.getState(State::Energy).getPotentialEnergy();
-    ASSERT_EQUAL_TOL(e3, e4, 1e-5);
+    assertEqualTo(e3, e4, 1e-5);
 }
 
-void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool exceptions) {
+void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool includeLJ) {
+    bool includeCoulomb = !includeLJ;
+
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
@@ -1011,13 +994,12 @@ void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool ex
     NonbondedForce* nonbonded = new NonbondedForce();
     nonbonded->setNonbondedMethod(method);
     nonbonded->setCutoffDistance(cutoff);
+    nonbonded->setUseDispersionCorrection(false);
     vector<Vec3> positions(numParticles);
 
-    double intraChargeProd = -0.5;
-
-    int M = static_cast<int>(std::pow(numMolecules, 1.0/3.0));
+    int M = (int) pow(numMolecules, 1.0/3.0);
     if (M*M*M < numMolecules) M++;
-    double sqrt3 = std::sqrt(3);
+    const double sqrt3 = sqrt(3);
     for (int k = 0; k < numMolecules; k++) {
         int iz = k/(M*M);
         int iy = (k - iz*M*M)/M;
@@ -1028,40 +1010,57 @@ void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool ex
         double dx = (0.5 - ix%2)/2;
         double dy = (0.5 - iy%2)/2;
         double dz = (0.5 - iz%2)/2;
-        nonbonded->addParticle(1.0, 1.0, 0.0);
-        nonbonded->addParticle(-1.0, 1.0, 0.0);
+        nonbonded->addParticle(1.0, 1.0, 1.0);
+        nonbonded->addParticle(-1.0, 1.0, 1.0);
         if (exceptions)
-            nonbonded->addException(2*k, 2*k+1, intraChargeProd, 1.0, 0.0);
+            nonbonded->addException(2*k, 2*k+1, -0.5, 1.0, 2.0);
         positions[2*k] = Vec3(x+dx, y+dy, z+dz);
         positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
     }
 
-    double lambda = 0.5;
+    string lambda1 = includeCoulomb ? "lambda" : "sqrtLambda";
+    string lambda2 = includeCoulomb ? "lambdaSq" : "lambda";
+    map<string, double> value;
+
+    value["lambda"] = 1/2;
+    value["sqrtLambda"] = sqrt(value["lambda"]);
+    value["lambdaSq"] = value["lambda"]*value["lambda"];
+
+    nonbonded->addGlobalParameter(lambda1, value[lambda1]);
+    nonbonded->addGlobalParameter(lambda2, value[lambda2]);
 
     SlicedNonbondedForce* slicedNonbonded = new SlicedNonbondedForce(*nonbonded, 2);
-    for (int k = 0; k < numMolecules; k++)
-        slicedNonbonded->setParticleSubset(2*k, 1);
+    for (int k = 0; k < numParticles; k++)
+        if (genrand_real2(sfmt) < 0.5)
+            slicedNonbonded->setParticleSubset(k, 1);
 
-    nonbonded->addGlobalParameter("lambda", lambda);
-    for (int k = 0; k < numMolecules; k++) {
-        double charge, sigma, epsilon;
-        nonbonded->getParticleParameters(2*k, charge, sigma, epsilon);
-        nonbonded->setParticleParameters(2*k, 0.0, sigma, epsilon);
-        nonbonded->addParticleParameterOffset("lambda", 2*k, charge, 0.0, 0.0);
-    }
+    slicedNonbonded->addScalingParameter(lambda1, 0, 1, includeLJ, includeCoulomb);
+    slicedNonbonded->addScalingParameter(lambda2, 1, 1, includeLJ, includeCoulomb);
 
-    slicedNonbonded->addGlobalParameter("lambda", lambda);
-    slicedNonbonded->addGlobalParameter("lambdaSq", lambda*lambda);
-    slicedNonbonded->addScalingParameter("lambda", 0, 1, false, true);
-    slicedNonbonded->addScalingParameter("lambdaSq", 1, 1, false, true);
+    for (int k = 0; k < numParticles; k++)
+        if (slicedNonbonded->getParticleSubset(k) == 1) {
+            double charge, sigma, epsilon;
+            nonbonded->getParticleParameters(k, charge, sigma, epsilon);
+            double chargeScale = includeCoulomb ? charge : 0.0;
+            double epsilonScale = includeLJ ? epsilon : 0.0;
+            nonbonded->setParticleParameters(k, charge-chargeScale, sigma, epsilon-epsilonScale);
+            nonbonded->addParticleParameterOffset("lambda", k, chargeScale, 0.0, epsilonScale);
+        }
 
     if (exceptions)
-        for (int i = 0; i < nonbonded->getNumExceptions(); i++) {
-            int p1, p2;
+        for (int k = 0; k < numMolecules; k++) {
+            int i, j;
             double chargeProd, sigma, epsilon;
-            nonbonded->getExceptionParameters(i, p1, p2, chargeProd, sigma, epsilon);
-            nonbonded->setExceptionParameters(i, p1, p2, 0.0, sigma, epsilon);
-            nonbonded->addExceptionParameterOffset("lambda", i, chargeProd, 0.0, 0.0);
+            nonbonded->getExceptionParameters(k, i, j, chargeProd, sigma, epsilon);
+            int si = slicedNonbonded->getParticleSubset(i);
+            int sj = slicedNonbonded->getParticleSubset(j);
+            if (si != sj || si == 1) {
+                double chargeProdScale = includeCoulomb ? chargeProd : 0.0;
+                double epsilonScale = includeLJ ? epsilon : 0.0;
+                nonbonded->setExceptionParameters(k, i, j, chargeProd-chargeProdScale, sigma, epsilon-epsilonScale);
+                string parameter = si != sj ? lambda1 : lambda2;
+                nonbonded->addExceptionParameterOffset(parameter, k, chargeProdScale, 0.0, epsilonScale);
+            }
         }
 
     system1.addForce(nonbonded);
@@ -1077,67 +1076,98 @@ void testNonbondedCoulombSlicing(NonbondedForce::NonbondedMethod method, bool ex
     Context context2(system2, integrator2, platform);
     context2.setPositions(positions);
 
-    // Direct space:
+    // Direct space
+
     State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
     State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // Reciprocal space:
+    // Reciprocal space
+
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // Change of switching parameter value:
-    lambda = 0.8;
+    // Change of scaling parameter value
 
-    context1.setParameter("lambda", lambda);
-    context2.setParameter("lambda", lambda);
-    context2.setParameter("lambdaSq", lambda*lambda);
+    value["lambda"] = 2/3;
+    value["sqrtLambda"] = sqrt(value["lambda"]);
+    value["lambdaSq"] = value["lambda"]*value["lambda"];
+
+    context1.setParameter(lambda1, value[lambda1]);
+    context2.setParameter(lambda1, value[lambda1]);
+    context1.setParameter(lambda2, value[lambda2]);
+    context2.setParameter(lambda2, value[lambda2]);
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // Derivatives:
-    context1.setParameter("lambda", 0);
+    // Derivatives
+
+    context1.setParameter(lambda1, 0);
+    context1.setParameter(lambda2, 0);
     double energy0 = context1.getState(State::Energy).getPotentialEnergy();
-    context1.setParameter("lambda", 1);
+    context1.setParameter(lambda1, 1);
+    context1.setParameter(lambda2, 1);
     double energy1 = context1.getState(State::Energy).getPotentialEnergy();
 
-    slicedNonbonded->addScalingParameterDerivative("lambda");
-    slicedNonbonded->addScalingParameterDerivative("lambdaSq");
+    slicedNonbonded->addScalingParameterDerivative(lambda1);
+    slicedNonbonded->addScalingParameterDerivative(lambda2);
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     auto derivatives = state2.getEnergyParameterDerivatives();
-    ASSERT_EQUAL_TOL(energy1-energy0, derivatives["lambda"]+derivatives["lambdaSq"], TOL);
+    assertEqualTo(energy1-energy0, derivatives[lambda1]+derivatives[lambda2], TOL);
+
+    // Sum of derivatives
+
+    for (int k = 0; k < numParticles; k++) {
+        double charge, sigma, epsilon;
+        slicedNonbonded->getParticleParameters(k, charge, sigma, epsilon);
+        slicedNonbonded->setParticleParameters(k, includeCoulomb ? charge : 0.0, sigma, includeLJ ? epsilon : 0.0);
+    }
+    if (exceptions)
+        for (int k = 0; k < numMolecules; k++) {
+            int i, j;
+            double chargeProd, sigma, epsilon;
+            slicedNonbonded->getExceptionParameters(k, i, j, chargeProd, sigma, epsilon);
+            slicedNonbonded->setExceptionParameters(k, i, j, includeCoulomb ? chargeProd : 0.0, sigma, includeLJ ? epsilon : 0.0);
+        }
 
     slicedNonbonded->addGlobalParameter("remainder", 1.0);
-    slicedNonbonded->addScalingParameter("remainder", 0, 0, false, true);
+    slicedNonbonded->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
     slicedNonbonded->addScalingParameterDerivative("remainder");
     context2.reinitialize(true);
-    context2.setParameter("lambda", 1.0);
-    context2.setParameter("lambdaSq", 1.0);
+    context2.setParameter(lambda1, 1.0);
+    context2.setParameter(lambda2, 1.0);
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     double energy = state2.getPotentialEnergy();
     derivatives = state2.getEnergyParameterDerivatives();
-    double sum = derivatives["lambda"]+derivatives["lambdaSq"]+derivatives["remainder"];
-    ASSERT_EQUAL_TOL(energy, sum, TOL);
+    double sum = derivatives[lambda1]+derivatives[lambda2]+derivatives["remainder"];
+    assertEqualTo(energy, sum, TOL);
 }
 
 void runPlatformTests();
 
 int main(int argc, char* argv[]) {
+    vector<NonbondedForce::NonbondedMethod> nonbondedMethods = {
+        NonbondedForce::NoCutoff,
+        NonbondedForce::CutoffNonPeriodic,
+        NonbondedForce::CutoffPeriodic,
+        NonbondedForce::Ewald,
+        NonbondedForce::PME,
+        NonbondedForce::LJPME
+    };
+    vector <bool> booleanValues = {false, true};
+    OpenMM_SFMT::SFMT sfmt;
+    init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
-        testInstantiateFromNonbondedForce(NonbondedForce::NoCutoff);
-        testInstantiateFromNonbondedForce(NonbondedForce::CutoffNonPeriodic);
-        testInstantiateFromNonbondedForce(NonbondedForce::CutoffPeriodic);
-        testInstantiateFromNonbondedForce(NonbondedForce::Ewald);
-        testInstantiateFromNonbondedForce(NonbondedForce::PME);
-        testInstantiateFromNonbondedForce(NonbondedForce::LJPME);
+        for (auto method : nonbondedMethods)
+            testInstantiateFromNonbondedForce(method);
         testCoulomb();
         testLJ();
         testExclusionsAnd14();
@@ -1155,18 +1185,10 @@ int main(int argc, char* argv[]) {
         testParameterOffsets();
         testEwaldExceptions();
         testDirectAndReciprocal();
-        testNonbondedCoulombSlicing(NonbondedForce::NoCutoff, false);
-        testNonbondedCoulombSlicing(NonbondedForce::CutoffNonPeriodic, false);
-        testNonbondedCoulombSlicing(NonbondedForce::CutoffPeriodic, false);
-        testNonbondedCoulombSlicing(NonbondedForce::Ewald, false);
-        testNonbondedCoulombSlicing(NonbondedForce::PME, false);
-        testNonbondedCoulombSlicing(NonbondedForce::LJPME, false);
-        testNonbondedCoulombSlicing(NonbondedForce::NoCutoff, true);
-        testNonbondedCoulombSlicing(NonbondedForce::CutoffNonPeriodic, true);
-        testNonbondedCoulombSlicing(NonbondedForce::CutoffPeriodic, true);
-        testNonbondedCoulombSlicing(NonbondedForce::Ewald, true);
-        testNonbondedCoulombSlicing(NonbondedForce::PME, true);
-        testNonbondedCoulombSlicing(NonbondedForce::LJPME, true);
+        for (auto method : nonbondedMethods)
+            for (auto exceptions : booleanValues)
+                for (auto includeLJ : booleanValues)
+                    testNonbondedSlicing(sfmt, method, exceptions, includeLJ);
         runPlatformTests();
     }
     catch(const exception& e) {
