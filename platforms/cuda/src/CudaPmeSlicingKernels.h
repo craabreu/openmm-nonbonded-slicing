@@ -274,13 +274,29 @@ private:
     std::vector<std::pair<int, int> > exceptionAtoms;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
     bool hasCoulomb, hasLJ, usePmeStream, useCudaFFT, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
     NonbondedMethod nonbondedMethod;
     static const int PmeOrder = 5;
+
+    int numSubsets, numSlices;
+    vector<int> subsetsVec;
+    vector<string> scalingParams;
+    vector<double2> sliceLambdasVec;
+    vector<int2> sliceScalingParams, sliceScalingParamDerivs;
+    vector<double> subsetSelfEnergy, dispersionCoefficients;
+    CudaArray subsets;
+    CudaArray sliceLambdas;
+
+    vector<float2> double2float(vector<double2> input) {
+        vector<float2> output;
+        for (auto vec : input)
+            output.push_back(make_float2(vec.x, vec.y));
+        return output;
+    }
 };
 
 } // namespace PmeSlicing

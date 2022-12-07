@@ -322,7 +322,7 @@ ReferenceCalcSlicedNonbondedForceKernel::~ReferenceCalcSlicedNonbondedForceKerne
 void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
     numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
-    numSlices = numSubsets*(numSubsets+1)/2;
+    numSlices = force.getNumSlices();
     sliceLambdas.resize(numSlices, (vector<double>){1, 1});
     sliceScalingParams.resize(numSlices, (vector<int>){-1, -1});
     sliceScalingParamDerivs.resize(numSlices, (vector<int>){-1, -1});
