@@ -29,11 +29,15 @@ public:
     void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     void updateParametersInContext(Context& context);
+    string getNonbondedMethodName() const;
     int getNumSubsets() const {
         return numSubsets;
     }
     int getNumSlices() const {
         return numSubsets*(numSubsets+1)/2;
+    }
+    int getSliceIndex(int subset1, int subset2) const {
+        return subset1>subset2 ? subset1*(subset1+1)/2+subset2 : subset2*(subset2+1)/2+subset1;
     }
     int getNumScalingParameters() const {
         return scalingParameters.size();

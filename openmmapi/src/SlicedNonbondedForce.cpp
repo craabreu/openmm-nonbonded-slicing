@@ -178,3 +178,21 @@ void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, d
 void SlicedNonbondedForce::updateParametersInContext(Context& context) {
     dynamic_cast<SlicedNonbondedForceImpl&>(getImplInContext(context)).updateParametersInContext(getContextImpl(context));
 }
+
+string SlicedNonbondedForce::getNonbondedMethodName() const {
+    NonbondedMethod method = getNonbondedMethod();
+    string name = "Unknown";
+    if (method == NoCutoff)
+        name = "NoCutoff";
+    else if (method == CutoffNonPeriodic)
+        name = "CutoffNonPeriodic";
+    else if (method == CutoffPeriodic)
+        name = "CutoffPeriodic";
+    else if (method == Ewald)
+        name = "Ewald";
+    else if (method == PME)
+        name = "PME";
+    else if (method == LJPME)
+        name = "LJPME";
+    return name;
+}

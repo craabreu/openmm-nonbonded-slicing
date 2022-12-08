@@ -1,4 +1,7 @@
 {
+    int slice = SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
+    real coulombLambda = LAMBDA[slice].x;
+    real ljLambda = LAMBDA[slice].y;
 #if USE_EWALD
     unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
     const real alphaR = EWALD_ALPHA*r;
@@ -19,6 +22,7 @@
     const real t = RECIP(1.0f+0.3275911f*alphaR);
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
+    real coulombEnergy = prefactor*erfcAlphaR;
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
     real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
@@ -55,6 +59,7 @@
     // The multiplicative grid term
     ljEnergy += coef*(1.0f - expDar2*eprefac);
     tempForce += 6.0f*coef*(1.0f - expDar2*dprefac);
+    tempForce *= ljLambda;
     // The potential shift accounts for the step at the cutoff introduced by the
     // transition from additive to multiplicative combintion rules and is only
     // needed for the real (not excluded) terms.  By addin these terms to ljEnergy
@@ -67,11 +72,11 @@
     // The multiplicative part of the potential shift
     ljEnergy += MULTSHIFT6*c6;
 #endif
-    tempForce += prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? ljEnergy + prefactor*erfcAlphaR : 0;
+    tempForce += coulombLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempEnergy += includeInteraction ? ljLambda*ljEnergy + coulombLambda*coulombEnergy : 0;
 #else
-    tempForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? prefactor*erfcAlphaR : 0;
+    tempForce = coulombLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempEnergy += includeInteraction ? coulombLambda*coulombEnergy : 0;
 #endif
     dEdR += includeInteraction ? tempForce*invR*invR : 0;
 #else
@@ -98,18 +103,20 @@
         ljEnergy *= switchValue;
     }
     #endif
-    tempEnergy += ljEnergy;
+    tempForce *= ljLambda;
+    tempEnergy += ljLambda*ljEnergy;
 #endif
 #if HAS_COULOMB
   #ifdef USE_CUTOFF
     const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2;
-    tempForce += prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
-    tempEnergy += includeInteraction ? prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C) : 0;
+    real coulombEnergy = prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C);
+    tempForce += coulombLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
   #else
     const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2*invR;
-    tempForce += prefactor;
-    tempEnergy += includeInteraction ? prefactor : 0;
+    real coulombEnergy = prefactor;
+    tempForce += coulombLambda*prefactor;
   #endif
+    tempEnergy += includeInteraction ? coulombLambda*coulombEnergy : 0;
 #endif
     dEdR += includeInteraction ? tempForce*invR*invR : 0;
 #endif

@@ -3,16 +3,19 @@
  */
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
-        GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices
+        GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
+        const int* RESTRICT subsets, const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
-        , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams, GLOBAL float4* RESTRICT exceptionParams,
+        , int numExceptions, GLOBAL const int2* RESTRICT exceptionPairs, GLOBAL const float4* RESTRICT baseExceptionParams,
+        GLOBAL int* RESTRICT exceptionSlices, GLOBAL float4* RESTRICT exceptionParams,
         GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
         ) {
-    mixed energy = 0;
+    mixed coulombEnergy[NUM_SUBSETS] = {0};
+    mixed ljEnergy[NUM_SUBSETS] = {0};
 
     // Compute particle parameters.
-    
+
     for (int i = GLOBAL_ID; i < numAtoms; i += GLOBAL_SIZE) {
         float4 params = baseParticleParams[i];
 #ifdef HAS_PARTICLE_OFFSETS
@@ -33,17 +36,17 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         sigmaEpsilon[i] = make_float2(0.5f*params.y, 2*SQRT(params.z));
 #ifdef HAS_OFFSETS
     #ifdef INCLUDE_EWALD
-        energy -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
+        coulombEnergy[subsets[i]] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
     #endif
     #ifdef INCLUDE_LJPME
         real sig3 = params.y*params.y*params.y;
-        energy += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
+        ljEnergy[subsets[i]] += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
     #endif
 #endif
     }
 
     // Compute exception parameters.
-    
+
 #ifdef HAS_EXCEPTIONS
     for (int i = GLOBAL_ID; i < numExceptions; i += GLOBAL_SIZE) {
         float4 params = baseExceptionParams[i];
@@ -57,11 +60,20 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
             params.z += value*offset.z;
         }
 #endif
-        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), 0);
+        int j = subsets[exceptionPairs[i].x];
+        int k = subsets[exceptionPairs[i].y];
+        float slice = bitcast_to_float(j>k ? j*(j+1)/2+k : k*(k+1)/2+j);
+        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), slice);
     }
 #endif
-    if (includeSelfEnergy)
+    if (includeSelfEnergy) {
+        mixed energy = 0;
+        for (int j = 0; j < NUM_SUBSETS; j++) {
+            int slice = j*(j+3)/2;
+            energy += sliceLambdas[slice].x*coulombEnergy[j] + sliceLambdas[slice].y*ljEnergy[j];
+        }
         energyBuffer[GLOBAL_ID] += energy;
+    }
 }
 
 /**

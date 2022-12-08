@@ -1029,6 +1029,10 @@ public:
      */
     void updateParametersInContext(Context& context);
     /**
+     * Get the name of the method used for handling long range nonbonded interactions.
+     */
+    std::string getNonbondedMethodName() const;
+    /**
      * Get the specified number of particle subsets.
      */
     int getNumSubsets() const;
@@ -1036,6 +1040,24 @@ public:
      * Get the number of slices determined by the specified number of particle subsets.
      */
     int getNumSlices() const;
+    /**
+     * Get the index of an energy sliced formed by two given particle subsets.
+     *
+     * Parameters
+     * ----------
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets`
+     *
+     * Returns
+     * -------
+     *     slice : int
+     *         the index of the slice
+     */
+    int getSliceIndex(int subset1, int subset2) const;
     /**
      * Get the subset to which a particle belongs.
      *

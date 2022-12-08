@@ -272,6 +272,8 @@ private:
     CUfunction pmeInterpolateDispersionForceKernel;
     string realToFixedPoint;
     std::vector<std::pair<int, int> > exceptionAtoms;
+    CudaArray exceptionPairs;
+    CudaArray exceptionSlices;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
     double ewaldSelfEnergy, alpha, dispersionAlpha;
@@ -285,9 +287,9 @@ private:
     int numSubsets, numSlices;
     vector<int> subsetsVec;
     vector<string> scalingParams;
-    vector<double2> sliceLambdasVec;
+    vector<double2> sliceLambdasVec, subsetSelfEnergy;
     vector<int2> sliceScalingParams, sliceScalingParamDerivs;
-    vector<double> subsetSelfEnergy, dispersionCoefficients;
+    vector<double> dispersionCoefficients;
     CudaArray subsets;
     CudaArray sliceLambdas;
 
