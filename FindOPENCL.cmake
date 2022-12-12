@@ -95,10 +95,6 @@ find_library(OPENCL_LIBRARY
 
 find_package_handle_standard_args(OPENCL DEFAULT_MSG OPENCL_LIBRARY OPENCL_INCLUDE_DIR)
 
-include(CMakePrintHelpers)
-
-cmake_print_variables(OPENCL_FOUND)
-
 if(OPENCL_FOUND)
   set(OPENCL_LIBRARIES ${OPENCL_LIBRARY})
   mark_as_advanced(CLEAR OPENCL_INCLUDE_DIR)
