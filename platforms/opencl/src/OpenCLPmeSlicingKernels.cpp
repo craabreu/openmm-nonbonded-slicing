@@ -174,9 +174,8 @@ private:
 
 OpenCLCalcSlicedPmeForceKernel::OpenCLCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
     CalcSlicedPmeForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), usePmeQueue(false) {
-    string version = Platform::getOpenMMVersion();
     stringstream code;
-    if (stoi(version.substr(0, version.find("."))) < 8) {
+    if (Platform::getOpenMMVersion().at(0) == '7') {
         code<<"inline long realToFixedPoint(real x) {"<<endl;
         code<<"    return (long) (x * 0x100000000);"<<endl;
         code<<"}"<<endl;

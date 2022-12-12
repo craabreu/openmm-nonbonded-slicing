@@ -152,9 +152,8 @@ private:
 
 CudaCalcSlicedPmeForceKernel::CudaCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
         CalcSlicedPmeForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL), fft(NULL), usePmeStream(false) {
-    string version = Platform::getOpenMMVersion();
     stringstream code;
-    if (stoi(version.substr(0, version.find("."))) < 8) {
+    if (Platform::getOpenMMVersion().at(0) == '7') {
         code<<"__device__ inline long long realToFixedPoint(real x) {"<<endl;
         code<<"return static_cast<long long>(x * 0x100000000);"<<endl;
         code<<"}"<<endl;

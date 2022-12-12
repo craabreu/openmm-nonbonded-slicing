@@ -16,9 +16,6 @@ file(GLOB STAGING_INPUT_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "theory.rst"
 )
 
-include(CMakePrintHelpers)
-cmake_print_variables(STAGING_INPUT_FILES)
-
 set(STAGING_OUTPUT_FILES "")
 foreach(INIT_FILE ${STAGING_INPUT_FILES})
     set(infile "${CMAKE_CURRENT_SOURCE_DIR}/${INIT_FILE}")
@@ -32,8 +29,6 @@ foreach(INIT_FILE ${STAGING_INPUT_FILES})
 endforeach(INIT_FILE ${STAGING_INPUT_FILES})
 
 set(SPHINX_HTML_DIR "${CMAKE_CURRENT_BINARY_DIR}/_build")
-
-cmake_print_variables(STAGING_OUTPUT_FILES)
 
 add_custom_target(doc
     DEPENDS PythonInstall ${STAGING_OUTPUT_FILES}
