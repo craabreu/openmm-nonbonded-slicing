@@ -1005,6 +1005,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     nonbonded->setNonbondedMethod(method);
     nonbonded->setCutoffDistance(cutoff);
     nonbonded->setUseDispersionCorrection(false);
+    nonbonded->setReciprocalSpaceForceGroup(1);
     vector<Vec3> positions(numParticles);
 
     int M = (int) pow(numMolecules, 1.0/3.0);
@@ -1020,69 +1021,53 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         double dx = (0.5 - ix%2)/2;
         double dy = (0.5 - iy%2)/2;
         double dz = (0.5 - iz%2)/2;
-        nonbonded->addParticle(1.0, 1.0, 1.0);
-        nonbonded->addParticle(-1.0, 1.0, 1.0);
-        if (exceptions)
-            nonbonded->addException(2*k, 2*k+1, -0.5, 1.0, 2.0);
         positions[2*k] = Vec3(x+dx, y+dy, z+dz);
         positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
+        nonbonded->addParticle( 1, 1, 1);
+        nonbonded->addParticle(-1, 1, 1);
+        if (exceptions)
+            nonbonded->addException(2*k, 2*k+1, -0.5, 1, 2);
     }
 
-    string lambda1 = includeCoulomb ? "lambda" : "sqrtLambda";
-    string lambda2 = includeCoulomb ? "lambdaSq" : "lambda";
-    map<string, double> value;
-
-    value["lambda"] = 1/2;
-    value["sqrtLambda"] = sqrt(value["lambda"]);
-    value["lambdaSq"] = value["lambda"]*value["lambda"];
-
-    nonbonded->addGlobalParameter(lambda1, value[lambda1]);
-    nonbonded->addGlobalParameter(lambda2, value[lambda2]);
-
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
-    cout<<sliced->getNonbondedMethodName()<<endl;
     for (int k = 0; k < numParticles; k++)
         if (genrand_real2(sfmt) < 0.5)
             sliced->setParticleSubset(k, 1);
 
-    sliced->addScalingParameter(lambda1, 0, 1, includeLJ, includeCoulomb);
-    sliced->addScalingParameter(lambda2, 1, 1, includeLJ, includeCoulomb);
+    string param1 = includeCoulomb ? "lambda" : "sqrtLambda";
+    sliced->addGlobalParameter(param1, 1);
+    sliced->addScalingParameter(param1, 0, 1, includeLJ, includeCoulomb);
 
-    for (int k = 0; k < numParticles; k++)
-        if (sliced->getParticleSubset(k) == 1) {
-            double charge, sigma, epsilon;
-            nonbonded->getParticleParameters(k, charge, sigma, epsilon);
-            double chargeScale = includeCoulomb ? charge : 0.0;
-            double epsilonScale = includeLJ ? epsilon : 0.0;
-            nonbonded->setParticleParameters(k, charge-chargeScale, sigma, epsilon-epsilonScale);
-            nonbonded->addParticleParameterOffset("lambda", k, chargeScale, 0.0, epsilonScale);
-        }
-
-    if (exceptions)
-        for (int k = 0; k < numMolecules; k++) {
-            int i, j;
-            double chargeProd, sigma, epsilon;
-            nonbonded->getExceptionParameters(k, i, j, chargeProd, sigma, epsilon);
-            int si = sliced->getParticleSubset(i);
-            int sj = sliced->getParticleSubset(j);
-            if (si != sj || si == 1) {
-                double chargeProdScale = includeCoulomb ? chargeProd : 0.0;
-                double epsilonScale = includeLJ ? epsilon : 0.0;
-                nonbonded->setExceptionParameters(k, i, j, chargeProd-chargeProdScale, sigma, epsilon-epsilonScale);
-                string parameter = si != sj ? lambda1 : lambda2;
-                nonbonded->addExceptionParameterOffset(parameter, k, chargeProdScale, 0.0, epsilonScale);
-            }
-        }
+    string param2 = includeCoulomb ? "lambdaSq" : "lambda";
+    sliced->addGlobalParameter(param2, 1);
+    sliced->addScalingParameter(param2, 1, 1, includeLJ, includeCoulomb);
 
     system1.addForce(nonbonded);
     system2.addForce(sliced);
 
-    nonbonded->setReciprocalSpaceForceGroup(1);
+    vector<pair<string, string>> particleScale(numParticles, make_pair("one", "one"));
+    for (int k = 0; k < numParticles; k++)
+        if (sliced->getParticleSubset(k) == 1)
+            particleScale[k] = make_pair(includeCoulomb ? "lambda" : "one", includeLJ ? "lambda" : "one");
+
+    int numExceptions = nonbonded->getNumExceptions();
+    vector<pair<string, string>> exceptionScale(numExceptions, make_pair("one", "one"));
+    for (int k = 0; k < numExceptions; k++) {
+        int i, j;
+        double chargeProd, sigma, epsilon;
+        nonbonded->getExceptionParameters(k, i, j, chargeProd, sigma, epsilon);
+        int si = sliced->getParticleSubset(i);
+        int sj = sliced->getParticleSubset(j);
+        if (si != sj || si == 1) {
+            string parameter = si != sj ? param1 : param2;
+            exceptionScale[k] = make_pair(includeCoulomb ? parameter : "one", includeLJ ? parameter : "one");
+        }
+    }
+
     VerletIntegrator integrator1(0.01);
     Context context1(system1, integrator1, platform);
     context1.setPositions(positions);
 
-    sliced->setReciprocalSpaceForceGroup(1);
     VerletIntegrator integrator2(0.01);
     Context context2(system2, integrator2, platform);
     context2.setPositions(positions);
@@ -1101,64 +1086,78 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // Change of scaling parameter value
-
-    value["lambda"] = 2/3;
-    value["sqrtLambda"] = sqrt(value["lambda"]);
-    value["lambdaSq"] = value["lambda"]*value["lambda"];
-
-    context1.setParameter(lambda1, value[lambda1]);
-    context2.setParameter(lambda1, value[lambda1]);
-    context1.setParameter(lambda2, value[lambda2]);
-    context2.setParameter(lambda2, value[lambda2]);
+    // Overall
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
     assertEnergy(state1, state2);
     assertForces(state1, state2);
 
-    // // Derivatives
+    double energy_lambda_one = state1.getPotentialEnergy();
 
-    // context1.setParameter(lambda1, 0);
-    // context1.setParameter(lambda2, 0);
-    // double energy0 = context1.getState(State::Energy).getPotentialEnergy();
-    // context1.setParameter(lambda1, 1);
-    // context1.setParameter(lambda2, 1);
-    // double energy1 = context1.getState(State::Energy).getPotentialEnergy();
+    // Change of scaling parameter value
 
-    // sliced->addScalingParameterDerivative(lambda1);
-    // sliced->addScalingParameterDerivative(lambda2);
-    // context2.reinitialize(true);
-    // state2 = context2.getState(State::ParameterDerivatives);
-    // auto derivatives = state2.getEnergyParameterDerivatives();
-    // assertEqualTo(energy1-energy0, derivatives[lambda1]+derivatives[lambda2], TOL);
+    map<string, double> value;
+    value["one"] = 1;
+    value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
+    for (int k = 0; k < numParticles; k++)
+        nonbonded->setParticleParameters(k, (1-2*(k%2))*value[particleScale[k].first], 1, value[particleScale[k].second]);
+    for (int k = 0; k < numExceptions; k++)
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, -0.5*value[exceptionScale[k].first], 1, 2*value[exceptionScale[k].second]);
+    nonbonded->updateParametersInContext(context1);
+    context2.setParameter(param1, value[param1]);
+    context2.setParameter(param2, value[param2]);
 
-    // // Sum of derivatives
+    state1 = context1.getState(State::Energy | State::Forces);
+    state2 = context2.getState(State::Energy | State::Forces);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
 
-    // for (int k = 0; k < numParticles; k++) {
-    //     double charge, sigma, epsilon;
-    //     sliced->getParticleParameters(k, charge, sigma, epsilon);
-    //     sliced->setParticleParameters(k, includeCoulomb ? charge : 0.0, sigma, includeLJ ? epsilon : 0.0);
-    // }
-    // if (exceptions)
-    //     for (int k = 0; k < numMolecules; k++) {
-    //         int i, j;
-    //         double chargeProd, sigma, epsilon;
-    //         sliced->getExceptionParameters(k, i, j, chargeProd, sigma, epsilon);
-    //         sliced->setExceptionParameters(k, i, j, includeCoulomb ? chargeProd : 0.0, sigma, includeLJ ? epsilon : 0.0);
-    //     }
+    double energy_lambda_zero = state1.getPotentialEnergy();
 
-    // sliced->addGlobalParameter("remainder", 1.0);
-    // sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
-    // sliced->addScalingParameterDerivative("remainder");
-    // context2.reinitialize(true);
-    // context2.setParameter(lambda1, 1.0);
-    // context2.setParameter(lambda2, 1.0);
-    // state2 = context2.getState(State::Energy | State::ParameterDerivatives);
-    // double energy = state2.getPotentialEnergy();
-    // derivatives = state2.getEnergyParameterDerivatives();
-    // double sum = derivatives[lambda1]+derivatives[lambda2]+derivatives["remainder"];
-    // assertEqualTo(energy, sum, TOL);
+    value["lambda"] = 0.5;
+    value["sqrtLambda"] = sqrt(value["lambda"]);
+    value["lambdaSq"] = value["lambda"]*value["lambda"];
+    for (int k = 0; k < numParticles; k++)
+        nonbonded->setParticleParameters(k, (1-2*(k%2))*value[particleScale[k].first], 1, value[particleScale[k].second]);
+    for (int k = 0; k < numExceptions; k++)
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, -0.5*value[exceptionScale[k].first], 1, 2*value[exceptionScale[k].second]);
+    nonbonded->updateParametersInContext(context1);
+    context2.setParameter(param1, value[param1]);
+    context2.setParameter(param2, value[param2]);
+
+    state1 = context1.getState(State::Energy | State::Forces);
+    state2 = context2.getState(State::Energy | State::Forces);
+    assertEnergy(state1, state2);
+    assertForces(state1, state2);
+
+    // Derivatives
+
+    sliced->addScalingParameterDerivative(param1);
+    sliced->addScalingParameterDerivative(param2);
+    context2.reinitialize(true);
+    state2 = context2.getState(State::ParameterDerivatives);
+    auto derivatives = state2.getEnergyParameterDerivatives();
+    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], TOL);
+
+    // Sum of derivatives
+
+    for (int k = 0; k < nonbonded->getNumParticles(); k++)
+        nonbonded->setParticleParameters(k, includeCoulomb ? (1-2*(k%2)) : 0, 1, includeLJ ? 1 : 0);
+    for (int k = 0; k < nonbonded->getNumExceptions(); k++)
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? -0.5 : 0, 1, includeLJ ? 2 : 0);
+    nonbonded->updateParametersInContext(context1);
+    state1 = context1.getState(State::Energy | State::Forces);
+    double energy = state1.getPotentialEnergy();
+
+    sliced->addGlobalParameter("remainder", 1.0);
+    sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
+    sliced->addScalingParameterDerivative("remainder");
+    context2.reinitialize(true);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
+    derivatives = state2.getEnergyParameterDerivatives();
+    double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
+    assertEqualTo(energy, sum, TOL);
 }
 
 void runPlatformTests();
@@ -1177,25 +1176,25 @@ int main(int argc, char* argv[]) {
     init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
-        // for (auto method : nonbondedMethods)
-        //     testInstantiateFromNonbondedForce(method);
-        // testCoulomb();
-        // testLJ();
-        // testExclusionsAnd14();
-        // testCutoff();
-        // testCutoff14();
-        // testPeriodic();
-        // testPeriodicExceptions();
-        // testTriclinic();
-        // testLargeSystem();
-        // testDispersionCorrection();
-        // testChangingParameters();
-        // testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
-        // testSwitchingFunction(SlicedNonbondedForce::PME);
-        // testTwoForces();
-        // testParameterOffsets();
-        // testEwaldExceptions();
-        // testDirectAndReciprocal();
+        for (auto method : nonbondedMethods)
+            testInstantiateFromNonbondedForce(method);
+        testCoulomb();
+        testLJ();
+        testExclusionsAnd14();
+        testCutoff();
+        testCutoff14();
+        testPeriodic();
+        testPeriodicExceptions();
+        testTriclinic();
+        testLargeSystem();
+        testDispersionCorrection();
+        testChangingParameters();
+        testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
+        testSwitchingFunction(SlicedNonbondedForce::PME);
+        testTwoForces();
+        testParameterOffsets();
+        testEwaldExceptions();
+        testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
             for (auto exceptions : booleanValues)
                 for (auto lj : booleanValues)
