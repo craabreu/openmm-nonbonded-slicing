@@ -68,7 +68,7 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
 
     context.setPositions(positions);
 
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 }
 
 void testCoulomb() {
@@ -522,7 +522,7 @@ void testLargeSystem() {
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 
     // Now try cutoffs but not periodic boundary conditions.
 
@@ -531,14 +531,14 @@ void testLargeSystem() {
     sliced->setNonbondedMethod(SlicedNonbondedForce::CutoffNonPeriodic);
     sliced->setCutoffDistance(cutoff);
     context.reinitialize(true);
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 
     // Now do the same thing with periodic boundary conditions.
 
     nonbonded->setNonbondedMethod(NonbondedForce::CutoffPeriodic);
     sliced->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
     context.reinitialize(true);
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 }
 
 void testHugeSystem(double tol=1e-5) {
@@ -715,7 +715,7 @@ void testChangingParameters() {
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 
     // Now modify parameters and see if they still agree.
 
@@ -728,7 +728,7 @@ void testChangingParameters() {
     }
     nonbonded->updateParametersInContext(context);
     sliced->updateParametersInContext(context);
-    assertForcesAndEnergy(context);
+    assertForcesAndEnergy(context, TOL);
 }
 
 void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
@@ -1083,22 +1083,22 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
     State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
-    assertEnergy(state1, state2);
-    assertForces(state1, state2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
 
     // Reciprocal space
 
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-    assertEnergy(state1, state2);
-    assertForces(state1, state2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
 
     // Overall
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2);
-    assertForces(state1, state2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
 
     double energy_lambda_one = state1.getPotentialEnergy();
 
@@ -1117,8 +1117,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2);
-    assertForces(state1, state2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
 
     double energy_lambda_zero = state1.getPotentialEnergy();
 
@@ -1135,8 +1135,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2);
-    assertForces(state1, state2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
 
     // // Derivatives
 

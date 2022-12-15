@@ -25,20 +25,20 @@
     } \
 };
 
-#define assertEnergy(state0, state1) { \
-    assertEqualTo(state0.getPotentialEnergy(), state1.getPotentialEnergy(), TOL); \
+#define assertEnergy(state0, state1, tol) { \
+    assertEqualTo(state0.getPotentialEnergy(), state1.getPotentialEnergy(), tol); \
 }
 
-#define assertForces(state0, state1) { \
+#define assertForces(state0, state1, tol) { \
     const vector<Vec3>& forces0 = state0.getForces(); \
     const vector<Vec3>& forces1 = state1.getForces(); \
     for (int i = 0; i < forces0.size(); i++) \
-        assertEqualVec(forces0[i], forces1[i], TOL); \
+        assertEqualVec(forces0[i], forces1[i], tol); \
 }
 
-#define assertForcesAndEnergy(context) { \
+#define assertForcesAndEnergy(context, tol) { \
     State state0 = context.getState(State::Forces | State::Energy, false, 1<<0); \
     State state1 = context.getState(State::Forces | State::Energy, false, 1<<1); \
-    assertEnergy(state0, state1); \
-    assertForces(state0, state1); \
+    assertEnergy(state0, state1, tol); \
+    assertForces(state0, state1, tol); \
 }
