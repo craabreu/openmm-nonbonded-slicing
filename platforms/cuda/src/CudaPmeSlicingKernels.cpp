@@ -1059,18 +1059,6 @@ private:
     int forceGroup;
 };
 
-CudaCalcSlicedNonbondedForceKernel::CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-        cu(cu), hasInitializedFFT(false), sort(NULL), dispersionFft(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {
-    string version = Platform::getOpenMMVersion();
-    stringstream code;
-    if (stoi(version.substr(0, version.find("."))) < 8) {
-        code<<"__device__ inline long long realToFixedPoint(real x) {"<<endl;
-        code<<"return static_cast<long long>(x * 0x100000000);"<<endl;
-        code<<"}"<<endl;
-    }
-    realToFixedPoint = code.str();
-}
-
 CudaCalcSlicedNonbondedForceKernel::~CudaCalcSlicedNonbondedForceKernel() {
     ContextSelector selector(cu);
     if (sort != NULL)
@@ -1104,6 +1092,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
     string prefix = "slicedNonbonded"+cu.intToString(forceIndex)+"_";
+
+    string realToFixedPoint = Platform::getOpenMMVersion()[0] == '7' ? CommonPmeSlicingKernelSources::realToFixedPoint : "";
 
     int numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
@@ -1142,7 +1132,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     if (cu.getUseDoublePrecision())
         sliceLambdas.upload(sliceLambdasVec);
     else
-        sliceLambdas.upload(double2float(sliceLambdasVec));
+        sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -1734,7 +1724,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         if (cu.getUseDoublePrecision())
             sliceLambdas.upload(sliceLambdasVec);
         else
-            sliceLambdas.upload(double2float(sliceLambdasVec));
+            sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
     }
 
     // Update particle and exception parameters.

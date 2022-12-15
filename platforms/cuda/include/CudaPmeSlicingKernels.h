@@ -21,6 +21,7 @@
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaSort.h"
 #include <vector>
+#include <algorithm>
 
 using namespace OpenMM;
 using namespace std;
@@ -156,7 +157,9 @@ private:
  */
 class CudaCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
-    CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system);
+    CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
+            CalcSlicedNonbondedForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL),
+            dispersionFft(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {};
     ~CudaCalcSlicedNonbondedForceKernel();
     /**
      * Initialize the kernel.
@@ -270,7 +273,6 @@ private:
     CUfunction pmeDispersionConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
     CUfunction pmeInterpolateDispersionForceKernel;
-    string realToFixedPoint;
     std::vector<std::pair<int, int> > exceptionAtoms;
     CudaArray exceptionPairs;
     CudaArray exceptionSlices;
@@ -293,10 +295,12 @@ private:
     CudaArray subsets;
     CudaArray sliceLambdas;
 
-    vector<float2> double2float(vector<double2> input) {
-        vector<float2> output;
-        for (auto vec : input)
-            output.push_back(make_float2(vec.x, vec.y));
+    vector<float2> double2Tofloat2(vector<double2> input) {
+        vector<float2> output(input.size());
+        transform(
+            input.begin(), input.end(), output.begin(),
+            [](double2 v) -> float2 { return make_float2(v.x, v.y); }
+        );
         return output;
     }
 };

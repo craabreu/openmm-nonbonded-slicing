@@ -1008,7 +1008,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     nonbonded->setReciprocalSpaceForceGroup(1);
     vector<Vec3> positions(numParticles);
 
-    double q = 1;
+    auto q = [](int k) { return (1-2*(k%2)); };
     double qiqj = -0.5;
     double eps = 1;
     double epsij = 2;
@@ -1026,12 +1026,13 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         double dx = (0.5 - ix%2)/2;
         double dy = (0.5 - iy%2)/2;
         double dz = (0.5 - iz%2)/2;
-        positions[2*k] = Vec3(x+dx, y+dy, z+dz);
-        positions[2*k+1] = Vec3(x-dx, y-dy, z-dz);
-        nonbonded->addParticle( q, 1, eps);
-        nonbonded->addParticle(-q, 1, eps);
+        int i = 2*k, j = i+1;
+        positions[i] = Vec3(x+dx, y+dy, z+dz);
+        positions[j] = Vec3(x-dx, y-dy, z-dz);
+        nonbonded->addParticle(q(i), 1, eps);
+        nonbonded->addParticle(q(j), 1, eps);
         if (exceptions)
-            nonbonded->addException(2*k, 2*k+1, qiqj, 1, epsij);
+            nonbonded->addException(i, j, qiqj, 1, epsij);
     }
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
@@ -1108,7 +1109,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["one"] = 1;
     value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
     for (int k = 0; k < numParticles; k++)
-        nonbonded->setParticleParameters(k, (1-2*(k%2))*q*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
+        nonbonded->setParticleParameters(k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]);
     nonbonded->updateParametersInContext(context1);
@@ -1126,7 +1127,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["sqrtLambda"] = sqrt(value["lambda"]);
     value["lambdaSq"] = value["lambda"]*value["lambda"];
     for (int k = 0; k < numParticles; k++)
-        nonbonded->setParticleParameters(k, (1-2*(k%2))*q*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
+        nonbonded->setParticleParameters(k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]);
     nonbonded->updateParametersInContext(context1);
@@ -1150,7 +1151,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     // // Sum of derivatives
 
     // for (int k = 0; k < nonbonded->getNumParticles(); k++)
-    //     nonbonded->setParticleParameters(k, includeCoulomb ? (1-2*(k%2))*q : 0, 1, includeLJ ? eps : 0);
+    //     nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
     // for (int k = 0; k < nonbonded->getNumExceptions(); k++)
     //     nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
     // nonbonded->updateParametersInContext(context1);
