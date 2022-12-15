@@ -4,7 +4,7 @@
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
-        const int* RESTRICT subsets, const real2* RESTRICT sliceLambdas
+        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
         , int numExceptions, GLOBAL const int2* RESTRICT exceptionPairs, GLOBAL const float4* RESTRICT baseExceptionParams,
         GLOBAL int* RESTRICT exceptionSlices, GLOBAL float4* RESTRICT exceptionParams,
@@ -62,8 +62,9 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 #endif
         int j = subsets[exceptionPairs[i].x];
         int k = subsets[exceptionPairs[i].y];
-        float slice = bitcast_to_float(j>k ? j*(j+1)/2+k : k*(k+1)/2+j);
-        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), slice);
+        int slice = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
+        float sliceAsFloat = *((float*) &slice);
+        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), sliceAsFloat);
     }
 #endif
     if (includeSelfEnergy) {

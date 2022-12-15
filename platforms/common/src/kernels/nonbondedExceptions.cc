@@ -1,5 +1,6 @@
 float4 exceptionParams = PARAMS[index];
-int slice = bitcast_to_int(exceptionParams.w);
+float sliceAsFloat = exceptionParams.w;
+int slice = *((int*) &sliceAsFloat);
 real coulombLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);

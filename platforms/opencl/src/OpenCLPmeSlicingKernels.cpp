@@ -983,7 +983,9 @@ public:
         double charge1, charge2, sigma1, sigma2, epsilon1, epsilon2;
         force.getParticleParameters(particle1, charge1, sigma1, epsilon1);
         force.getParticleParameters(particle2, charge2, sigma2, epsilon2);
-        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        int subset1 = force.getParticleSubset(particle1);
+        int subset2 = force.getParticleSubset(particle2);
+        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2 && subset1 == subset2);
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
@@ -1000,8 +1002,10 @@ public:
         int particle1, particle2;
         double chargeProd1, chargeProd2, sigma1, sigma2, epsilon1, epsilon2;
         force.getExceptionParameters(group1, particle1, particle2, chargeProd1, sigma1, epsilon1);
+        int slice1 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
         force.getExceptionParameters(group2, particle1, particle2, chargeProd2, sigma2, epsilon2);
-        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        int slice2 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2 && slice1 == slice2);
     }
 private:
     const SlicedNonbondedForce& force;
@@ -1102,18 +1106,6 @@ private:
     int forceGroup;
 };
 
-OpenCLCalcSlicedNonbondedForceKernel::OpenCLCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-        hasInitializedKernel(false), cl(cl), sort(NULL), fft(NULL), dispersionFft(NULL), pmeio(NULL), usePmeQueue(false) {
-    string version = Platform::getOpenMMVersion();
-    stringstream code;
-    if (stoi(version.substr(0, version.find("."))) < 8) {
-        code<<"inline long realToFixedPoint(real x) {"<<endl;
-        code<<"    return (long) (x * 0x100000000);"<<endl;
-        code<<"}"<<endl;
-    }
-    realToFixedPoint = code.str();
-}
-
 OpenCLCalcSlicedNonbondedForceKernel::~OpenCLCalcSlicedNonbondedForceKernel() {
     if (sort != NULL)
         delete sort;
@@ -1130,6 +1122,47 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
     string prefix = "nonbonded"+cl.intToString(forceIndex)+"_";
+
+    realToFixedPoint = Platform::getOpenMMVersion()[0] == '7' ? OpenCLPmeSlicingKernelSources::realToFixedPoint : "";
+
+    int numParticles = force.getNumParticles();
+    numSubsets = force.getNumSubsets();
+    numSlices = force.getNumSlices();
+    sliceLambdasVec.resize(numSlices, mm_double2(1, 1));
+    sliceScalingParams.resize(numSlices, mm_int2(-1, -1));
+    sliceScalingParamDerivs.resize(numSlices, mm_int2(-1, -1));
+    subsetSelfEnergy.resize(numSlices, mm_double2(0, 0));
+
+    subsetsVec.resize(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        subsetsVec[i] = force.getParticleSubset(i);
+    subsets.initialize<int>(cl, numParticles, "subsets");
+    subsets.upload(subsetsVec);
+
+    int numDerivs = force.getNumScalingParameterDerivatives();
+    vector<string> derivs(numDerivs);
+    for (int i = 0; i < numDerivs; i++)
+        derivs[i] = force.getScalingParameterDerivativeName(i);
+
+    int numScalingParams = force.getNumScalingParameters();
+    scalingParams.resize(numScalingParams);
+    for (int index = 0; index < numScalingParams; index++) {
+        int i, j;
+        bool includeLJ, includeCoulomb;
+        force.getScalingParameter(index, scalingParams[index], i, j, includeLJ, includeCoulomb);
+        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        sliceScalingParams[slice] = mm_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
+        int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
+        if (pos < numDerivs)
+            sliceScalingParamDerivs[slice] = mm_int2(includeCoulomb ? pos : -1, includeLJ ? pos : -1);
+    }
+
+    size_t sizeOfReal = cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
+    sliceLambdas.initialize(cl, numSlices, 2*sizeOfReal, "sliceLambdas");
+    if (cl.getUseDoublePrecision())
+        sliceLambdas.upload(sliceLambdasVec);
+    else
+        sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -1157,7 +1190,6 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
 
     // Initialize nonbonded interactions.
 
-    int numParticles = force.getNumParticles();
     vector<mm_float4> baseParticleParamVec(cl.getPaddedNumAtoms(), mm_float4(0, 0, 0, 0));
     vector<vector<int> > exclusionList(numParticles);
     hasCoulomb = false;
@@ -1213,12 +1245,11 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         }
     }
     if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0 && !doLJPME)
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(system, force);
-    else
-        dispersionCoefficient = 0.0;
+        dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     alpha = 0;
     ewaldSelfEnergy = 0.0;
     map<string, string> paramsDefines;
+    paramsDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
     paramsDefines["ONE_4PI_EPS0"] = cl.doubleToString(ONE_4PI_EPS0);
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
     if (hasOffsets)
@@ -1243,7 +1274,9 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
             for (int i = 0; i < numParticles; i++)
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+                subsetSelfEnergy[subsetsVec[i]].x -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            for (int i = 0; i < numSubsets; i++)
+                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x;
 
             // Create the reciprocal space kernels.
 
@@ -1518,6 +1551,11 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         replacements["SIGMA_EPSILON2"] = prefix+"sigmaEpsilon2";
         cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"sigmaEpsilon", "float", 2, sizeof(cl_float2), sigmaEpsilon.getDeviceBuffer()));
     }
+    replacements["SUBSET1"] = prefix+"subset1";
+    replacements["SUBSET2"] = prefix+"subset2";
+    cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"subset", "int", 1, sizeof(int), subsets.getDeviceBuffer()));
+    replacements["LAMBDA"] = prefix+"lambda";
+    cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDeviceBuffer()));
     source = cl.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cl.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
@@ -1534,17 +1572,24 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         vector<vector<int> > atoms(numExceptions, vector<int>(2));
         exceptionParams.initialize<mm_float4>(cl, numExceptions, "exceptionParams");
         baseExceptionParams.initialize<mm_float4>(cl, numExceptions, "baseExceptionParams");
+        exceptionPairs.initialize<mm_int2>(cl, numExceptions, "exceptionPairs");
+        exceptionSlices.initialize<int>(cl, numExceptions, "exceptionSlices");
         vector<mm_float4> baseExceptionParamsVec(numExceptions);
+        vector<int> exceptionSlicesVec(numExceptions);
         for (int i = 0; i < numExceptions; i++) {
             double chargeProd, sigma, epsilon;
             force.getExceptionParameters(exceptions[startIndex+i], atoms[i][0], atoms[i][1], chargeProd, sigma, epsilon);
             baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, 0);
             exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
+            exceptionSlicesVec[i] = force.getSliceIndex(atoms[i][0], atoms[i][1]);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
+        exceptionPairs.upload(exceptionAtoms);
+        exceptionSlices.upload(exceptionSlicesVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
+        replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
         if (force.getIncludeDirectSpace())
             cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
@@ -1643,9 +1688,13 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         computeParamsKernel.setArg<cl::Buffer>(index++, sigmaEpsilon.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleParamOffsets.getDeviceBuffer());
         computeParamsKernel.setArg<cl::Buffer>(index++, particleOffsetIndices.getDeviceBuffer());
+        computeParamsKernel.setArg<cl::Buffer>(index++, subsets.getDeviceBuffer());
+        computeParamsKernel.setArg<cl::Buffer>(index++, sliceLambdas.getDeviceBuffer());
         if (exceptionParams.isInitialized()) {
             computeParamsKernel.setArg<cl_int>(index++, exceptionParams.getSize());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionPairs.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, baseExceptionParams.getDeviceBuffer());
+            computeParamsKernel.setArg<cl::Buffer>(index++, exceptionSlices.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParams.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionParamOffsets.getDeviceBuffer());
             computeParamsKernel.setArg<cl::Buffer>(index++, exceptionOffsetIndices.getDeviceBuffer());
@@ -1746,6 +1795,31 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
             }
        }
+    }
+
+    // Update scaling parameters if needed.
+
+    bool scalingParamChanged = false;
+    for (int slice = 0; slice < numSlices; slice++) {
+        mm_int2 indices = sliceScalingParams[slice];
+        int index = max(indices.x, indices.y);
+        if (index != -1) {
+            double paramValue = context.getParameter(scalingParams[index]);
+            double oldValue = indices.x != -1 ? sliceLambdasVec[slice].x : sliceLambdasVec[slice].y;
+            if (oldValue != paramValue) {
+                sliceLambdasVec[slice] = mm_double2(indices.x == -1 ? 1.0 : paramValue, indices.y == -1 ? 1.0 : paramValue);
+                scalingParamChanged = true;
+            }
+        }
+    }
+    if (scalingParamChanged) {
+        ewaldSelfEnergy = 0.0;
+        for (int i = 0; i < numSubsets; i++)
+            ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
+        if (cl.getUseDoublePrecision())
+            sliceLambdas.upload(sliceLambdasVec);
+        else
+            sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
     }
 
     // Update particle and exception parameters.
@@ -1951,9 +2025,11 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             cl.restoreDefaultQueue();
         }
     }
-    if (dispersionCoefficient != 0.0 && includeDirect) {
+    if (dispersionCoefficients.size() != 0 && includeDirect) {
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
-        energy += dispersionCoefficient/(boxSize.x*boxSize.y*boxSize.z);
+        double volume = boxSize.x*boxSize.y*boxSize.z;
+        for (int slice = 0; slice < numSlices; slice++)
+            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
     }
     return energy;
 }
@@ -1973,6 +2049,9 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
                 throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Lennard-Jones interactions, because all epsilons were originally 0");
         }
     }
+    for (int i = 0; i < force.getNumParticles(); i++)
+        subsetsVec[i] = force.getParticleSubset(i);
+    subsets.upload(subsetsVec);
     set<int> exceptionsWithOffsets;
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
@@ -2024,17 +2103,20 @@ void OpenCLCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
     // Compute other values.
 
     ewaldSelfEnergy = 0.0;
+    subsetSelfEnergy.assign(numSubsets, mm_double2(0, 0));
     if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
         if (cl.getContextIndex() == 0) {
             for (int i = 0; i < force.getNumParticles(); i++) {
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+                subsetSelfEnergy[subsetsVec[i]].x -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
                 if (doLJPME)
-                    ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
+                    subsetSelfEnergy[subsetsVec[i]].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
             }
+            for (int i = 0; i < force.getNumSubsets(); i++)
+                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
         }
     }
     if (force.getUseDispersionCorrection() && cl.getContextIndex() == 0 && (nonbondedMethod == CutoffPeriodic || nonbondedMethod == Ewald || nonbondedMethod == PME))
-        dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(context.getSystem(), force);
+        dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(context.getSystem(), force);
     cl.invalidateMolecules(info);
     recomputeParams = true;
 }

@@ -19,6 +19,7 @@
 #include "openmm/opencl/OpenCLArray.h"
 #include "openmm/opencl/OpenCLSort.h"
 #include <vector>
+#include <algorithm>
 
 namespace PmeSlicing {
 
@@ -156,7 +157,9 @@ private:
  */
 class OpenCLCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
-    OpenCLCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system);
+    OpenCLCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
+            CalcSlicedNonbondedForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL),
+            fft(NULL), dispersionFft(NULL), pmeio(NULL), usePmeQueue(false) {};
     ~OpenCLCalcSlicedNonbondedForceKernel();
     /**
      * Initialize the kernel.
@@ -276,14 +279,34 @@ private:
     std::string realToFixedPoint;
     std::map<std::string, std::string> pmeDefines;
     std::vector<std::pair<int, int> > exceptionAtoms;
+    OpenCLArray exceptionPairs;
+    OpenCLArray exceptionSlices;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
     bool hasCoulomb, hasLJ, usePmeQueue, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
     NonbondedMethod nonbondedMethod;
     static const int PmeOrder = 5;
+
+    int numSubsets, numSlices;
+    vector<int> subsetsVec;
+    vector<string> scalingParams;
+    vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
+    vector<mm_int2> sliceScalingParams, sliceScalingParamDerivs;
+    vector<double> dispersionCoefficients;
+    OpenCLArray subsets;
+    OpenCLArray sliceLambdas;
+
+    vector<mm_float2> double2Tofloat2(vector<mm_double2> input) {
+        vector<mm_float2> output(input.size());
+        transform(
+            input.begin(), input.end(), output.begin(),
+            [](mm_double2 v) -> mm_float2 { return mm_float2(v.x, v.y); }
+        );
+        return output;
+    }
 };
 
 } // namespace PmeSlicing

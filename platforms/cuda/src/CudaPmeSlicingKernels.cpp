@@ -1093,7 +1093,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         ;
     string prefix = "slicedNonbonded"+cu.intToString(forceIndex)+"_";
 
-    string realToFixedPoint = Platform::getOpenMMVersion()[0] == '7' ? CommonPmeSlicingKernelSources::realToFixedPoint : "";
+    string realToFixedPoint = Platform::getOpenMMVersion()[0] == '7' ? CudaPmeSlicingKernelSources::realToFixedPoint : "";
 
     int numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
@@ -1615,7 +1615,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams.getDevicePointer(), "float4");
         replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
-        cu.getBondedUtilities().addPrefixCode(CommonPmeSlicingKernelSources::bitcast);
         if (force.getIncludeDirectSpace())
             cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
@@ -1692,7 +1691,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
     // Initialize the kernel for updating parameters.
 
-    CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::bitcast+CommonPmeSlicingKernelSources::nonbondedParameters, paramsDefines);
+    CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::nonbondedParameters, paramsDefines);
     computeParamsKernel = cu.getKernel(module, "computeParameters");
     computeExclusionParamsKernel = cu.getKernel(module, "computeExclusionParameters");
     info = new ForceInfo(force);
