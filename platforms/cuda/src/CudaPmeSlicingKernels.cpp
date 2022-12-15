@@ -41,7 +41,9 @@ public:
     bool areParticlesIdentical(int particle1, int particle2) {
         double charge1 = force.getParticleCharge(particle1);
         double charge2 = force.getParticleCharge(particle2);
-        return (charge1 == charge2);
+        int subset1 = force.getParticleSubset(particle1);
+        int subset2 = force.getParticleSubset(particle2);
+        return (charge1 == charge2 && subset1 == subset2);
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
@@ -55,11 +57,17 @@ public:
         particles[1] = particle2;
     }
     bool areGroupsIdentical(int group1, int group2) {
-        int particle1, particle2;
+        int particle1, particle2, i, j, slice1, slice2;
         double chargeProd1, chargeProd2;
         force.getExceptionParameters(group1, particle1, particle2, chargeProd1);
+        i = force.getParticleSubset(particle1);
+        j = force.getParticleSubset(particle2);
+        slice1 = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
         force.getExceptionParameters(group2, particle1, particle2, chargeProd2);
-        return (chargeProd1 == chargeProd2);
+        i = force.getParticleSubset(particle1);
+        j = force.getParticleSubset(particle2);
+        slice2 = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        return (chargeProd1 == chargeProd2 && slice1 == slice2);
     }
 private:
     const SlicedPmeForce& force;
