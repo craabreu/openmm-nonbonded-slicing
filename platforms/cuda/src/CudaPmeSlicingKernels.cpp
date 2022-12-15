@@ -934,7 +934,9 @@ public:
         double charge1, charge2, sigma1, sigma2, epsilon1, epsilon2;
         force.getParticleParameters(particle1, charge1, sigma1, epsilon1);
         force.getParticleParameters(particle2, charge2, sigma2, epsilon2);
-        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        int subset1 = force.getParticleSubset(particle1);
+        int subset2 = force.getParticleSubset(particle2);
+        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2 && subset1 == subset2);
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
@@ -951,8 +953,10 @@ public:
         int particle1, particle2;
         double chargeProd1, chargeProd2, sigma1, sigma2, epsilon1, epsilon2;
         force.getExceptionParameters(group1, particle1, particle2, chargeProd1, sigma1, epsilon1);
+        int slice1 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
         force.getExceptionParameters(group2, particle1, particle2, chargeProd2, sigma2, epsilon2);
-        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        int slice2 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2 && slice1 == slice2);
     }
 private:
     const SlicedNonbondedForce& force;
@@ -1578,7 +1582,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     replacements["SUBSET2"] = prefix+"subset2";
     cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"subset", "int", 1, sizeof(int), subsets.getDevicePointer()));
     replacements["LAMBDA"] = prefix+"lambda";
-    cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, sizeOfReal, sliceLambdas.getDevicePointer()));
+    cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDevicePointer()));
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
@@ -1906,7 +1910,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         double4 boxSize = cu.getPeriodicBoxSize();
         double volume = boxSize.x*boxSize.y*boxSize.z;
         for (int slice = 0; slice < numSlices; slice++)
-            energy += dispersionCoefficients[slice]/volume;
+            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
     }
     return energy;
 }
