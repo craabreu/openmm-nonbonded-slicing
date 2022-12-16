@@ -1059,6 +1059,46 @@ private:
     int forceGroup;
 };
 
+class CudaCalcSlicedNonbondedForceKernel::DispersionCorrectionPostComputation : public CudaContext::ForcePostComputation {
+public:
+    DispersionCorrectionPostComputation(CudaContext& cu, vector<double>& dispersionCoefficients, vector<double2>& sliceLambdas, vector<string>& scalingParams, vector<int2>& sliceScalingParamDerivs, int forceGroup) :
+                cu(cu), dispersionCoefficients(dispersionCoefficients), sliceLambdas(sliceLambdas), scalingParams(scalingParams), sliceScalingParamDerivs(sliceScalingParamDerivs), forceGroup(forceGroup) {
+        numSlices = dispersionCoefficients.size();
+        hasDerivs = false;
+        for (int slice = 0; slice < numSlices; slice++)
+            hasDerivs = hasDerivs || sliceScalingParamDerivs[slice].y != -1;
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if ((groups&(1<<forceGroup)) == 0)
+            return 0;
+        // if (!cu.getWorkThread().isCurrentThread())  // OpenMM 8.0
+            cu.getWorkThread().flush();
+        double energy = 0.0;
+        double4 boxSize = cu.getPeriodicBoxSize();
+        double volume = boxSize.x*boxSize.y*boxSize.z;
+        for (int slice = 0; slice < numSlices; slice++)
+            energy += sliceLambdas[slice].y*dispersionCoefficients[slice]/volume;
+        if (hasDerivs) {
+            map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
+            for (int slice = 0; slice < numSlices; slice++) {
+                int index = sliceScalingParamDerivs[slice].y;
+                if (index != -1)
+                    energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
+            }
+        }
+        return energy;
+    }
+private:
+    CudaContext& cu;
+    vector<double>& dispersionCoefficients;
+    vector<double2>& sliceLambdas;
+    vector<string>& scalingParams;
+    bool hasDerivs;
+    vector<int2>& sliceScalingParamDerivs;
+    int forceGroup;
+    int numSlices;
+};
+
 CudaCalcSlicedNonbondedForceKernel::~CudaCalcSlicedNonbondedForceKernel() {
     ContextSelector selector(cu);
     if (sort != NULL)
@@ -1219,7 +1259,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             defines["LJ_SWITCH_C5"] = cu.doubleToString(6/pow(force.getSwitchingDistance()-force.getCutoffDistance(), 5.0));
         }
     }
-    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && !doLJPME)
+    if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && hasLJ && useCutoff && usePeriodic && !doLJPME)
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     alpha = 0;
     ewaldSelfEnergy = 0.0;
@@ -1728,6 +1768,11 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         globalParams.upload(paramValues, true);
     recomputeParams = true;
 
+    // Add post-computation for dispersion correction.
+
+    if (dispersionCoefficients.size() > 0)
+        cu.addPostComputation(new DispersionCorrectionPostComputation(cu, dispersionCoefficients, sliceLambdasVec, scalingParams, sliceScalingParamDerivsVec, force.getForceGroup()));
+
     // Initialize the kernel for updating parameters.
 
     CUmodule module = cu.createModule(CommonPmeSlicingKernelSources::nonbondedParameters, paramsDefines);
@@ -1942,20 +1987,6 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         }
     }
 
-    if (dispersionCoefficients.size() != 0 && includeDirect) {
-        double4 boxSize = cu.getPeriodicBoxSize();
-        double volume = boxSize.x*boxSize.y*boxSize.z;
-        for (int slice = 0; slice < numSlices; slice++)
-            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
-        if (sliceScalingParamDerivs.isInitialized()) {
-            map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
-            for (int slice = 0; slice < numSlices; slice++) {
-                int index = sliceScalingParamDerivsVec[slice].y;
-                if (index != -1)
-                    energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
-            }
-        }
-    }
     return energy;
 }
 

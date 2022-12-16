@@ -221,6 +221,7 @@ private:
     class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
+    class DispersionCorrectionPostComputation;
     OpenCLContext& cl;
     ForceInfo* info;
     bool hasInitializedKernel;

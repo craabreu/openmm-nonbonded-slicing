@@ -221,6 +221,7 @@ private:
     class PmePostComputation;
     class SyncStreamPreComputation;
     class SyncStreamPostComputation;
+    class DispersionCorrectionPostComputation;
     CudaContext& cu;
     ForceInfo* info;
     bool hasInitializedFFT;

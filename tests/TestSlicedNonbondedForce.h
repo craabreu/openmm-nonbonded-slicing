@@ -992,7 +992,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = 10.0;
-    const double tol = 2e-3;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
