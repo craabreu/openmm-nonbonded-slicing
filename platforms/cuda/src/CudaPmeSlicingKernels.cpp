@@ -1132,8 +1132,11 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         sliceLambdas.upload(sliceLambdasVec);
     else
         sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
-    sliceScalingParamDerivs.initialize<int2>(cu, numSlices, "sliceScalingParamDerivs");
-    sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
+
+    if (numDerivs > 0) {
+        sliceScalingParamDerivs.initialize<int2>(cu, numSlices, "sliceScalingParamDerivs");
+        sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
+    }
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -1942,13 +1945,15 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     if (dispersionCoefficients.size() != 0 && includeDirect) {
         double4 boxSize = cu.getPeriodicBoxSize();
         double volume = boxSize.x*boxSize.y*boxSize.z;
-        map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
-        for (int slice = 0; slice < numSlices; slice++) {
-            double correctionEnergy = dispersionCoefficients[slice]/volume;
-            energy += sliceLambdasVec[slice].y*correctionEnergy;
-            int index = sliceScalingParamDerivsVec[slice].y;
-            if (index != -1)
-                energyParamDerivs[scalingParams[index]] += correctionEnergy;
+        for (int slice = 0; slice < numSlices; slice++)
+            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
+        if (sliceScalingParamDerivs.isInitialized()) {
+            map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
+            for (int slice = 0; slice < numSlices; slice++) {
+                int index = sliceScalingParamDerivsVec[slice].y;
+                if (index != -1)
+                    energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
+            }
         }
     }
     return energy;
