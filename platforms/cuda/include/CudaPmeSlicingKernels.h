@@ -290,10 +290,11 @@ private:
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;
-    vector<int2> sliceScalingParams, sliceScalingParamDerivs;
+    vector<int2> sliceScalingParams, sliceScalingParamDerivsVec;
     vector<double> dispersionCoefficients;
     CudaArray subsets;
     CudaArray sliceLambdas;
+    CudaArray sliceScalingParamDerivs;
 
     vector<float2> double2Tofloat2(vector<double2> input) {
         vector<float2> output(input.size());

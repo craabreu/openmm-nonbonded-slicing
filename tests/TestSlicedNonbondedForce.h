@@ -1139,33 +1139,33 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     assertEnergy(state1, state2, TOL);
     assertForces(state1, state2, TOL);
 
-    // // Derivatives
+    // Derivatives
 
-    // sliced->addScalingParameterDerivative(param1);
-    // sliced->addScalingParameterDerivative(param2);
-    // context2.reinitialize(true);
-    // state2 = context2.getState(State::ParameterDerivatives);
-    // auto derivatives = state2.getEnergyParameterDerivatives();
-    // assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], TOL);
+    sliced->addScalingParameterDerivative(param1);
+    sliced->addScalingParameterDerivative(param2);
+    context2.reinitialize(true);
+    state2 = context2.getState(State::ParameterDerivatives);
+    auto derivatives = state2.getEnergyParameterDerivatives();
+    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], TOL);
 
-    // // Sum of derivatives
+    // Sum of derivatives
 
-    // for (int k = 0; k < nonbonded->getNumParticles(); k++)
-    //     nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
-    // for (int k = 0; k < nonbonded->getNumExceptions(); k++)
-    //     nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
-    // nonbonded->updateParametersInContext(context1);
-    // state1 = context1.getState(State::Energy | State::Forces);
-    // double energy = state1.getPotentialEnergy();
+    for (int k = 0; k < nonbonded->getNumParticles(); k++)
+        nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
+    for (int k = 0; k < nonbonded->getNumExceptions(); k++)
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
+    nonbonded->updateParametersInContext(context1);
+    state1 = context1.getState(State::Energy | State::Forces);
+    double energy = state1.getPotentialEnergy();
 
-    // sliced->addGlobalParameter("remainder", 1.0);
-    // sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
-    // sliced->addScalingParameterDerivative("remainder");
-    // context2.reinitialize(true);
-    // state2 = context2.getState(State::Energy | State::ParameterDerivatives);
-    // derivatives = state2.getEnergyParameterDerivatives();
-    // double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
-    // assertEqualTo(energy, sum, TOL);
+    sliced->addGlobalParameter("remainder", 1.0);
+    sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
+    sliced->addScalingParameterDerivative("remainder");
+    context2.reinitialize(true);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
+    derivatives = state2.getEnergyParameterDerivatives();
+    double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
+    assertEqualTo(energy, sum, TOL);
 }
 
 void runPlatformTests();
@@ -1175,7 +1175,7 @@ int main(int argc, char* argv[]) {
         NonbondedForce::NoCutoff,
         NonbondedForce::CutoffNonPeriodic,
         NonbondedForce::CutoffPeriodic,
-        NonbondedForce::Ewald,
+        // NonbondedForce::Ewald,
         NonbondedForce::PME,
         NonbondedForce::LJPME
     };

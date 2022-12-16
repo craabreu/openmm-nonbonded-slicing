@@ -1,6 +1,6 @@
 {
     int slice = SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
-    real coulombLambda = LAMBDA[slice].x;
+    real clLambda = LAMBDA[slice].x;
     real ljLambda = LAMBDA[slice].y;
 #if USE_EWALD
     unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
@@ -22,7 +22,7 @@
     const real t = RECIP(1.0f+0.3275911f*alphaR);
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
-    real coulombEnergy = prefactor*erfcAlphaR;
+    real clEnergy = prefactor*erfcAlphaR;
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
     real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
@@ -72,13 +72,12 @@
     // The multiplicative part of the potential shift
     ljEnergy += MULTSHIFT6*c6;
 #endif
-    tempForce += coulombLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? ljLambda*ljEnergy + coulombLambda*coulombEnergy : 0;
+    tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempEnergy += includeInteraction ? ljLambda*ljEnergy + clLambda*clEnergy : 0;
 #else
-    tempForce = coulombLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? coulombLambda*coulombEnergy : 0;
+    tempForce = clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempEnergy += includeInteraction ? clLambda*clEnergy : 0;
 #endif
-    dEdR += includeInteraction ? tempForce*invR*invR : 0;
 #else
 #ifdef USE_CUTOFF
     unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
@@ -109,15 +108,16 @@
 #if HAS_COULOMB
   #ifdef USE_CUTOFF
     const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2;
-    real coulombEnergy = prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C);
-    tempForce += coulombLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
+    real clEnergy = includeInteraction ? prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C) : 0;
+    tempForce += clLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
   #else
     const real prefactor = ONE_4PI_EPS0*CHARGE1*CHARGE2*invR;
-    real coulombEnergy = prefactor;
-    tempForce += coulombLambda*prefactor;
+    real clEnergy = includeInteraction ? prefactor : 0;
+    tempForce += clLambda*prefactor;
   #endif
-    tempEnergy += includeInteraction ? coulombLambda*coulombEnergy : 0;
+    tempEnergy += clLambda*clEnergy;
 #endif
-    dEdR += includeInteraction ? tempForce*invR*invR : 0;
 #endif
+dEdR += includeInteraction ? tempForce*invR*invR : 0;
+COMPUTE_DERIVATIVES
 }

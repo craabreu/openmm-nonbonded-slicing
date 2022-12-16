@@ -1100,7 +1100,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     numSlices = force.getNumSlices();
     sliceLambdasVec.resize(numSlices, make_double2(1, 1));
     sliceScalingParams.resize(numSlices, make_int2(-1, -1));
-    sliceScalingParamDerivs.resize(numSlices, make_int2(-1, -1));
+    sliceScalingParamDerivsVec.resize(numSlices, make_int2(-1, -1));
     subsetSelfEnergy.resize(numSlices, make_double2(0, 0));
 
     subsetsVec.resize(numParticles);
@@ -1110,21 +1110,20 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     subsets.upload(subsetsVec);
 
     int numDerivs = force.getNumScalingParameterDerivatives();
-    vector<string> derivs(numDerivs);
+    set<string> derivs;
     for (int i = 0; i < numDerivs; i++)
-        derivs[i] = force.getScalingParameterDerivativeName(i);
+        derivs.insert(force.getScalingParameterDerivativeName(i));
 
     int numScalingParams = force.getNumScalingParameters();
     scalingParams.resize(numScalingParams);
     for (int index = 0; index < numScalingParams; index++) {
-        int i, j;
+        int subset1, subset2;
         bool includeLJ, includeCoulomb;
-        force.getScalingParameter(index, scalingParams[index], i, j, includeLJ, includeCoulomb);
-        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeLJ, includeCoulomb);
+        int slice = force.getSliceIndex(subset1, subset2);
         sliceScalingParams[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
-        int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
-        if (pos < numDerivs)
-            sliceScalingParamDerivs[slice] = make_int2(includeCoulomb ? pos : -1, includeLJ ? pos : -1);
+        if (derivs.find(scalingParams[index]) != derivs.end())
+            sliceScalingParamDerivsVec[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
     }
 
     size_t sizeOfReal = cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
@@ -1133,6 +1132,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         sliceLambdas.upload(sliceLambdasVec);
     else
         sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
+    sliceScalingParamDerivs.initialize<int2>(cu, numSlices, "sliceScalingParamDerivs");
+    sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -1581,6 +1582,24 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     cu.getNonbondedUtilities().addParameter(CudaNonbondedUtilities::ParameterInfo(prefix+"subset", "int", 1, sizeof(int), subsets.getDevicePointer()));
     replacements["LAMBDA"] = prefix+"lambda";
     cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDevicePointer()));
+    stringstream code;
+    if (numDerivs > 0) {
+        string derivIndices = prefix+"derivIndices";
+        cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(derivIndices, "int", 2, 2*sizeof(int), sliceScalingParamDerivs.getDevicePointer()));
+        code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+        for (int slice = 0; slice < numSlices; slice++) {
+            int2 indices = sliceScalingParamDerivsVec[slice];
+            int index = max(indices.x, indices.y);
+            if (index != -1) {
+                string paramDeriv = cu.getNonbondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                if (hasCoulomb && indices.x == index)
+                    code<<paramDeriv<<" += (which.x == "<<index<<" ? interactionScale*clEnergy : 0);"<<endl;
+                if (hasLJ && indices.y == index)
+                    code<<paramDeriv<<" += (which.y == "<<index<<" ? interactionScale*ljEnergy : 0);"<<endl;
+            }
+        }
+    }
+    replacements["COMPUTE_DERIVATIVES"] = code.str();
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
@@ -1615,6 +1634,23 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams.getDevicePointer(), "float4");
         replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
+        stringstream code;
+        if (numDerivs > 0) {
+            string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int2");
+            code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+            for (int slice = 0; slice < numSlices; slice++) {
+                int2 indices = sliceScalingParamDerivsVec[slice];
+                int index = max(indices.x, indices.y);
+                if (index != -1) {
+                    string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                    if (hasCoulomb && indices.x == index)
+                        code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
+                    if (hasLJ && indices.y == index)
+                        code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                }
+            }
+        }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())
             cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
@@ -1906,8 +1942,14 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     if (dispersionCoefficients.size() != 0 && includeDirect) {
         double4 boxSize = cu.getPeriodicBoxSize();
         double volume = boxSize.x*boxSize.y*boxSize.z;
-        for (int slice = 0; slice < numSlices; slice++)
-            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
+        map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
+        for (int slice = 0; slice < numSlices; slice++) {
+            double correctionEnergy = dispersionCoefficients[slice]/volume;
+            energy += sliceLambdasVec[slice].y*correctionEnergy;
+            int index = sliceScalingParamDerivsVec[slice].y;
+            if (index != -1)
+                energyParamDerivs[scalingParams[index]] += correctionEnergy;
+        }
     }
     return energy;
 }

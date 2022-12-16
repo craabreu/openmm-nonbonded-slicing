@@ -1130,7 +1130,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     numSlices = force.getNumSlices();
     sliceLambdasVec.resize(numSlices, mm_double2(1, 1));
     sliceScalingParams.resize(numSlices, mm_int2(-1, -1));
-    sliceScalingParamDerivs.resize(numSlices, mm_int2(-1, -1));
+    sliceScalingParamDerivsVec.resize(numSlices, mm_int2(-1, -1));
     subsetSelfEnergy.resize(numSlices, mm_double2(0, 0));
 
     subsetsVec.resize(numParticles);
@@ -1140,21 +1140,20 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     subsets.upload(subsetsVec);
 
     int numDerivs = force.getNumScalingParameterDerivatives();
-    vector<string> derivs(numDerivs);
+    set<string> derivs;
     for (int i = 0; i < numDerivs; i++)
-        derivs[i] = force.getScalingParameterDerivativeName(i);
+        derivs.insert(force.getScalingParameterDerivativeName(i));
 
     int numScalingParams = force.getNumScalingParameters();
     scalingParams.resize(numScalingParams);
     for (int index = 0; index < numScalingParams; index++) {
-        int i, j;
+        int subset1, subset2;
         bool includeLJ, includeCoulomb;
-        force.getScalingParameter(index, scalingParams[index], i, j, includeLJ, includeCoulomb);
-        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeLJ, includeCoulomb);
+        int slice = force.getSliceIndex(subset1, subset2);
         sliceScalingParams[slice] = mm_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
-        int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
-        if (pos < numDerivs)
-            sliceScalingParamDerivs[slice] = mm_int2(includeCoulomb ? pos : -1, includeLJ ? pos : -1);
+        if (derivs.find(scalingParams[index]) != derivs.end())
+            sliceScalingParamDerivsVec[slice] = mm_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
     }
 
     size_t sizeOfReal = cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
@@ -1163,6 +1162,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         sliceLambdas.upload(sliceLambdasVec);
     else
         sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
+    sliceScalingParamDerivs.initialize<mm_int2>(cl, numSlices, "sliceScalingParamDerivs");
+    sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -1556,6 +1557,24 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"subset", "int", 1, sizeof(int), subsets.getDeviceBuffer()));
     replacements["LAMBDA"] = prefix+"lambda";
     cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDeviceBuffer()));
+    stringstream code;
+    if (numDerivs > 0) {
+        string derivIndices = prefix+"derivIndices";
+        cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(derivIndices, "int", 2, 2*sizeof(int), sliceScalingParamDerivs.getDeviceBuffer()));
+        code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+        for (int slice = 0; slice < numSlices; slice++) {
+            mm_int2 indices = sliceScalingParamDerivsVec[slice];
+            int index = max(indices.x, indices.y);
+            if (index != -1) {
+                string paramDeriv = cl.getNonbondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                if (hasCoulomb && indices.x == index)
+                    code<<paramDeriv<<" += (which.x == "<<index<<" ? interactionScale*clEnergy : 0);"<<endl;
+                if (hasLJ && indices.y == index)
+                    code<<paramDeriv<<" += (which.y == "<<index<<" ? interactionScale*ljEnergy : 0);"<<endl;
+            }
+        }
+    }
+    replacements["COMPUTE_DERIVATIVES"] = code.str();
     source = cl.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cl.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup());
@@ -1590,6 +1609,23 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
         replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+        stringstream code;
+        if (numDerivs > 0) {
+            string derivIndices = cl.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDeviceBuffer(), "int2");
+            code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+            for (int slice = 0; slice < numSlices; slice++) {
+                mm_int2 indices = sliceScalingParamDerivsVec[slice];
+                int index = max(indices.x, indices.y);
+                if (index != -1) {
+                    string paramDeriv = cl.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                    if (hasCoulomb && indices.x == index)
+                        code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
+                    if (hasLJ && indices.y == index)
+                        code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                }
+            }
+        }
+        replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())
             cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
@@ -2028,8 +2064,14 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     if (dispersionCoefficients.size() != 0 && includeDirect) {
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         double volume = boxSize.x*boxSize.y*boxSize.z;
-        for (int slice = 0; slice < numSlices; slice++)
-            energy += sliceLambdasVec[slice].y*dispersionCoefficients[slice]/volume;
+        map<string, double>& energyParamDerivs = cl.getEnergyParamDerivWorkspace();
+        for (int slice = 0; slice < numSlices; slice++) {
+            double correctionEnergy = dispersionCoefficients[slice]/volume;
+            energy += sliceLambdasVec[slice].y*correctionEnergy;
+            int index = sliceScalingParamDerivsVec[slice].y;
+            if (index != -1)
+                energyParamDerivs[scalingParams[index]] += correctionEnergy;
+        }
     }
     return energy;
 }

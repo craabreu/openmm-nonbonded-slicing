@@ -294,10 +294,11 @@ private:
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
-    vector<mm_int2> sliceScalingParams, sliceScalingParamDerivs;
+    vector<mm_int2> sliceScalingParams, sliceScalingParamDerivsVec;
     vector<double> dispersionCoefficients;
     OpenCLArray subsets;
     OpenCLArray sliceLambdas;
+    OpenCLArray sliceScalingParamDerivs;
 
     vector<mm_float2> double2Tofloat2(vector<mm_double2> input) {
         vector<mm_float2> output(input.size());
