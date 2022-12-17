@@ -45,7 +45,7 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
     // PME_ORDER blocks, where the data for each block is stored together.  We
     // can ensure that all threads write to the same block at the same time,
     // which leads to better coalescing of writes.
-    
+
     LOCAL int zindexTable[GRID_SIZE_Z+PME_ORDER];
     int blockSize = (int) ceil(GRID_SIZE_Z/(real) PME_ORDER);
     for (int i = LOCAL_ID; i < GRID_SIZE_Z+PME_ORDER; i += LOCAL_SIZE) {
@@ -54,10 +54,10 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
         zindexTable[i] = zindex/PME_ORDER + block*GRID_SIZE_X*GRID_SIZE_Y*blockSize;
     }
     SYNC_THREADS;
-    
+
     // Process the atoms in spatially sorted order.  This improves efficiency when writing
     // the grid values.
-    
+
     real3 data[PME_ORDER];
     const real scale = RECIP((real) (PME_ORDER-1));
     for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
@@ -267,7 +267,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
             kx = ((kx == 0) ? kx : GRID_SIZE_X-kx);
             ky = ((ky == 0) ? ky : GRID_SIZE_Y-ky);
             kz = GRID_SIZE_Z-kz;
-        } 
+        }
         int indexInHalfComplexGrid = kz + ky*(GRID_SIZE_Z/2+1)+kx*(GRID_SIZE_Y*(GRID_SIZE_Z/2+1));
         real2 grid = pmeGrid[indexInHalfComplexGrid];
 #ifndef USE_LJPME
@@ -275,7 +275,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
 #endif
             energy += eterm*(grid.x*grid.x + grid.y*grid.y);
     }
-#if defined(USE_PME_STREAM) && !defined(USE_LJPME)
+#if !defined(USE_LJPME)
     energyBuffer[GLOBAL_ID] = 0.5f*energy;
 #else
     energyBuffer[GLOBAL_ID] += 0.5f*energy;
@@ -297,10 +297,10 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
     const real scale = RECIP((real) (PME_ORDER-1));
-    
+
     // Process the atoms in spatially sorted order.  This improves cache performance when loading
     // the grid values.
-    
+
     for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
         int atom = pmeAtomGridIndex[i].x;
         real3 force = make_real3(0);
@@ -346,14 +346,14 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
             xbase = xbase*GRID_SIZE_Y*GRID_SIZE_Z;
             real dx = data[ix].x;
             real ddx = ddata[ix].x;
-            
+
             for (int iy = 0; iy < PME_ORDER; iy++) {
                 int ybase = gridIndex.y+iy;
                 ybase -= (ybase >= GRID_SIZE_Y ? GRID_SIZE_Y : 0);
                 ybase = xbase + ybase*GRID_SIZE_Z;
                 real dy = data[iy].y;
                 real ddy = ddata[iy].y;
-                
+
                 for (int iz = 0; iz < PME_ORDER; iz++) {
                     int zindex = gridIndex.z+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);

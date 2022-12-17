@@ -220,6 +220,7 @@ private:
     class PmePreComputation;
     class PmePostComputation;
     class SyncStreamPreComputation;
+    class AddEnergyPostComputation;
     class SyncStreamPostComputation;
     class DispersionCorrectionPostComputation;
     CudaContext& cu;

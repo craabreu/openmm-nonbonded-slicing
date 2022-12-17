@@ -221,6 +221,7 @@ private:
     class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
+    class AddEnergyPostComputation;
     class DispersionCorrectionPostComputation;
     OpenCLContext& cl;
     ForceInfo* info;
@@ -257,7 +258,7 @@ private:
     OpenCLVkFFT3D* dispersionFft;
     Kernel cpuPme;
     PmeIO* pmeio;
-    SyncQueuePostComputation* syncQueue;
+    AddEnergyPostComputation* addEnergy;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
