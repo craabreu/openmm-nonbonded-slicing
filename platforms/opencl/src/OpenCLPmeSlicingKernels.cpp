@@ -1372,13 +1372,15 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cl.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
             for (int i = 0; i < numParticles; i++)
-                ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+                subsetSelfEnergy[subsetsVec[i]].x -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
             if (doLJPME) {
                 paramsDefines["INCLUDE_LJPME"] = "1";
                 paramsDefines["LJPME_SELF_ENERGY_SCALE"] = cl.doubleToString(pow(dispersionAlpha, 6)/3.0);
                 for (int i = 0; i < numParticles; i++)
-                    ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
+                    subsetSelfEnergy[subsetsVec[i]].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
             }
+            for (int i = 0; i < numSubsets; i++)
+                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
             pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
             pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
             pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
@@ -1566,6 +1568,24 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cl.doubleToString(dispersionAlpha);
+            replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+            stringstream code;
+            if (numDerivs > 0) {
+                string derivIndices = cl.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDeviceBuffer(), "int2");
+                code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+                for (int slice = 0; slice < numSlices; slice++) {
+                    mm_int2 indices = sliceScalingParamDerivsVec[slice];
+                    int index = max(indices.x, indices.y);
+                    if (index != -1) {
+                        string paramDeriv = cl.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                        if (indices.x == index)
+                            code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
+                        if (doLJPME && indices.y == index)
+                            code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                    }
+                }
+            }
+            replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
                 cl.getBondedUtilities().addInteraction(atoms, cl.replaceStrings(CommonPmeSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
         }
@@ -1745,7 +1765,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
 
     // Add post-computation for dispersion correction.
 
-    if (dispersionCoefficients.size() > 0)
+    if (dispersionCoefficients.size() > 0 && force.getIncludeDirectSpace())
         cl.addPostComputation(new DispersionCorrectionPostComputation(cl, dispersionCoefficients, sliceLambdasVec, scalingParams, sliceScalingParamDerivsVec, force.getForceGroup()));
 
     // Initialize the kernel for updating parameters.
@@ -1787,9 +1807,10 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             computeExclusionParamsKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(1, charges.getDeviceBuffer());
             computeExclusionParamsKernel.setArg<cl::Buffer>(2, sigmaEpsilon.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl_int>(3, exclusionParams.getSize());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(4, exclusionAtoms.getDeviceBuffer());
-            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionParams.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl_int>(4, exclusionParams.getSize());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(5, exclusionAtoms.getDeviceBuffer());
+            computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionParams.getDeviceBuffer());
         }
         if (cosSinSums.isInitialized()) {
             ewaldSumsKernel.setArg<cl::Buffer>(0, cl.getEnergyBuffer().getDeviceBuffer());

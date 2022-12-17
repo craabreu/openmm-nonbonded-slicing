@@ -1591,6 +1591,24 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cu.doubleToString(dispersionAlpha);
+            replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
+            stringstream code;
+            if (numDerivs > 0) {
+                string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int2");
+                code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+                for (int slice = 0; slice < numSlices; slice++) {
+                    int2 indices = sliceScalingParamDerivsVec[slice];
+                    int index = max(indices.x, indices.y);
+                    if (index != -1) {
+                        string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
+                        if (indices.x == index)
+                            code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
+                        if (doLJPME && indices.y == index)
+                            code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                    }
+                }
+            }
+            replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
                 cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonPmeSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
         }
@@ -1770,7 +1788,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
     // Add post-computation for dispersion correction.
 
-    if (dispersionCoefficients.size() > 0)
+    if (dispersionCoefficients.size() > 0 && force.getIncludeDirectSpace())
         cu.addPostComputation(new DispersionCorrectionPostComputation(cu, dispersionCoefficients, sliceLambdasVec, scalingParams, sliceScalingParamDerivsVec, force.getForceGroup()));
 
     // Initialize the kernel for updating parameters.
@@ -1846,7 +1864,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         if (exclusionParams.isInitialized()) {
             int numExclusions = exclusionParams.getSize();
             vector<void*> exclusionParamsArgs = {&cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
-                    &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionParams.getDevicePointer()};
+                    &subsets.getDevicePointer(), &numExclusions, &exclusionAtoms.getDevicePointer(), &exclusionParams.getDevicePointer()};
             cu.executeKernel(computeExclusionParamsKernel, &exclusionParamsArgs[0], numExclusions);
         }
         if (usePmeStream) {
