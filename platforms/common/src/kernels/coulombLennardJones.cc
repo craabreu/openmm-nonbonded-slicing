@@ -22,7 +22,7 @@
     const real t = RECIP(1.0f+0.3275911f*alphaR);
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
-    real clEnergy = prefactor*erfcAlphaR;
+    real clEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
     real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
@@ -32,7 +32,7 @@
     real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
     real epssig6 = sig6*eps;
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
-    real ljEnergy = epssig6*(sig6 - 1.0f);
+    real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
         real x = r-LJ_SWITCH_CUTOFF;
@@ -57,7 +57,7 @@
     const real eprefac = 1.0f + dar2 + 0.5f*dar4;
     const real dprefac = eprefac + dar6/6.0f;
     // The multiplicative grid term
-    ljEnergy += coef*(1.0f - expDar2*eprefac);
+    real ljPmeEnergy = coef*(1.0f - expDar2*eprefac);
     tempForce += 6.0f*coef*(1.0f - expDar2*dprefac);
     tempForce *= ljLambda;
     // The potential shift accounts for the step at the cutoff introduced by the
@@ -68,15 +68,16 @@
     sig6 = sig2*sig2*sig2*INVCUT6;
     epssig6 = eps*sig6;
     // The additive part of the potential shift
-    ljEnergy += epssig6*(1.0f - sig6);
+    ljPmeEnergy += epssig6*(1.0f - sig6);
     // The multiplicative part of the potential shift
-    ljEnergy += MULTSHIFT6*c6;
+    ljPmeEnergy += MULTSHIFT6*c6;
+    ljEnergy += includeInteraction ? ljPmeEnergy : 0;
 #endif
     tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? ljLambda*ljEnergy + clLambda*clEnergy : 0;
+    tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
 #else
     tempForce = clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    tempEnergy += includeInteraction ? clLambda*clEnergy : 0;
+    tempEnergy += clLambda*clEnergy;
 #endif
 #else
 #ifdef USE_CUTOFF

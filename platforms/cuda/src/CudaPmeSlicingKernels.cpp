@@ -1155,10 +1155,10 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     sliceScalingParamDerivsVec.resize(numSlices, make_int2(-1, -1));
     subsetSelfEnergy.resize(numSlices, make_double2(0, 0));
 
-    subsetsVec.resize(numParticles);
+    subsetsVec.resize(cu.getPaddedNumAtoms(), 0);
     for (int i = 0; i < numParticles; i++)
         subsetsVec[i] = force.getParticleSubset(i);
-    subsets.initialize<int>(cu, numParticles, "subsets");
+    subsets.initialize<int>(cu, cu.getPaddedNumAtoms(), "subsets");
     subsets.upload(subsetsVec);
 
     int numDerivs = force.getNumScalingParameterDerivatives();

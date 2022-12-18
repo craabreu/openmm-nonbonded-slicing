@@ -1174,7 +1174,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     int forceIndex;
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
-    string prefix = "nonbonded"+cl.intToString(forceIndex)+"_";
+    string prefix = "slicedNonbonded"+cl.intToString(forceIndex)+"_";
 
     realToFixedPoint = Platform::getOpenMMVersion()[0] == '7' ? OpenCLPmeSlicingKernelSources::realToFixedPoint : "";
 
@@ -1186,10 +1186,10 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     sliceScalingParamDerivsVec.resize(numSlices, mm_int2(-1, -1));
     subsetSelfEnergy.resize(numSlices, mm_double2(0, 0));
 
-    subsetsVec.resize(numParticles);
+    subsetsVec.resize(cl.getPaddedNumAtoms(), 0);
     for (int i = 0; i < numParticles; i++)
         subsetsVec[i] = force.getParticleSubset(i);
-    subsets.initialize<int>(cl, numParticles, "subsets");
+    subsets.initialize<int>(cl, cl.getPaddedNumAtoms(), "subsets");
     subsets.upload(subsetsVec);
 
     int numDerivs = force.getNumScalingParameterDerivatives();

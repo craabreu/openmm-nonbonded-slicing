@@ -992,6 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = 10.0;
+    double tol = platform.getPropertyDefaultValue("Precision") == string("single") ? 1e-4 : 1e-5;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
@@ -1083,22 +1084,22 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
     State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Reciprocal space
 
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Overall
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     double energy_lambda_one = state1.getPotentialEnergy();
 
@@ -1117,8 +1118,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     double energy_lambda_zero = state1.getPotentialEnergy();
 
@@ -1135,8 +1136,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Derivatives
 
@@ -1145,7 +1146,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     auto derivatives = state2.getEnergyParameterDerivatives();
-    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], TOL);
+    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], tol);
 
     // Sum of derivatives
 
@@ -1164,7 +1165,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     derivatives = state2.getEnergyParameterDerivatives();
     double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
-    assertEqualTo(energy, sum, TOL);
+    assertEqualTo(energy, sum, tol);
 }
 
 void runPlatformTests();
