@@ -249,6 +249,7 @@ private:
     CudaArray pmeDispersionBsplineModuliZ;
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
+    CudaArray ljpmeEnergyBuffer;
     CudaSort* sort;
     Kernel cpuPme;
     PmeIO* pmeio;

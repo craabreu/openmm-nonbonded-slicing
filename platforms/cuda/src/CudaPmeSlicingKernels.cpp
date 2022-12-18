@@ -1051,14 +1051,14 @@ private:
 
 class CudaCalcSlicedNonbondedForceKernel::AddEnergyPostComputation : public CudaContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, int forceGroup) : cu(cu),
-            addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
+    AddEnergyPostComputation(CudaContext& cu, CUfunction addEnergyKernel, CudaArray& pmeEnergyBuffer, CudaArray& ljpmeEnergyBuffer, CudaArray& sliceLambdas, int forceGroup) : cu(cu),
+            addEnergyKernel(addEnergyKernel), pmeEnergyBuffer(pmeEnergyBuffer), ljpmeEnergyBuffer(ljpmeEnergyBuffer), sliceLambdas(sliceLambdas), forceGroup(forceGroup) {
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             if (includeEnergy) {
                 int bufferSize = pmeEnergyBuffer.getSize();
-                void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &bufferSize};
+                void* args[] = {&pmeEnergyBuffer.getDevicePointer(), &ljpmeEnergyBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &sliceLambdas.getDevicePointer(), &bufferSize};
                 cu.executeKernel(addEnergyKernel, args, bufferSize);
             }
         }
@@ -1068,6 +1068,8 @@ private:
     CudaContext& cu;
     CUfunction addEnergyKernel;
     CudaArray& pmeEnergyBuffer;
+    CudaArray& ljpmeEnergyBuffer;
+    CudaArray& sliceLambdas;
     int forceGroup;
 };
 
@@ -1452,19 +1454,21 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
                 pmeEnergyBuffer.initialize(cu, cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
-                cu.addAutoclearBuffer(pmeEnergyBuffer);
+                cu.clearBuffer(pmeEnergyBuffer);
                 sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
                 int cufftVersion;
                 cufftGetVersion(&cufftVersion);
                 useCudaFFT = force.getUseCudaFFT() && (cufftVersion >= 7050); // There was a critical bug in version 7.0
-                if (useCudaFFT) {
+                if (useCudaFFT)
                     fft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, 1, true, pmeGrid1, pmeGrid2);
-                    if (doLJPME)
-                        dispersionFft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true, pmeGrid1, pmeGrid2);
-                }
-                else {
+                else
                     fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, 1, true, pmeGrid1, pmeGrid2);
-                    if (doLJPME)
+                if (doLJPME) {
+                    ljpmeEnergyBuffer.initialize(cu, cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize, energyElementSize, "ljpmeEnergyBuffer");
+                    cu.clearBuffer(ljpmeEnergyBuffer);
+                    if (useCudaFFT)
+                        dispersionFft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true, pmeGrid1, pmeGrid2);
+                    else
                         dispersionFft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true, pmeGrid1, pmeGrid2);
                 }
 
@@ -1490,7 +1494,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                     cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                     cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
                 }
-                cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, recipForceGroup));
+                cu.addPostComputation(new AddEnergyPostComputation(cu, cu.getKernel(module, "addEnergy"), pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, recipForceGroup));
                 hasInitializedFFT = true;
 
                 // Initialize the b-spline moduli.
@@ -1977,7 +1981,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
                 cu.executeKernel(pmeDispersionGridIndexKernel, gridIndexArgs, cu.getNumAtoms());
 
                 sort->sort(pmeAtomGridIndex);
-                cu.clearBuffer(pmeEnergyBuffer);
+                // cu.clearBuffer(ljpmeEnergyBuffer);  // Is this necessary?
             }
 
             cu.clearBuffer(pmeGrid2);
@@ -1993,7 +1997,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             dispersionFft->execFFT(true);
 
             if (includeEnergy) {
-                void* computeEnergyArgs[] = {&pmeGrid2.getDevicePointer(), &pmeEnergyBuffer.getDevicePointer(),
+                void* computeEnergyArgs[] = {&pmeGrid2.getDevicePointer(), &ljpmeEnergyBuffer.getDevicePointer(),
                         &pmeDispersionBsplineModuliX.getDevicePointer(), &pmeDispersionBsplineModuliY.getDevicePointer(), &pmeDispersionBsplineModuliZ.getDevicePointer(),
                         recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2]};
                 cu.executeKernel(pmeEvalDispersionEnergyKernel, computeEnergyArgs, dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ);

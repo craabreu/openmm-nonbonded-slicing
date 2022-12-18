@@ -1096,14 +1096,16 @@ private:
 
 class OpenCLCalcSlicedNonbondedForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, int forceGroup) : cl(cl),
-            pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
+    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& ljpmeEnergyBuffer, OpenCLArray& sliceLambdas, int forceGroup) : cl(cl),
+            pmeEnergyBuffer(pmeEnergyBuffer), ljpmeEnergyBuffer(ljpmeEnergyBuffer), sliceLambdas(sliceLambdas), forceGroup(forceGroup) {
     }
     void setKernel(cl::Kernel kernel) {
         addEnergyKernel = kernel;
         addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(1, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(2, pmeEnergyBuffer.getSize());
+        addEnergyKernel.setArg<cl::Buffer>(1, ljpmeEnergyBuffer.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(3, sliceLambdas.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(4, pmeEnergyBuffer.getSize());
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
@@ -1116,6 +1118,8 @@ private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
     OpenCLArray& pmeEnergyBuffer;
+    OpenCLArray& ljpmeEnergyBuffer;
+    OpenCLArray& sliceLambdas;
     int forceGroup;
 };
 
@@ -1449,11 +1453,14 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                 pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
                 pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
-                cl.addAutoclearBuffer(pmeEnergyBuffer);
+                cl.clearBuffer(pmeEnergyBuffer);
                 sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
                 fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, 1, true, pmeGrid1, pmeGrid2);
-                if (doLJPME)
+                if (doLJPME) {
+                    ljpmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "ljpmeEnergyBuffer");
+                    cl.clearBuffer(ljpmeEnergyBuffer);
                     dispersionFft = new OpenCLVkFFT3D(cl, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true, pmeGrid1, pmeGrid2);
+                }
 
                 string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
                 bool isNvidia = (vendor.size() >= 6 && vendor.substr(0, 6) == "NVIDIA");
@@ -1467,7 +1474,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                     cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
                     cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
                 }
-                cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, recipForceGroup));
+                cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, recipForceGroup));
 
                 // Initialize the b-spline moduli.
 
@@ -1899,7 +1906,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionConvolutionKernel.setArg<cl::Buffer>(2, pmeDispersionBsplineModuliY.getDeviceBuffer());
                 pmeDispersionConvolutionKernel.setArg<cl::Buffer>(3, pmeDispersionBsplineModuliZ.getDeviceBuffer());
                 pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
-                pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(1, pmeEnergyBuffer.getDeviceBuffer());
+                pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(1, ljpmeEnergyBuffer.getDeviceBuffer());
                 pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(2, pmeDispersionBsplineModuliX.getDeviceBuffer());
                 pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(3, pmeDispersionBsplineModuliY.getDeviceBuffer());
                 pmeDispersionEvalEnergyKernel.setArg<cl::Buffer>(4, pmeDispersionBsplineModuliZ.getDeviceBuffer());
@@ -2117,7 +2124,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
                 pmeDispersionEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
             }
-            if (!hasCoulomb) cl.clearBuffer(pmeEnergyBuffer);
+            // if (!hasCoulomb) cl.clearBuffer(ljpmeEnergyBuffer);  // Is this necessary?
             if (includeEnergy)
                 cl.executeKernel(pmeDispersionEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
             cl.executeKernel(pmeDispersionConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);

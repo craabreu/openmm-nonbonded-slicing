@@ -395,7 +395,8 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
+KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL const mixed* RESTRICT ljpmeEnergyBuffer,
+        GLOBAL mixed* RESTRICT energyBuffer, const GLOBAL real* RESTRICT sliceLambdas, int bufferSize) {
     for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
         energyBuffer[i] += pmeEnergyBuffer[i];
 }
