@@ -1105,7 +1105,7 @@ public:
         addEnergyKernel.setArg<cl::Buffer>(1, ljpmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyBuffer().getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(3, sliceLambdas.getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(4, pmeEnergyBuffer.getSize());
+        addEnergyKernel.setArg<cl_int>(4, pmeEnergyBuffer.getSize()/sliceLambdas.getSize());
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
@@ -1400,6 +1400,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                 ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
             pmeDefines["PME_ORDER"] = cl.intToString(PmeOrder);
             pmeDefines["NUM_ATOMS"] = cl.intToString(numParticles);
+            pmeDefines["NUM_SUBSETS"] = cl.intToString(numSubsets);
+            pmeDefines["NUM_SLICES"] = cl.intToString(numSlices);
             pmeDefines["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
             pmeDefines["RECIP_EXP_FACTOR"] = cl.doubleToString(M_PI*M_PI/(alpha*alpha));
             pmeDefines["GRID_SIZE_X"] = cl.intToString(gridSizeX);
@@ -1432,10 +1434,10 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
 
                 int elementSize = (cl.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
                 int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
-                int gridElements = gridSizeX*gridSizeY*roundedZSize;
+                int gridElements = gridSizeX*gridSizeY*roundedZSize*numSubsets;
                 if (doLJPME) {
                     roundedZSize = PmeOrder*(int) ceil(dispersionGridSizeZ/(double) PmeOrder);
-                    gridElements = max(gridElements, dispersionGridSizeX*dispersionGridSizeY*roundedZSize);
+                    gridElements = max(gridElements, dispersionGridSizeX*dispersionGridSizeY*roundedZSize*numSubsets);
                 }
                 pmeGrid1.initialize(cl, gridElements, 2*elementSize, "pmeGrid1");
                 pmeGrid2.initialize(cl, gridElements, 2*elementSize, "pmeGrid2");
@@ -1452,14 +1454,15 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                 pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
                 pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-                pmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
+                int bufferSize = numSlices*cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+                pmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "pmeEnergyBuffer");
                 cl.clearBuffer(pmeEnergyBuffer);
                 sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
-                fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, 1, true, pmeGrid1, pmeGrid2);
+                fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
                 if (doLJPME) {
-                    ljpmeEnergyBuffer.initialize(cl, cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize, energyElementSize, "ljpmeEnergyBuffer");
+                    ljpmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "ljpmeEnergyBuffer");
                     cl.clearBuffer(ljpmeEnergyBuffer);
-                    dispersionFft = new OpenCLVkFFT3D(cl, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true, pmeGrid1, pmeGrid2);
+                    dispersionFft = new OpenCLVkFFT3D(cl, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
                 }
 
                 string vendor = cl.getDevice().getInfo<CL_DEVICE_VENDOR>();
@@ -1855,6 +1858,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
             pmeGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeGridIndexKernel.setArg<cl::Buffer>(1, pmeAtomGridIndex.getDeviceBuffer());
+            pmeGridIndexKernel.setArg<cl::Buffer>(10, subsets.getDeviceBuffer());
             pmeSpreadChargeKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
             pmeSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid2.getDeviceBuffer());
             pmeSpreadChargeKernel.setArg<cl::Buffer>(10, pmeAtomGridIndex.getDeviceBuffer());
@@ -1897,6 +1901,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionInterpolateForceKernel = cl::Kernel(program, "gridInterpolateForce");
                 pmeDispersionGridIndexKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
                 pmeDispersionGridIndexKernel.setArg<cl::Buffer>(1, pmeAtomGridIndex.getDeviceBuffer());
+                pmeDispersionGridIndexKernel.setArg<cl::Buffer>(10, subsets.getDeviceBuffer());
                 pmeDispersionSpreadChargeKernel.setArg<cl::Buffer>(0, cl.getPosq().getDeviceBuffer());
                 pmeDispersionSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid2.getDeviceBuffer());
                 pmeDispersionSpreadChargeKernel.setArg<cl::Buffer>(10, pmeAtomGridIndex.getDeviceBuffer());

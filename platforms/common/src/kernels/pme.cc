@@ -1,6 +1,6 @@
 KERNEL void findAtomGridIndex(GLOBAL const real4* RESTRICT posq, GLOBAL int2* RESTRICT pmeAtomGridIndex,
         real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
-        real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ
+        real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const int* RESTRICT subsets
     ) {
     // Compute the index of the grid point each atom is associated with.
 
@@ -16,7 +16,8 @@ KERNEL void findAtomGridIndex(GLOBAL const real4* RESTRICT posq, GLOBAL int2* RE
         int3 gridIndex = make_int3(((int) t.x) % GRID_SIZE_X,
                                    ((int) t.y) % GRID_SIZE_Y,
                                    ((int) t.z) % GRID_SIZE_Z);
-        pmeAtomGridIndex[atom] = make_int2(atom, gridIndex.x*GRID_SIZE_Y*GRID_SIZE_Z+gridIndex.y*GRID_SIZE_Z+gridIndex.z);
+        int subset = subsets[atom];
+        pmeAtomGridIndex[atom] = make_int2(atom, ((subset*GRID_SIZE_X+gridIndex.x)*GRID_SIZE_Y+gridIndex.y)*GRID_SIZE_Z+gridIndex.z);
     }
 }
 
@@ -60,8 +61,11 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
 
     real3 data[PME_ORDER];
     const real scale = RECIP((real) (PME_ORDER-1));
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+    const unsigned int extendedSize = GRID_SIZE_X*GRID_SIZE_Y*PME_ORDER*blockSize;
     for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
         int atom = pmeAtomGridIndex[i].x;
+        int offset = extendedSize*(pmeAtomGridIndex[i].y/gridSize);
         real4 pos = posq[atom];
 #ifdef CHARGE_FROM_SIGEPS
         const float2 sigEps = sigmaEpsilon[atom];
@@ -120,9 +124,9 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
                     int index = ybase + zindexTable[zindex];
                     real add = dxdy*data[iz].z;
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
-                    ATOMIC_ADD(&pmeGrid[index], (mm_ulong) realToFixedPoint(add));
+                    ATOMIC_ADD(&pmeGrid[offset+index], (mm_ulong) realToFixedPoint(add));
 #else
-                    ATOMIC_ADD(&pmeGrid[index], add);
+                    ATOMIC_ADD(&pmeGrid[offset+index], add);
 #endif
                 }
             }
@@ -154,14 +158,20 @@ KERNEL void finishSpreadCharge(
     }
     SYNC_THREADS;
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+    const unsigned int extendedSize = GRID_SIZE_X*GRID_SIZE_Y*PME_ORDER*blockSize;
+    const unsigned int totalSize = NUM_SUBSETS*gridSize;
+#ifdef USE_FIXED_POINT_CHARGE_SPREADING
     real scale = 1/(real) 0x100000000;
-    for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
+#endif
+    for (int i = GLOBAL_ID; i < totalSize; i += GLOBAL_SIZE) {
+        int j = i/gridSize;
+        int index = i - j*gridSize;
         int zindex = index%GRID_SIZE_Z;
         int loadIndex = zindexTable[zindex] + blockSize*(int) (index/GRID_SIZE_Z);
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
-        grid2[index] = scale*grid1[loadIndex];
+        grid2[j*gridSize+index] = scale*grid1[j*extendedSize+loadIndex];
 #else
-        grid2[index] = grid1[loadIndex];
+        grid2[j*gridSize+index] = grid1[j*extendedSize+loadIndex];
 #endif
     }
 }
@@ -196,7 +206,6 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
         real bx = pmeBsplineModuliX[kx];
         real by = pmeBsplineModuliY[ky];
         real bz = pmeBsplineModuliZ[kz];
-        real2 grid = pmeGrid[index];
         real m2 = mhx*mhx+mhy*mhy+mhz*mhz;
 #ifdef USE_LJPME
         real denom = recipScaleFactor/(bx*by*bz);
@@ -207,14 +216,12 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
         real expterm = EXP(expfac);
         real erfcterm = ERFC(b);
         real eterm = (fac1*erfcterm*m3 + expterm*(fac2 + fac3*m2)) * denom;
-        pmeGrid[index] = make_real2(grid.x*eterm, grid.y*eterm);
 #else
         real denom = m2*bx*by*bz;
-        real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
-        if (kx != 0 || ky != 0 || kz != 0) {
-            pmeGrid[index] = make_real2(grid.x*eterm, grid.y*eterm);
-        }
+        real eterm = (kx != 0 || ky != 0 || kz != 0) ? recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom : 0;
 #endif
+        for (int j = 0; j < NUM_SUBSETS; j++)
+            pmeGrid[j*gridSize+index] *= eterm;
     }
 }
 
@@ -223,7 +230,8 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
                       real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
- #ifdef USE_LJPME
+    const unsigned int odist = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
+#ifdef USE_LJPME
     const real recipScaleFactor = -(2*M_PI/6)*SQRT(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
     real bfac = M_PI / EWALD_ALPHA;
     real fac1 = 2*M_PI*M_PI*M_PI*SQRT(M_PI);
@@ -233,7 +241,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
 #endif
 
-    mixed energy = 0;
+    mixed energy[NUM_SLICES] = { 0 };
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         // real indices
         int kx = index/(GRID_SIZE_Y*(GRID_SIZE_Z));
@@ -261,7 +269,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
         real eterm = (fac1*erfcterm*m3 + expterm*(fac2 + fac3*m2)) * denom;
 #else
         real denom = m2*bx*by*bz;
-        real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
+        real eterm = (kx != 0 || ky != 0 || kz != 0) ? recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom : 0;
 #endif
         if (kz >= (GRID_SIZE_Z/2+1)) {
             kx = ((kx == 0) ? kx : GRID_SIZE_X-kx);
@@ -269,17 +277,17 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
             kz = GRID_SIZE_Z-kz;
         }
         int indexInHalfComplexGrid = kz + ky*(GRID_SIZE_Z/2+1)+kx*(GRID_SIZE_Y*(GRID_SIZE_Z/2+1));
-        real2 grid = pmeGrid[indexInHalfComplexGrid];
-#ifndef USE_LJPME
-        if (kx != 0 || ky != 0 || kz != 0)
-#endif
-            energy += eterm*(grid.x*grid.x + grid.y*grid.y);
+        real2 grid[NUM_SUBSETS];
+        for (int j = 0; j < NUM_SUBSETS; j++) {
+            grid[j] = pmeGrid[j*odist+indexInHalfComplexGrid];
+            int offset = (j+1)*j/2;
+            for (int i = 0; i < j; i++)
+                energy[offset+i] += eterm*(grid[i].x*grid[j].x + grid[i].y*grid[j].y);
+            energy[offset+j] += 0.5*eterm*(grid[j].x*grid[j].x + grid[j].y*grid[j].y);
+        }
     }
-#if !defined(USE_LJPME)
-    energyBuffer[GLOBAL_ID] = 0.5f*energy;
-#else
-    energyBuffer[GLOBAL_ID] += 0.5f*energy;
-#endif
+    for (int slice = 0; slice < NUM_SLICES; slice++)
+        energyBuffer[GLOBAL_ID*NUM_SLICES+slice] = energy[slice];
 }
 
 #if defined(USE_HIP) && !defined(AMD_RDNA) && !defined(USE_DOUBLE_PRECISION)
@@ -396,7 +404,14 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
 }
 
 KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL const mixed* RESTRICT ljpmeEnergyBuffer,
-        GLOBAL mixed* RESTRICT energyBuffer, const GLOBAL real* RESTRICT sliceLambdas, int bufferSize) {
-    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
-        energyBuffer[i] += pmeEnergyBuffer[i];
+        GLOBAL mixed* RESTRICT energyBuffer, const GLOBAL real2* RESTRICT sliceLambdas, int bufferSize) {
+    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE) {
+        mixed energy = 0;
+        for (int slice = 0; slice < NUM_SLICES; slice++) {
+            energy += sliceLambdas[slice].x*pmeEnergyBuffer[i*NUM_SLICES+slice];
+            if (ljpmeEnergyBuffer)
+                energy += sliceLambdas[slice].y*ljpmeEnergyBuffer[i*NUM_SLICES+slice];
+        }
+        energyBuffer[i] += energy;
+    }
 }

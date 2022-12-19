@@ -1172,9 +1172,9 @@ void runPlatformTests();
 
 int main(int argc, char* argv[]) {
     vector<NonbondedForce::NonbondedMethod> nonbondedMethods = {
-        NonbondedForce::NoCutoff,
-        NonbondedForce::CutoffNonPeriodic,
-        NonbondedForce::CutoffPeriodic,
+        // NonbondedForce::NoCutoff,
+        // NonbondedForce::CutoffNonPeriodic,
+        // NonbondedForce::CutoffPeriodic,
         // NonbondedForce::Ewald,
         NonbondedForce::PME,
         NonbondedForce::LJPME
