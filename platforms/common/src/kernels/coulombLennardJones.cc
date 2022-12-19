@@ -59,7 +59,6 @@
     // The multiplicative grid term
     real ljPmeEnergy = coef*(1.0f - expDar2*eprefac);
     tempForce += 6.0f*coef*(1.0f - expDar2*dprefac);
-    tempForce *= ljLambda;
     // The potential shift accounts for the step at the cutoff introduced by the
     // transition from additive to multiplicative combintion rules and is only
     // needed for the real (not excluded) terms.  By addin these terms to ljEnergy
@@ -73,6 +72,7 @@
     ljPmeEnergy += MULTSHIFT6*c6;
     ljEnergy += includeInteraction ? ljPmeEnergy : 0;
 #endif
+    tempForce *= ljLambda;
     tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
 #else

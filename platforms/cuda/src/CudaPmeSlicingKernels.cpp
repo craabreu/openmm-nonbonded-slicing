@@ -1340,7 +1340,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             dispersionGridSizeY = CudaFFT3D::findLegalDimension(dispersionGridSizeY);
             dispersionGridSizeZ = CudaFFT3D::findLegalDimension(dispersionGridSizeZ);
         }
-
         defines["EWALD_ALPHA"] = cu.doubleToString(alpha);
         defines["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
         defines["USE_EWALD"] = "1";
@@ -1456,8 +1455,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 }
                 pmeAtomGridIndex.initialize<int2>(cu, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cu.getUseDoublePrecision() || cu.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-                int bufferSize = numSlices*cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
-                pmeEnergyBuffer.initialize(cu, bufferSize, energyElementSize, "pmeEnergyBuffer");
+                int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
+                pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
                 cu.clearBuffer(pmeEnergyBuffer);
                 sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
                 int cufftVersion;
@@ -1468,7 +1467,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 else
                     fft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
                 if (doLJPME) {
-                    ljpmeEnergyBuffer.initialize(cu, bufferSize, energyElementSize, "ljpmeEnergyBuffer");
+                    ljpmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "ljpmeEnergyBuffer");
                     cu.clearBuffer(ljpmeEnergyBuffer);
                     if (useCudaFFT)
                         dispersionFft = (CudaFFT3D*) new CudaCuFFT3D(cu, pmeStream, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
@@ -1482,6 +1481,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 if (recipForceGroup < 0)
                     recipForceGroup = force.getForceGroup();
                 if (usePmeStream) {
+                    pmeDefines["USE_PME_STREAM"] = "1";
                     cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
                     if (useCudaFFT) {
                         cufftSetStream(fftForward, pmeStream);
@@ -1973,21 +1973,16 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                     cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                     recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                    &charges.getDevicePointer()};
+                    &charges.getDevicePointer(), &subsets.getDevicePointer(), &sliceLambdas.getDevicePointer()};
             cu.executeKernel(pmeInterpolateForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
         }
 
         if (doLJPME && hasLJ) {
-            if (!hasCoulomb) {
-                void* gridIndexArgs[] = {&cu.getPosq().getDevicePointer(), &pmeAtomGridIndex.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
-                        cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
-                        recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &subsets.getDevicePointer()};
-                cu.executeKernel(pmeDispersionGridIndexKernel, gridIndexArgs, cu.getNumAtoms());
-
-                sort->sort(pmeAtomGridIndex);
-                // cu.clearBuffer(ljpmeEnergyBuffer);  // Is this necessary?
-            }
-
+            void* gridIndexArgs[] = {&cu.getPosq().getDevicePointer(), &pmeAtomGridIndex.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
+                    cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
+                    recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &subsets.getDevicePointer()};
+            cu.executeKernel(pmeDispersionGridIndexKernel, gridIndexArgs, cu.getNumAtoms());
+            sort->sort(pmeAtomGridIndex);
             cu.clearBuffer(pmeGrid2);
             void* spreadArgs[] = {&cu.getPosq().getDevicePointer(), &pmeGrid2.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                     cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
@@ -2017,7 +2012,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             void* interpolateArgs[] = {&cu.getPosq().getDevicePointer(), &cu.getForce().getDevicePointer(), &pmeGrid1.getDevicePointer(), cu.getPeriodicBoxSizePointer(),
                     cu.getInvPeriodicBoxSizePointer(), cu.getPeriodicBoxVecXPointer(), cu.getPeriodicBoxVecYPointer(), cu.getPeriodicBoxVecZPointer(),
                     recipBoxVectorPointer[0], recipBoxVectorPointer[1], recipBoxVectorPointer[2], &pmeAtomGridIndex.getDevicePointer(),
-                    &sigmaEpsilon.getDevicePointer()};
+                    &sigmaEpsilon.getDevicePointer(), &subsets.getDevicePointer(), &sliceLambdas.getDevicePointer()};
             cu.executeKernel(pmeInterpolateDispersionForceKernel, interpolateArgs, cu.getNumAtoms(), 128);
         }
         if (usePmeStream) {

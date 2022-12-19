@@ -11,7 +11,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
         ) {
-    mixed coulombEnergy[NUM_SUBSETS] = {0};
+    mixed clEnergy[NUM_SUBSETS] = {0};
     mixed ljEnergy[NUM_SUBSETS] = {0};
 
     // Compute particle parameters.
@@ -36,7 +36,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         sigmaEpsilon[i] = make_float2(0.5f*params.y, 2*SQRT(params.z));
 #ifdef HAS_OFFSETS
     #ifdef INCLUDE_EWALD
-        coulombEnergy[subsets[i]] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
+        clEnergy[subsets[i]] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
     #endif
     #ifdef INCLUDE_LJPME
         real sig3 = params.y*params.y*params.y;
@@ -71,7 +71,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         mixed energy = 0;
         for (int j = 0; j < NUM_SUBSETS; j++) {
             int slice = j*(j+3)/2;
-            energy += sliceLambdas[slice].x*coulombEnergy[j] + sliceLambdas[slice].y*ljEnergy[j];
+            energy += sliceLambdas[slice].x*clEnergy[j] + sliceLambdas[slice].y*ljEnergy[j];
         }
         energyBuffer[GLOBAL_ID] += energy;
     }

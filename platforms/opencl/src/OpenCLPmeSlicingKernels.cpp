@@ -1098,6 +1098,7 @@ class OpenCLCalcSlicedNonbondedForceKernel::AddEnergyPostComputation : public Op
 public:
     AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& ljpmeEnergyBuffer, OpenCLArray& sliceLambdas, int forceGroup) : cl(cl),
             pmeEnergyBuffer(pmeEnergyBuffer), ljpmeEnergyBuffer(ljpmeEnergyBuffer), sliceLambdas(sliceLambdas), forceGroup(forceGroup) {
+        bufferSize = pmeEnergyBuffer.getSize()/sliceLambdas.getSize();
     }
     void setKernel(cl::Kernel kernel) {
         addEnergyKernel = kernel;
@@ -1105,13 +1106,12 @@ public:
         addEnergyKernel.setArg<cl::Buffer>(1, ljpmeEnergyBuffer.getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyBuffer().getDeviceBuffer());
         addEnergyKernel.setArg<cl::Buffer>(3, sliceLambdas.getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(4, pmeEnergyBuffer.getSize()/sliceLambdas.getSize());
+        addEnergyKernel.setArg<cl_int>(4, bufferSize);
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if ((groups&(1<<forceGroup)) != 0) {
+        if ((groups&(1<<forceGroup)) != 0)
             if (includeEnergy)
-                cl.executeKernel(addEnergyKernel, pmeEnergyBuffer.getSize());
-        }
+                cl.executeKernel(addEnergyKernel, bufferSize);
         return 0.0;
     }
 private:
@@ -1121,6 +1121,7 @@ private:
     OpenCLArray& ljpmeEnergyBuffer;
     OpenCLArray& sliceLambdas;
     int forceGroup;
+    int bufferSize;
 };
 
 class OpenCLCalcSlicedNonbondedForceKernel::DispersionCorrectionPostComputation : public OpenCLContext::ForcePostComputation {
@@ -1454,13 +1455,13 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                 pmeAtomRange.initialize<cl_int>(cl, gridSizeX*gridSizeY*gridSizeZ+1, "pmeAtomRange");
                 pmeAtomGridIndex.initialize<mm_int2>(cl, numParticles, "pmeAtomGridIndex");
                 int energyElementSize = (cl.getUseDoublePrecision() || cl.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-                int bufferSize = numSlices*cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
-                pmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "pmeEnergyBuffer");
+                int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+                pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
                 cl.clearBuffer(pmeEnergyBuffer);
                 sort = new OpenCLSort(cl, new SortTrait(), cl.getNumAtoms());
                 fft = new OpenCLVkFFT3D(cl, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
                 if (doLJPME) {
-                    ljpmeEnergyBuffer.initialize(cl, bufferSize, energyElementSize, "ljpmeEnergyBuffer");
+                    ljpmeEnergyBuffer.initialize(cl, numSlices*bufferSize, energyElementSize, "ljpmeEnergyBuffer");
                     cl.clearBuffer(ljpmeEnergyBuffer);
                     dispersionFft = new OpenCLVkFFT3D(cl, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
                 }
@@ -1548,10 +1549,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                             moduli[i] = sc*sc+ss*ss;
                         }
                         for (int i = 0; i < ndata; i++)
-                        {
                             if (moduli[i] < 1.0e-7)
                                 moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
-                        }
                         if (dim == 0)
                             xmoduli->upload(moduli, true);
                         else if (dim == 1)
@@ -1877,6 +1876,8 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             pmeInterpolateForceKernel.setArg<cl::Buffer>(2, pmeGrid1.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(11, pmeAtomGridIndex.getDeviceBuffer());
             pmeInterpolateForceKernel.setArg<cl::Buffer>(12, charges.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(13, subsets.getDeviceBuffer());
+            pmeInterpolateForceKernel.setArg<cl::Buffer>(14, sliceLambdas.getDeviceBuffer());
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
@@ -1920,6 +1921,8 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionInterpolateForceKernel.setArg<cl::Buffer>(2, pmeGrid1.getDeviceBuffer());
                 pmeDispersionInterpolateForceKernel.setArg<cl::Buffer>(11, pmeAtomGridIndex.getDeviceBuffer());
                 pmeDispersionInterpolateForceKernel.setArg<cl::Buffer>(12, sigmaEpsilon.getDeviceBuffer());
+                pmeDispersionInterpolateForceKernel.setArg<cl::Buffer>(13, subsets.getDeviceBuffer());
+                pmeDispersionInterpolateForceKernel.setArg<cl::Buffer>(14, sliceLambdas.getDeviceBuffer());
                 pmeDispersionFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
                 pmeDispersionFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
                 pmeDispersionFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
@@ -2096,8 +2099,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionGridIndexKernel.setArg<mm_float4>(9, recipBoxVectorsFloat[2]);
             }
             cl.executeKernel(pmeDispersionGridIndexKernel, cl.getNumAtoms());
-            if (!hasCoulomb)
-                sort->sort(pmeAtomGridIndex);
+            sort->sort(pmeAtomGridIndex);
             cl.clearBuffer(pmeGrid2);
             setPeriodicBoxArgs(cl, pmeDispersionSpreadChargeKernel, 2);
             if (cl.getUseDoublePrecision()) {

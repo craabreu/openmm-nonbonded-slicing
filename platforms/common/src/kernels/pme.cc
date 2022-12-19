@@ -301,9 +301,10 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
 #else
         GLOBAL const real* RESTRICT charges
 #endif
-        ) {
+        , GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas) {
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const real scale = RECIP((real) (PME_ORDER-1));
 
     // Process the atoms in spatially sorted order.  This improves cache performance when loading
@@ -313,6 +314,7 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
         int atom = pmeAtomGridIndex[i].x;
         real3 force = make_real3(0);
         real4 pos = posq[atom];
+        int si = subsets[atom];
         APPLY_PERIODIC_TO_POS(pos)
         real3 t = make_real3(pos.x*recipBoxVecX.x+pos.y*recipBoxVecY.x+pos.z*recipBoxVecZ.x,
                              pos.y*recipBoxVecY.y+pos.z*recipBoxVecZ.y,
@@ -366,7 +368,18 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
                     int zindex = gridIndex.z+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int index = ybase + zindex;
-                    real gridvalue = pmeGrid[index];
+                    real gridvalue = 0.0;
+#ifdef USE_LJPME
+                    for (int sj = 0; sj < si; sj++)
+                        gridvalue += sliceLambdas[si*(si+1)/2+sj].y*pmeGrid[sj*gridSize+index];
+                    for (int sj = si; sj < NUM_SUBSETS; sj++)
+                        gridvalue += sliceLambdas[sj*(sj+1)/2+si].y*pmeGrid[sj*gridSize+index];
+#else
+                    for (int sj = 0; sj < si; sj++)
+                        gridvalue += sliceLambdas[si*(si+1)/2+sj].x*pmeGrid[sj*gridSize+index];
+                    for (int sj = si; sj < NUM_SUBSETS; sj++)
+                        gridvalue += sliceLambdas[sj*(sj+1)/2+si].x*pmeGrid[sj*gridSize+index];
+#endif
                     force.x += ddx*dy*data[iz].z*gridvalue;
                     force.y += dx*ddy*data[iz].z*gridvalue;
                     force.z += dx*dy*ddata[iz].z*gridvalue;
