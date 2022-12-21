@@ -992,7 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = 10.0;
-    double tol = platform.getPropertyDefaultValue("Precision") == string("single") ? 1e-4 : 1e-5;
+    double tol = platform.getName() != "Reference" && platform.getPropertyDefaultValue("Precision") == string("single") ? 1e-4 : 1e-5;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
@@ -1093,6 +1093,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
+
     // Overall
 
     state1 = context1.getState(State::Energy | State::Forces);
@@ -1138,42 +1139,42 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
-    // // Derivatives
+    // Derivatives
 
-    // sliced->addScalingParameterDerivative(param1);
-    // sliced->addScalingParameterDerivative(param2);
-    // context2.reinitialize(true);
-    // state2 = context2.getState(State::ParameterDerivatives);
-    // auto derivatives = state2.getEnergyParameterDerivatives();
-    // assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], tol);
+    sliced->addScalingParameterDerivative(param1);
+    sliced->addScalingParameterDerivative(param2);
+    context2.reinitialize(true);
+    state2 = context2.getState(State::ParameterDerivatives);
+    auto derivatives = state2.getEnergyParameterDerivatives();
+    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], tol);
 
-    // // Sum of derivatives
+    // Sum of derivatives
 
-    // for (int k = 0; k < nonbonded->getNumParticles(); k++)
-    //     nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
-    // for (int k = 0; k < nonbonded->getNumExceptions(); k++)
-    //     nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
-    // nonbonded->updateParametersInContext(context1);
-    // state1 = context1.getState(State::Energy | State::Forces);
-    // double energy = state1.getPotentialEnergy();
+    for (int k = 0; k < nonbonded->getNumParticles(); k++)
+        nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
+    for (int k = 0; k < nonbonded->getNumExceptions(); k++)
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
+    nonbonded->updateParametersInContext(context1);
+    state1 = context1.getState(State::Energy | State::Forces);
+    double energy = state1.getPotentialEnergy();
 
-    // sliced->addGlobalParameter("remainder", 1.0);
-    // sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
-    // sliced->addScalingParameterDerivative("remainder");
-    // context2.reinitialize(true);
-    // state2 = context2.getState(State::Energy | State::ParameterDerivatives);
-    // derivatives = state2.getEnergyParameterDerivatives();
-    // double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
-    // assertEqualTo(energy, sum, tol);
+    sliced->addGlobalParameter("remainder", 1.0);
+    sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
+    sliced->addScalingParameterDerivative("remainder");
+    context2.reinitialize(true);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
+    derivatives = state2.getEnergyParameterDerivatives();
+    double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
+    assertEqualTo(energy, sum, tol);
 }
 
 void runPlatformTests();
 
 int main(int argc, char* argv[]) {
     vector<NonbondedForce::NonbondedMethod> nonbondedMethods = {
-        // NonbondedForce::NoCutoff,
-        // NonbondedForce::CutoffNonPeriodic,
-        // NonbondedForce::CutoffPeriodic,
+        NonbondedForce::NoCutoff,
+        NonbondedForce::CutoffNonPeriodic,
+        NonbondedForce::CutoffPeriodic,
         // NonbondedForce::Ewald,
         NonbondedForce::PME,
         NonbondedForce::LJPME
@@ -1183,30 +1184,30 @@ int main(int argc, char* argv[]) {
     init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
-        // for (auto method : nonbondedMethods)
-        //     testInstantiateFromNonbondedForce(method);
-        // testCoulomb();
-        // testLJ();
-        // testExclusionsAnd14();
-        // testCutoff();
-        // testCutoff14();
-        // testPeriodic();
-        // testPeriodicExceptions();
-        // testTriclinic();
-        // testLargeSystem();
-        // testDispersionCorrection();
-        // testChangingParameters();
-        // testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
-        // testSwitchingFunction(SlicedNonbondedForce::PME);
-        // testTwoForces();
-        // testParameterOffsets();
-        // testEwaldExceptions();
-        // testDirectAndReciprocal();
+        for (auto method : nonbondedMethods)
+            testInstantiateFromNonbondedForce(method);
+        testCoulomb();
+        testLJ();
+        testExclusionsAnd14();
+        testCutoff();
+        testCutoff14();
+        testPeriodic();
+        testPeriodicExceptions();
+        testTriclinic();
+        testLargeSystem();
+        testDispersionCorrection();
+        testChangingParameters();
+        testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
+        testSwitchingFunction(SlicedNonbondedForce::PME);
+        testTwoForces();
+        testParameterOffsets();
+        testEwaldExceptions();
+        testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
             for (auto exceptions : booleanValues)
                 for (auto lj : booleanValues)
                     testNonbondedSlicing(sfmt, method, exceptions, lj);
-        // runPlatformTests();
+        runPlatformTests();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;

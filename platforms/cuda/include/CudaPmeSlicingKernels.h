@@ -276,6 +276,7 @@ private:
     CUfunction pmeDispersionConvolutionKernel;
     CUfunction pmeInterpolateForceKernel;
     CUfunction pmeInterpolateDispersionForceKernel;
+    AddEnergyPostComputation* addEnergy;
     std::vector<std::pair<int, int> > exceptionAtoms;
     CudaArray exceptionPairs;
     CudaArray exceptionSlices;
@@ -290,6 +291,7 @@ private:
     static const int PmeOrder = 5;
 
     int numSubsets, numSlices;
+    bool hasDerivatives;
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;

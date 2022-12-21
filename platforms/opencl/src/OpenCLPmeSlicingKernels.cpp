@@ -1096,32 +1096,67 @@ private:
 
 class OpenCLCalcSlicedNonbondedForceKernel::AddEnergyPostComputation : public OpenCLContext::ForcePostComputation {
 public:
-    AddEnergyPostComputation(OpenCLContext& cl, OpenCLArray& pmeEnergyBuffer, OpenCLArray& ljpmeEnergyBuffer, OpenCLArray& sliceLambdas, int forceGroup) : cl(cl),
-            pmeEnergyBuffer(pmeEnergyBuffer), ljpmeEnergyBuffer(ljpmeEnergyBuffer), sliceLambdas(sliceLambdas), forceGroup(forceGroup) {
-        bufferSize = pmeEnergyBuffer.getSize()/sliceLambdas.getSize();
+    AddEnergyPostComputation(OpenCLContext& cl, int forceGroup) : cl(cl), forceGroup(forceGroup), initialized(false) {
     }
-    void setKernel(cl::Kernel kernel) {
-        addEnergyKernel = kernel;
-        addEnergyKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(1, ljpmeEnergyBuffer.getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(2, cl.getEnergyBuffer().getDeviceBuffer());
-        addEnergyKernel.setArg<cl::Buffer>(3, sliceLambdas.getDeviceBuffer());
-        addEnergyKernel.setArg<cl_int>(4, bufferSize);
+    void initialize(OpenCLArray& pmeEnergyBuffer, OpenCLArray& ljpmeEnergyBuffer, OpenCLArray& sliceLambdas, vector<string> scalingParams, vector<mm_int2> sliceScalingParamDerivs) {
+        int numSlices = sliceLambdas.getSize();
+        bool doLJPME = ljpmeEnergyBuffer.isInitialized();
+        bufferSize = pmeEnergyBuffer.getSize()/numSlices;
+        vector<string> requestedDerivs;
+        for (auto indices : sliceScalingParamDerivs)
+            if (indices.x != -1 || (doLJPME && indices.y != -1))
+                requestedDerivs.push_back(scalingParams[max(indices.x, indices.y)]);
+        hasDerivatives = requestedDerivs.size() > 0;
+        stringstream code;
+        if (hasDerivatives) {
+            const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
+            for (int index = 0; index < requestedDerivs.size(); index++) {
+                int derivIndex = find(allDerivs.begin(), allDerivs.end(), requestedDerivs[index]) - allDerivs.begin();
+                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<derivIndex<<"] += ";
+                int position = 0;
+                for (int slice = 0; slice < numSlices; slice++) {
+                    if (sliceScalingParamDerivs[slice].x == index)
+                        code<<(position++ ? " + " : "")<<"clEnergy["<<slice<<"]";
+                    if (doLJPME && sliceScalingParamDerivs[slice].y == index)
+                        code<<(position++ ? " + " : "")<<"ljEnergy["<<slice<<"]";
+                }
+                code<<";"<<endl;
+            }
+        }
+        map<string, string> replacements, defines;
+        replacements["NUM_SLICES"] = cl.intToString(numSlices);
+        replacements["USE_LJPME"] = doLJPME ? "1" : "0";
+        replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+        replacements["ADD_DERIVATIVES"] = code.str();
+        string source = cl.replaceStrings(CommonPmeSlicingKernelSources::pmeAddEnergy, replacements);
+        cl::Program program = cl.createProgram(source, defines);
+        addEnergyKernel = cl::Kernel(program, "addEnergy");
+        int arg = 0;
+        addEnergyKernel.setArg<cl::Buffer>(arg++, cl.getEnergyBuffer().getDeviceBuffer());
+        if (hasDerivatives)
+            addEnergyKernel.setArg<cl::Buffer>(arg++, cl.getEnergyParamDerivBuffer().getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(arg++, pmeEnergyBuffer.getDeviceBuffer());
+        if (doLJPME)
+            addEnergyKernel.setArg<cl::Buffer>(arg++, ljpmeEnergyBuffer.getDeviceBuffer());
+        addEnergyKernel.setArg<cl::Buffer>(arg++, sliceLambdas.getDeviceBuffer());
+        addEnergyKernel.setArg<cl_int>(arg, bufferSize);
+        initialized = true;
+    }
+    bool isInitialized() {
+        return initialized;
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if ((groups&(1<<forceGroup)) != 0)
-            if (includeEnergy)
-                cl.executeKernel(addEnergyKernel, bufferSize);
+        if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0)
+            cl.executeKernel(addEnergyKernel, bufferSize);
         return 0.0;
     }
 private:
     OpenCLContext& cl;
     cl::Kernel addEnergyKernel;
-    OpenCLArray& pmeEnergyBuffer;
-    OpenCLArray& ljpmeEnergyBuffer;
-    OpenCLArray& sliceLambdas;
     int forceGroup;
     int bufferSize;
+    bool initialized;
+    bool hasDerivatives;
 };
 
 class OpenCLCalcSlicedNonbondedForceKernel::DispersionCorrectionPostComputation : public OpenCLContext::ForcePostComputation {
@@ -1129,28 +1164,28 @@ public:
     DispersionCorrectionPostComputation(OpenCLContext& cl, vector<double>& dispersionCoefficients, vector<mm_double2>& sliceLambdas, vector<string>& scalingParams, vector<mm_int2>& sliceScalingParamDerivs, int forceGroup) :
                 cl(cl), dispersionCoefficients(dispersionCoefficients), sliceLambdas(sliceLambdas), scalingParams(scalingParams), sliceScalingParamDerivs(sliceScalingParamDerivs), forceGroup(forceGroup) {
         numSlices = dispersionCoefficients.size();
-        hasDerivs = false;
+        hasDerivatives = false;
         for (int slice = 0; slice < numSlices; slice++)
-            hasDerivs = hasDerivs || sliceScalingParamDerivs[slice].y != -1;
+            hasDerivatives = hasDerivatives || sliceScalingParamDerivs[slice].y != -1;
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-        if ((groups&(1<<forceGroup)) == 0)
-            return 0;
-        // if (!cl.getWorkThread().isCurrentThread())  // OpenMM 8.0
-            cl.getWorkThread().flush();
         double energy = 0.0;
-        mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
-        double volume = boxSize.x*boxSize.y*boxSize.z;
-        for (int slice = 0; slice < numSlices; slice++)
-            energy += sliceLambdas[slice].y*dispersionCoefficients[slice]/volume;
-        if (hasDerivs) {
-            map<string, double>& energyParamDerivs = cl.getEnergyParamDerivWorkspace();
-            for (int slice = 0; slice < numSlices; slice++) {
-                int index = sliceScalingParamDerivs[slice].y;
-                if (index != -1)
-                    energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
+            if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0) {
+            // if (!cl.getWorkThread().isCurrentThread())  // OpenMM 8.0
+                cl.getWorkThread().flush();
+            mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
+            double volume = boxSize.x*boxSize.y*boxSize.z;
+            for (int slice = 0; slice < numSlices; slice++)
+                energy += sliceLambdas[slice].y*dispersionCoefficients[slice]/volume;
+            if (hasDerivatives) {
+                map<string, double>& energyParamDerivs = cl.getEnergyParamDerivWorkspace();
+                for (int slice = 0; slice < numSlices; slice++) {
+                    int index = sliceScalingParamDerivs[slice].y;
+                    if (index != -1)
+                        energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
+                }
             }
-        }
+            }
         return energy;
     }
 private:
@@ -1158,10 +1193,10 @@ private:
     vector<double>& dispersionCoefficients;
     vector<mm_double2>& sliceLambdas;
     vector<string>& scalingParams;
-    bool hasDerivs;
     vector<mm_int2>& sliceScalingParamDerivs;
     int forceGroup;
     int numSlices;
+    bool hasDerivatives;
 };
 
 OpenCLCalcSlicedNonbondedForceKernel::~OpenCLCalcSlicedNonbondedForceKernel() {
@@ -1198,6 +1233,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     subsets.upload(subsetsVec);
 
     int numDerivs = force.getNumScalingParameterDerivatives();
+    hasDerivatives = numDerivs > 0;
     set<string> derivs;
     for (int i = 0; i < numDerivs; i++)
         derivs.insert(force.getScalingParameterDerivativeName(i));
@@ -1221,7 +1257,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     else
         sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
 
-    if (numDerivs > 0) {
+    if (hasDerivatives) {
         sliceScalingParamDerivs.initialize<mm_int2>(cl, numSlices, "sliceScalingParamDerivs");
         sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
     }
@@ -1478,7 +1514,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                     cl.addPreComputation(new SyncQueuePreComputation(cl, pmeQueue, recipForceGroup));
                     cl.addPostComputation(new SyncQueuePostComputation(cl, pmeSyncEvent, recipForceGroup));
                 }
-                cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, recipForceGroup));
+                cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, recipForceGroup));
 
                 // Initialize the b-spline moduli.
 
@@ -1593,7 +1629,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
                 replacements["EWALD_DISPERSION_ALPHA"] = cl.doubleToString(dispersionAlpha);
             replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
             stringstream code;
-            if (numDerivs > 0) {
+            if (hasDerivatives) {
                 string derivIndices = cl.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDeviceBuffer(), "int2");
                 code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
                 for (int slice = 0; slice < numSlices; slice++) {
@@ -1644,7 +1680,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     replacements["LAMBDA"] = prefix+"lambda";
     cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDeviceBuffer()));
     stringstream code;
-    if (numDerivs > 0) {
+    if (hasDerivatives) {
         string derivIndices = prefix+"derivIndices";
         cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(derivIndices, "int", 2, 2*sizeof(int), sliceScalingParamDerivs.getDeviceBuffer()));
         code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
@@ -1696,7 +1732,7 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
         replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
         stringstream code;
-        if (numDerivs > 0) {
+        if (hasDerivatives) {
             string derivIndices = cl.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDeviceBuffer(), "int2");
             code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
             for (int slice = 0; slice < numSlices; slice++) {
@@ -1881,7 +1917,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             pmeFinishSpreadChargeKernel = cl::Kernel(program, "finishSpreadCharge");
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(0, pmeGrid2.getDeviceBuffer());
             pmeFinishSpreadChargeKernel.setArg<cl::Buffer>(1, pmeGrid1.getDeviceBuffer());
-            addEnergy->setKernel(cl::Kernel(program, "addEnergy"));
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParamDerivsVec);
 
             if (doLJPME) {
                 // Create kernels for LJ PME.
@@ -1961,7 +1997,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     for (int i = 0; i < paramNames.size(); i++) {
         double value = context.getParameter(paramNames[i]);
         if (value != paramValues[i]) {
-            paramValues[i] = value;;
+            paramValues[i] = value;
             paramChanged = true;
         }
     }
@@ -2065,7 +2101,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeEvalEnergyKernel.setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
                 pmeEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
             }
-            if (includeEnergy)
+            if (includeEnergy || hasDerivatives)
                 cl.executeKernel(pmeEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
             cl.executeKernel(pmeConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
             fft->execFFT(false, cl.getQueue());
@@ -2132,7 +2168,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionEvalEnergyKernel.setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
             }
             // if (!hasCoulomb) cl.clearBuffer(ljpmeEnergyBuffer);  // Is this necessary?
-            if (includeEnergy)
+            if (includeEnergy || hasDerivatives)
                 cl.executeKernel(pmeDispersionEvalEnergyKernel, gridSizeX*gridSizeY*gridSizeZ);
             cl.executeKernel(pmeDispersionConvolutionKernel, gridSizeX*gridSizeY*gridSizeZ);
             dispersionFft->execFFT(false, cl.getQueue());
@@ -2155,6 +2191,20 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         if (usePmeQueue) {
             pmeQueue.enqueueMarkerWithWaitList(NULL, &pmeSyncEvent);
             cl.restoreDefaultQueue();
+        }
+    }
+    if (!hasOffsets) {
+        map<string, double>& energyParamDerivs = cl.getEnergyParamDerivWorkspace();
+        for (int j = 0; j < numSubsets; j++) {
+            mm_int2 indices = sliceScalingParamDerivsVec[j*(j+3)/2];
+            int index = max(indices.x, indices.y);
+            if (index != -1) {
+                string param = scalingParams[index];
+                if (indices.x != -1)
+                    energyParamDerivs[param] += subsetSelfEnergy[j].x;
+                if (doLJPME && indices.y != -1)
+                    energyParamDerivs[param] += subsetSelfEnergy[j].y;
+            }
         }
     }
 

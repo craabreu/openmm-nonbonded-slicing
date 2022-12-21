@@ -294,6 +294,7 @@ private:
     static const int PmeOrder = 5;
 
     int numSubsets, numSlices;
+    bool hasDerivatives;
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
