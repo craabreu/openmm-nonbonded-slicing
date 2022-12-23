@@ -164,7 +164,7 @@ void testDeterministicForces() {
 
 void runPlatformTests() {
     testParallelComputation(SlicedNonbondedForce::NoCutoff);
-    testParallelComputation(SlicedNonbondedForce::Ewald);
+    // testParallelComputation(SlicedNonbondedForce::Ewald);
     testParallelComputation(SlicedNonbondedForce::PME);
     testParallelComputation(SlicedNonbondedForce::LJPME);
     testReordering();

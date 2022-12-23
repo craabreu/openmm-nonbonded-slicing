@@ -1171,8 +1171,6 @@ public:
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         double energy = 0.0;
             if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0) {
-            // if (!cl.getWorkThread().isCurrentThread())  // OpenMM 8.0
-                cl.getWorkThread().flush();
             mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
             double volume = boxSize.x*boxSize.y*boxSize.z;
             for (int slice = 0; slice < numSlices; slice++)

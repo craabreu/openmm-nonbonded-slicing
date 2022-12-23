@@ -1036,7 +1036,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     }
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
-    cout<<sliced->getNonbondedMethodName()<<" (exceptions="<<exceptions<<", lj="<<includeLJ<<", coul="<<includeCoulomb<<")"<<endl;
+    // cout<<sliced->getNonbondedMethodName()<<" (exceptions="<<exceptions<<", lj="<<includeLJ<<", coul="<<includeCoulomb<<")"<<endl;
 
     for (int k = 0; k < numParticles; k++)
         if (genrand_real2(sfmt) < 0.5)
