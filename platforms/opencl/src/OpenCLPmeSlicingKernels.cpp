@@ -1378,6 +1378,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
 
             map<string, string> replacements;
             replacements["NUM_ATOMS"] = cl.intToString(numParticles);
+            replacements["NUM_SUBSETS"] = cl.intToString(numSubsets);
+            replacements["NUM_SLICES"] = cl.intToString(numSlices);
             replacements["PADDED_NUM_ATOMS"] = cl.intToString(cl.getPaddedNumAtoms());
             replacements["KMAX_X"] = cl.intToString(kmaxx);
             replacements["KMAX_Y"] = cl.intToString(kmaxy);
@@ -1389,7 +1391,12 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             ewaldSumsKernel = cl::Kernel(program, "calculateEwaldCosSinSums");
             ewaldForcesKernel = cl::Kernel(program, "calculateEwaldForces");
             int elementSize = (cl.getUseDoublePrecision() ? sizeof(mm_double2) : sizeof(mm_float2));
-            cosSinSums.initialize(cl, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
+            cosSinSums.initialize(cl, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1)*numSubsets, elementSize, "cosSinSums");
+            int bufferSize = cl.getNumThreadBlocks()*OpenCLContext::ThreadBlockSize;
+            pmeEnergyBuffer.initialize(cl, numSlices*bufferSize, elementSize, "pmeEnergyBuffer");
+            cl.clearBuffer(pmeEnergyBuffer);
+            int recipForceGroup = force.getReciprocalSpaceForceGroup();
+            cl.addPostComputation(addEnergy = new AddEnergyPostComputation(cl, recipForceGroup >= 0 ? recipForceGroup : force.getForceGroup()));
         }
     }
     else if (((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME) {
@@ -1870,12 +1877,16 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             computeExclusionParamsKernel.setArg<cl::Buffer>(6, exclusionParams.getDeviceBuffer());
         }
         if (cosSinSums.isInitialized()) {
-            ewaldSumsKernel.setArg<cl::Buffer>(0, cl.getEnergyBuffer().getDeviceBuffer());
+            ewaldSumsKernel.setArg<cl::Buffer>(0, pmeEnergyBuffer.getDeviceBuffer());
             ewaldSumsKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
-            ewaldSumsKernel.setArg<cl::Buffer>(2, cosSinSums.getDeviceBuffer());
+            ewaldSumsKernel.setArg<cl::Buffer>(2, subsets.getDeviceBuffer());
+            ewaldSumsKernel.setArg<cl::Buffer>(3, cosSinSums.getDeviceBuffer());
             ewaldForcesKernel.setArg<cl::Buffer>(0, cl.getLongForceBuffer().getDeviceBuffer());
             ewaldForcesKernel.setArg<cl::Buffer>(1, cl.getPosq().getDeviceBuffer());
             ewaldForcesKernel.setArg<cl::Buffer>(2, cosSinSums.getDeviceBuffer());
+            ewaldForcesKernel.setArg<cl::Buffer>(3, subsets.getDeviceBuffer());
+            ewaldForcesKernel.setArg<cl::Buffer>(4, sliceLambdas.getDeviceBuffer());
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParamDerivsVec);
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
@@ -2024,12 +2035,12 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     if (cosSinSums.isInitialized() && includeReciprocal) {
         mm_double4 boxSize = cl.getPeriodicBoxSizeDouble();
         if (cl.getUseDoublePrecision()) {
-            ewaldSumsKernel.setArg<mm_double4>(3, boxSize);
-            ewaldForcesKernel.setArg<mm_double4>(3, boxSize);
+            ewaldSumsKernel.setArg<mm_double4>(4, boxSize);
+            ewaldForcesKernel.setArg<mm_double4>(5, boxSize);
         }
         else {
-            ewaldSumsKernel.setArg<mm_float4>(3, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
-            ewaldForcesKernel.setArg<mm_float4>(3, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
+            ewaldSumsKernel.setArg<mm_float4>(4, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
+            ewaldForcesKernel.setArg<mm_float4>(5, mm_float4((float) boxSize.x, (float) boxSize.y, (float) boxSize.z, 0));
         }
         cl.executeKernel(ewaldSumsKernel, cosSinSums.getSize());
         cl.executeKernel(ewaldForcesKernel, cl.getNumAtoms());

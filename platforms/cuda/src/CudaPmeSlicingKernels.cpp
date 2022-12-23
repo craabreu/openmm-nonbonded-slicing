@@ -1352,6 +1352,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
             map<string, string> replacements;
             replacements["NUM_ATOMS"] = cu.intToString(numParticles);
+            replacements["NUM_SUBSETS"] = cu.intToString(numSubsets);
+            replacements["NUM_SLICES"] = cu.intToString(numSlices);
             replacements["PADDED_NUM_ATOMS"] = cu.intToString(cu.getPaddedNumAtoms());
             replacements["KMAX_X"] = cu.intToString(kmaxx);
             replacements["KMAX_Y"] = cu.intToString(kmaxy);
@@ -1363,7 +1365,12 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             ewaldSumsKernel = cu.getKernel(module, "calculateEwaldCosSinSums");
             ewaldForcesKernel = cu.getKernel(module, "calculateEwaldForces");
             int elementSize = (cu.getUseDoublePrecision() ? sizeof(double2) : sizeof(float2));
-            cosSinSums.initialize(cu, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
+            cosSinSums.initialize(cu, (2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1)*numSubsets, elementSize, "cosSinSums");
+            int bufferSize = cu.getNumThreadBlocks()*CudaContext::ThreadBlockSize;
+            pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, elementSize, "pmeEnergyBuffer");
+            cu.clearBuffer(pmeEnergyBuffer);
+            int recipForceGroup = force.getReciprocalSpaceForceGroup();
+            cu.addPostComputation(addEnergy = new AddEnergyPostComputation(cu, recipForceGroup >= 0 ? recipForceGroup : force.getForceGroup()));
         }
     }
     else if (((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME) {
@@ -1940,9 +1947,13 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     // Do reciprocal space calculations.
 
     if (cosSinSums.isInitialized() && includeReciprocal) {
-        void* sumsArgs[] = {&cu.getEnergyBuffer().getDevicePointer(), &cu.getPosq().getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
-        cu.executeKernel(ewaldSumsKernel, sumsArgs, cosSinSums.getSize());
-        void* forcesArgs[] = {&cu.getForce().getDevicePointer(), &cu.getPosq().getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
+        if (!addEnergy->isInitialized())
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParamDerivsVec);
+        void* sumsArgs[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getPosq().getDevicePointer(),
+                &subsets.getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
+        cu.executeKernel(ewaldSumsKernel, sumsArgs, cosSinSums.getSize()/numSubsets);
+        void* forcesArgs[] = {&cu.getForce().getDevicePointer(), &cu.getPosq().getDevicePointer(), &cosSinSums.getDevicePointer(),
+                &subsets.getDevicePointer(), &sliceLambdas.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
         cu.executeKernel(ewaldForcesKernel, forcesArgs, cu.getNumAtoms());
     }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
