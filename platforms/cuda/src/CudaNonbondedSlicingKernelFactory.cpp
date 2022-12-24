@@ -1,13 +1,13 @@
 /* -------------------------------------------------------------------------- *
- *                              OpenMMPmeSlicing                                   *
+ *                              OpenMMNonbondedSlicing                                   *
  * -------------------------------------------------------------------------- */
 
 #include <exception>
 
-#include "CudaPmeSlicingKernelFactory.h"
-#include "CudaPmeSlicingKernels.h"
-#include "CudaParallelPmeSlicingKernels.h"
-#include "CommonPmeSlicingKernels.h"
+#include "CudaNonbondedSlicingKernelFactory.h"
+#include "CudaNonbondedSlicingKernels.h"
+#include "CudaParallelNonbondedSlicingKernels.h"
+#include "CommonNonbondedSlicingKernels.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/internal/windowsExport.h"
 #include "openmm/internal/ContextImpl.h"
@@ -22,7 +22,7 @@ extern "C" OPENMM_EXPORT void registerPlatforms() {
 extern "C" OPENMM_EXPORT void registerKernelFactories() {
     try {
         Platform& platform = Platform::getPlatformByName("CUDA");
-        CudaPmeSlicingKernelFactory* factory = new CudaPmeSlicingKernelFactory();
+        CudaNonbondedSlicingKernelFactory* factory = new CudaNonbondedSlicingKernelFactory();
         platform.registerKernelFactory(CalcSlicedPmeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcSlicedNonbondedForceKernel::Name(), factory);
     }
@@ -31,7 +31,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
     }
 }
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingCudaKernelFactories() {
+extern "C" OPENMM_EXPORT void registerNonbondedSlicingCudaKernelFactories() {
     try {
         Platform::getPlatformByName("CUDA");
     }
@@ -41,7 +41,7 @@ extern "C" OPENMM_EXPORT void registerPmeSlicingCudaKernelFactories() {
     registerKernelFactories();
 }
 
-KernelImpl* CudaPmeSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
+KernelImpl* CudaNonbondedSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
     CudaPlatform::PlatformData& data = *static_cast<CudaPlatform::PlatformData*>(context.getPlatformData());
     if (data.contexts.size() > 1) {
         // We are running in parallel on multiple devices, so we may want to create a parallel kernel.

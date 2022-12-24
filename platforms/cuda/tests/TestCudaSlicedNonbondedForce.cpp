@@ -9,7 +9,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "CudaPmeSlicingTests.h"
+#include "CudaNonbondedSlicingTests.h"
 #include "TestSlicedNonbondedForce.h"
 #include "openmm/NonbondedForce.h"
 // #include <cuda.h>

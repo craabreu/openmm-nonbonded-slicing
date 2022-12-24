@@ -1,6 +1,3 @@
-#ifndef OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_
-#define OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_
-
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -12,19 +9,20 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "openmm/KernelFactory.h"
+#ifdef WIN32
+  #define _USE_MATH_DEFINES // Needed to get M_PI
+#endif
+#include "openmm/cuda/CudaPlatform.h"
 
-namespace NonbondedSlicing {
+extern "C" OPENMM_EXPORT void registerNonbondedSlicingCudaKernelFactories();
 
-/**
- * This KernelFactory creates kernels for the OpenCL implementation of the NonbondedSlicing plugin.
- */
+OpenMM::CudaPlatform platform;
 
-class OpenCLPmeSlicingKernelFactory : public OpenMM::KernelFactory {
-public:
-    OpenMM::KernelImpl* createKernelImpl(std::string name, const OpenMM::Platform& platform, OpenMM::ContextImpl& context) const;
-};
-
-} // namespace NonbondedSlicing
-
-#endif /*OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_*/
+void initializeTests(int argc, char* argv[]) {
+    registerNonbondedSlicingCudaKernelFactories();
+    platform = dynamic_cast<OpenMM::CudaPlatform&>(OpenMM::Platform::getPlatformByName("CUDA"));
+    if (argc > 1)
+        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
+    if (argc > 2)
+        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
+}

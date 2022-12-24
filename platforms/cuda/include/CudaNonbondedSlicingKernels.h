@@ -1,5 +1,5 @@
-#ifndef CUDA_PMESLICING_KERNELS_H_
-#define CUDA_PMESLICING_KERNELS_H_
+#ifndef CUDA_NONBONDED_SLICING_KERNELS_H_
+#define CUDA_NONBONDED_SLICING_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -12,7 +12,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "PmeSlicingKernels.h"
+#include "NonbondedSlicingKernels.h"
 #include "internal/CudaFFT3D.h"
 #include "internal/CudaCuFFT3D.h"
 #include "internal/CudaVkFFT3D.h"
@@ -313,4 +313,4 @@ private:
 
 } // namespace NonbondedSlicing
 
-#endif /*CUDA_PMESLICING_KERNELS_H_*/
+#endif /*CUDA_NONBONDED_SLICING_KERNELS_H_*/

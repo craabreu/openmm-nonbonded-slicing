@@ -1,5 +1,5 @@
-#ifndef OPENMM_CUDAPMESLICINGKERNELSOURCES_H_
-#define OPENMM_CUDAPMESLICINGKERNELSOURCES_H_
+#ifndef OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_
+#define OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -12,21 +12,19 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include <string>
+#include "openmm/KernelFactory.h"
 
 namespace NonbondedSlicing {
 
 /**
- * This class is a central holding place for the source code of CUDA kernels.
- * The CMake build script inserts declarations into it based on the .cu files in the
- * kernels subfolder.
+ * This KernelFactory creates kernels for the OpenCL implementation of the NonbondedSlicing plugin.
  */
 
-class CudaPmeSlicingKernelSources {
+class OpenCLNonbondedSlicingKernelFactory : public OpenMM::KernelFactory {
 public:
-@CUDA_FILE_DECLARATIONS@
+    OpenMM::KernelImpl* createKernelImpl(std::string name, const OpenMM::Platform& platform, OpenMM::ContextImpl& context) const;
 };
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENMM_CUDAPMESLICINGKERNELSOURCES_H_*/
+#endif /*OPENMM_OPENCLPMESLICINGKERNELFACTORY_H_*/

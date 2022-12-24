@@ -1,9 +1,9 @@
 /* -------------------------------------------------------------------------- *
- *                              OpenMMPmeSlicing                                   *
+ *                              OpenMMNonbondedSlicing                                   *
  * -------------------------------------------------------------------------- */
 
-#include "ReferencePmeSlicingKernelFactory.h"
-#include "ReferencePmeSlicingKernels.h"
+#include "ReferenceNonbondedSlicingKernelFactory.h"
+#include "ReferenceNonbondedSlicingKernels.h"
 #include "openmm/reference/ReferencePlatform.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/OpenMMException.h"
@@ -18,18 +18,18 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
     for (int i = 0; i < Platform::getNumPlatforms(); i++) {
         Platform& platform = Platform::getPlatform(i);
         if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
-            ReferencePmeSlicingKernelFactory* factory = new ReferencePmeSlicingKernelFactory();
+            ReferenceNonbondedSlicingKernelFactory* factory = new ReferenceNonbondedSlicingKernelFactory();
             platform.registerKernelFactory(CalcSlicedPmeForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcSlicedNonbondedForceKernel::Name(), factory);
         }
     }
 }
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingReferenceKernelFactories() {
+extern "C" OPENMM_EXPORT void registerNonbondedSlicingReferenceKernelFactories() {
     registerKernelFactories();
 }
 
-KernelImpl* ReferencePmeSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
+KernelImpl* ReferenceNonbondedSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
     ReferencePlatform::PlatformData& data = *static_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
     if (name == CalcSlicedPmeForceKernel::Name())
         return new ReferenceCalcSlicedPmeForceKernel(name, platform);

@@ -1,3 +1,6 @@
+#ifndef OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_
+#define OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_
+
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -9,8 +12,21 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "CudaPmeSlicingKernelSources.h"
+#include <string>
 
-using namespace NonbondedSlicing;
-using namespace std;
+namespace NonbondedSlicing {
 
+/**
+ * This class is a central holding place for the source code of OpenCL kernels.
+ * The CMake build script inserts declarations into it based on the .cl files in the
+ * kernels subfolder.
+ */
+
+class OpenCLNonbondedSlicingKernelSources {
+public:
+@OPENCL_FILE_DECLARATIONS@
+};
+
+} // namespace NonbondedSlicing
+
+#endif /*OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_*/

@@ -1,5 +1,5 @@
-#ifndef OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_
-#define OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_
+#ifndef OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
+#define OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -17,16 +17,16 @@
 namespace NonbondedSlicing {
 
 /**
- * This class is a central holding place for the source code of OpenCL kernels.
- * The CMake build script inserts declarations into it based on the .cl files in the
+ * This class is a central holding place for the source code of common kernels.
+ * The CMake build script inserts declarations into it based on the .cc files in the
  * kernels subfolder.
  */
 
-class OpenCLPmeSlicingKernelSources {
+class CommonNonbondedSlicingKernelSources {
 public:
-@OPENCL_FILE_DECLARATIONS@
+@KERNEL_FILE_DECLARATIONS@
 };
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENMM_OPENCLPMESLICINGKERNELSOURCES_H_*/
+#endif /*OPENMM_COMMONPMESLICINGKERNELSOURCES_H_*/

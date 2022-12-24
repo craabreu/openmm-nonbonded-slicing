@@ -1,5 +1,5 @@
-#ifndef OPENCL_PMESLICING_KERNELS_H_
-#define OPENCL_PMESLICING_KERNELS_H_
+#ifndef OPENCL_NONBONDED_SLICING_KERNELS_H_
+#define OPENCL_NONBONDED_SLICING_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -12,7 +12,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "PmeSlicingKernels.h"
+#include "NonbondedSlicingKernels.h"
 #include "internal/OpenCLVkFFT3D.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/opencl/OpenCLContext.h"
@@ -316,4 +316,4 @@ private:
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENCL_PMESLICING_KERNELS_H_*/
+#endif /*OPENCL_NONBONDED_SLICING_KERNELS_H_*/

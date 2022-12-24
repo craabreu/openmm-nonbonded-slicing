@@ -42,3 +42,12 @@
     assertEnergy(state0, state1, tol); \
     assertForces(state0, state1, tol); \
 }
+
+#define assertEqualTo(expected, found, tol) {\
+    double _scale_ = std::abs(expected) > 1.0 ? std::abs(expected) : 1.0; \
+    if (!(std::abs((expected)-(found))/_scale_ <= (tol))) {\
+        std::stringstream details; \
+        details<<__FILE__<<":"<< __LINE__<<": Expected "<<(expected)<<", found "<<(found); \
+        throw OpenMMException(details.str()); \
+    } \
+};

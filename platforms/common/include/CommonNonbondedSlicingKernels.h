@@ -1,3 +1,6 @@
+#ifndef COMMON_NONBONDED_SLICING_KERNELS_H_
+#define COMMON_NONBONDED_SLICING_KERNELS_H_
+
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -9,20 +12,13 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#ifdef WIN32
-  #define _USE_MATH_DEFINES // Needed to get M_PI
-#endif
-#include "openmm/cuda/CudaPlatform.h"
+#include "NonbondedSlicingKernels.h"
+#include "openmm/common/ComputeContext.h"
+#include "openmm/common/ComputeArray.h"
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingCudaKernelFactories();
+namespace NonbondedSlicing {
 
-OpenMM::CudaPlatform platform;
 
-void initializeTests(int argc, char* argv[]) {
-    registerPmeSlicingCudaKernelFactories();
-    platform = dynamic_cast<OpenMM::CudaPlatform&>(OpenMM::Platform::getPlatformByName("CUDA"));
-    if (argc > 1)
-        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
-    if (argc > 2)
-        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
-}
+} // namespace NonbondedSlicing
+
+#endif /*COMMON_NONBONDED_SLICING_KERNELS_H_*/

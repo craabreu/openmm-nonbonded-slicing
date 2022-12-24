@@ -12,7 +12,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "openmm/Vec3.h"
-#include "internal/windowsExportPmeSlicing.h"
+#include "internal/windowsExportNonbondedSlicing.h"
 #include <vector>
 
 using namespace std;

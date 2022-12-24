@@ -680,7 +680,7 @@ void testNonbondedSwitchingParameters(bool exceptions) {
 
 void runPlatformTests();
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingReferenceKernelFactories();
+extern "C" OPENMM_EXPORT void registerNonbondedSlicingReferenceKernelFactories();
 
 int main(int argc, char* argv[]) {
     try {

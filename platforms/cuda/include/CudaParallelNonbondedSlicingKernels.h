@@ -1,5 +1,5 @@
-#ifndef OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_
-#define OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_
+#ifndef OPENMM_CUDAPARALLELPMESLICINGKERNELS_H_
+#define OPENMM_CUDAPARALLELPMESLICINGKERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -12,21 +12,21 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "OpenCLPmeSlicingKernels.h"
-#include "CommonPmeSlicingKernels.h"
-#include "openmm/opencl/OpenCLPlatform.h"
-#include "openmm/opencl/OpenCLContext.h"
+#include "openmm/cuda/CudaPlatform.h"
+#include "openmm/cuda/CudaContext.h"
+#include "CudaNonbondedSlicingKernels.h"
+#include "CommonNonbondedSlicingKernels.h"
 
 namespace NonbondedSlicing {
 
 /**
  * This kernel is invoked by SlicedPmeForce to calculate the forces acting on the system.
  */
-class OpenCLParallelCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
+class CudaParallelCalcSlicedPmeForceKernel : public CalcSlicedPmeForceKernel {
 public:
-    OpenCLParallelCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLPlatform::PlatformData& data, const System& system);
-    OpenCLCalcSlicedPmeForceKernel& getKernel(int index) {
-        return dynamic_cast<OpenCLCalcSlicedPmeForceKernel&>(kernels[index].getImpl());
+    CudaParallelCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaPlatform::PlatformData& data, const System& system);
+    CudaCalcSlicedPmeForceKernel& getKernel(int index) {
+        return dynamic_cast<CudaCalcSlicedPmeForceKernel&>(kernels[index].getImpl());
     }
     /**
      * Initialize the kernel.
@@ -64,18 +64,18 @@ public:
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 private:
     class Task;
-    OpenCLPlatform::PlatformData& data;
+    CudaPlatform::PlatformData& data;
     std::vector<Kernel> kernels;
 };
 
 /**
  * This kernel is invoked by SlicedNonbondedForce to calculate the forces acting on the system.
  */
-class OpenCLParallelCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
+class CudaParallelCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
 public:
-    OpenCLParallelCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLPlatform::PlatformData& data, const System& system);
-    OpenCLCalcSlicedNonbondedForceKernel& getKernel(int index) {
-        return dynamic_cast<OpenCLCalcSlicedNonbondedForceKernel&>(kernels[index].getImpl());
+    CudaParallelCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaPlatform::PlatformData& data, const System& system);
+    CudaCalcSlicedNonbondedForceKernel& getKernel(int index) {
+        return dynamic_cast<CudaCalcSlicedNonbondedForceKernel&>(kernels[index].getImpl());
     }
     /**
      * Initialize the kernel.
@@ -112,7 +112,7 @@ public:
      */
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Get the parameters being used for the dispersion term in LJPME.
+     * Get the dispersion parameters being used for the dispersion term in LJPME.
      *
      * @param alpha   the separation parameter
      * @param nx      the number of grid points along the X axis
@@ -122,10 +122,10 @@ public:
     void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 private:
     class Task;
-    OpenCLPlatform::PlatformData& data;
+    CudaPlatform::PlatformData& data;
     std::vector<Kernel> kernels;
 };
 
-} // namespace NonbondedSlicing
+} // namespace OpenMM
 
-#endif /*OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_*/
+#endif /*OPENMM_CUDAPARALLELPMESLICINGKERNELS_H_*/

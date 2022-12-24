@@ -9,7 +9,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "ReferencePmeSlicingTests.h"
+#include "ReferenceNonbondedSlicingTests.h"
 #include "TestSlicedPmeForce.h"
 
 void runPlatformTests() {

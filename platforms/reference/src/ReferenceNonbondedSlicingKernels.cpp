@@ -9,7 +9,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "ReferencePmeSlicingKernels.h"
+#include "ReferenceNonbondedSlicingKernels.h"
 #include "SlicedPmeForce.h"
 #include "internal/SlicedPmeForceImpl.h"
 #include "SlicedNonbondedForce.h"

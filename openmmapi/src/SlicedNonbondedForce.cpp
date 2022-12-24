@@ -2,9 +2,6 @@
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
  *                                                                            *
- *                          OpenMM Nonbonded Slicing                          *
- *                          ========================                          *
- *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential calculations on the basis *
  * of atom pairs and for applying scaling parameters to selected slices.      *
  *                                                                            *
@@ -15,14 +12,22 @@
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
 #include "openmm/internal/AssertionUtilities.h"
+#include "openmm/OpenMMException.h"
 #include <string.h>
 #include <algorithm>
+#include <iostream>
 
 using namespace std;
 using namespace OpenMM;
 using namespace NonbondedSlicing;
 
-#define ASSERT_VALID(name, value, number) {if (value < 0 || value >= number) throwException(__FILE__, __LINE__, name " out of range");};
+#define ASSERT_VALID(name, value, number) { \
+    if (value < 0 || value >= number) {\
+        std::stringstream details; \
+        details<<__FILE__<<":"<< __LINE__<<": out of range"; \
+            throw OpenMMException(details.str()); \
+    } \
+}
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) :
     NonbondedForce(), numSubsets(numSubsets), useCudaFFT(false) {

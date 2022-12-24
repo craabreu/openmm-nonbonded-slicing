@@ -15,7 +15,7 @@
 #include "internal/SlicedNonbondedForceImpl.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
-#include "PmeSlicingKernels.h"
+#include "NonbondedSlicingKernels.h"
 #include <cmath>
 #include <map>
 #include <sstream>

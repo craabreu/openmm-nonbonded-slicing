@@ -1,5 +1,5 @@
-#ifndef OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
-#define OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
+#ifndef OPENMM_CUDAPMESLICINGKERNELFACTORY_H_
+#define OPENMM_CUDAPMESLICINGKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -13,21 +13,18 @@
  * -------------------------------------------------------------------------- */
 
 #include "openmm/KernelFactory.h"
-#include <string.h>
 
-using namespace OpenMM;
-
-namespace NonbondedSlicing {
+namespace OpenMM {
 
 /**
- * This KernelFactory creates kernels for the reference implementation of the NonbondedSlicing plugin.
+ * This KernelFactory creates kernels for the CUDA implementation of the NonbondedSlicing plugin.
  */
 
-class ReferencePmeSlicingKernelFactory : public KernelFactory {
+class CudaNonbondedSlicingKernelFactory : public KernelFactory {
 public:
     KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
 };
 
-} // namespace NonbondedSlicing
+} // namespace OpenMM
 
-#endif /*OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_*/
+#endif /*OPENMM_CUDAPMESLICINGKERNELFACTORY_H_*/

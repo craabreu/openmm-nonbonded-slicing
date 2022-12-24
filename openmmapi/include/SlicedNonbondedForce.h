@@ -12,7 +12,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "internal/windowsExportPmeSlicing.h"
+#include "internal/windowsExportNonbondedSlicing.h"
 #include "openmm/NonbondedForce.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include <map>

@@ -1,6 +1,3 @@
-#ifndef COMMON_PMESLICING_KERNELS_H_
-#define COMMON_PMESLICING_KERNELS_H_
-
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -12,13 +9,8 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "PmeSlicingKernels.h"
-#include "openmm/common/ComputeContext.h"
-#include "openmm/common/ComputeArray.h"
+#include "CudaNonbondedSlicingKernelSources.h"
 
-namespace NonbondedSlicing {
+using namespace NonbondedSlicing;
+using namespace std;
 
-
-} // namespace NonbondedSlicing
-
-#endif /*COMMON_PMESLICING_KERNELS_H_*/

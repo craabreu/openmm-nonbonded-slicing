@@ -14,12 +14,12 @@
 #endif
 #include "openmm/opencl/OpenCLPlatform.h"
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingOpenCLKernelFactories();
+extern "C" OPENMM_EXPORT void registerNonbondedSlicingOpenCLKernelFactories();
 
 OpenMM::OpenCLPlatform platform;
 
 void initializeTests(int argc, char* argv[]) {
-    registerPmeSlicingOpenCLKernelFactories();
+    registerNonbondedSlicingOpenCLKernelFactories();
     platform = dynamic_cast<OpenMM::OpenCLPlatform&>(OpenMM::Platform::getPlatformByName("OpenCL"));
     if (argc > 1)
         platform.setPropertyDefaultValue("Precision", std::string(argv[1]));

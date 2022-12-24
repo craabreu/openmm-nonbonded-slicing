@@ -1,6 +1,3 @@
-#ifndef OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
-#define OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
-
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -12,21 +9,8 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include <string>
+#include "CommonNonbondedSlicingKernelSources.h"
 
-namespace NonbondedSlicing {
+using namespace NonbondedSlicing;
+using namespace std;
 
-/**
- * This class is a central holding place for the source code of common kernels.
- * The CMake build script inserts declarations into it based on the .cc files in the
- * kernels subfolder.
- */
-
-class CommonPmeSlicingKernelSources {
-public:
-@KERNEL_FILE_DECLARATIONS@
-};
-
-} // namespace NonbondedSlicing
-
-#endif /*OPENMM_COMMONPMESLICINGKERNELSOURCES_H_*/

@@ -1,5 +1,5 @@
-#ifndef REFERENCE_PMESLICING_KERNELS_H_
-#define REFERENCE_PMESLICING_KERNELS_H_
+#ifndef REFERENCE_NONBONDED_SLICING_KERNELS_H_
+#define REFERENCE_NONBONDED_SLICING_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -12,7 +12,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "PmeSlicingKernels.h"
+#include "NonbondedSlicingKernels.h"
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 #include <vector>
@@ -168,4 +168,4 @@ private:
 
 } // namespace NonbondedSlicing
 
-#endif /*REFERENCE_PMESLICING_KERNELS_H_*/
+#endif /*REFERENCE_NONBONDED_SLICING_KERNELS_H_*/

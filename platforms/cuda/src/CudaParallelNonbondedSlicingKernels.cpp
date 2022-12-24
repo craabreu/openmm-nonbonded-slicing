@@ -9,15 +9,17 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "OpenCLParallelPmeSlicingKernels.h"
+#include "CudaParallelNonbondedSlicingKernels.h"
+#include "CudaNonbondedSlicingKernelSources.h"
+#include "openmm/common/ContextSelector.h"
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
 
-class OpenCLParallelCalcSlicedPmeForceKernel::Task : public OpenCLContext::WorkTask {
+class CudaParallelCalcSlicedPmeForceKernel::Task : public CudaContext::WorkTask {
 public:
-    Task(ContextImpl& context, OpenCLCalcSlicedPmeForceKernel& kernel, bool includeForce,
+    Task(ContextImpl& context, CudaCalcSlicedPmeForceKernel& kernel, bool includeForce,
             bool includeEnergy, bool includeDirect, bool includeReciprocal, double& energy) : context(context), kernel(kernel),
             includeForce(includeForce), includeEnergy(includeEnergy), includeDirect(includeDirect), includeReciprocal(includeReciprocal), energy(energy) {
     }
@@ -26,43 +28,43 @@ public:
     }
 private:
     ContextImpl& context;
-    OpenCLCalcSlicedPmeForceKernel& kernel;
+    CudaCalcSlicedPmeForceKernel& kernel;
     bool includeForce, includeEnergy, includeDirect, includeReciprocal;
     double& energy;
 };
 
-OpenCLParallelCalcSlicedPmeForceKernel::OpenCLParallelCalcSlicedPmeForceKernel(std::string name, const Platform& platform, OpenCLPlatform::PlatformData& data, const System& system) :
+CudaParallelCalcSlicedPmeForceKernel::CudaParallelCalcSlicedPmeForceKernel(std::string name, const Platform& platform, CudaPlatform::PlatformData& data, const System& system) :
         CalcSlicedPmeForceKernel(name, platform), data(data) {
     for (int i = 0; i < (int) data.contexts.size(); i++)
-        kernels.push_back(Kernel(new OpenCLCalcSlicedPmeForceKernel(name, platform, *data.contexts[i], system)));
+        kernels.push_back(Kernel(new CudaCalcSlicedPmeForceKernel(name, platform, *data.contexts[i], system)));
 }
 
-void OpenCLParallelCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
+void CudaParallelCalcSlicedPmeForceKernel::initialize(const System& system, const SlicedPmeForce& force) {
     for (int i = 0; i < (int) kernels.size(); i++)
         getKernel(i).initialize(system, force);
 }
 
-double OpenCLParallelCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double CudaParallelCalcSlicedPmeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
     for (int i = 0; i < (int) data.contexts.size(); i++) {
-        OpenCLContext& cl = *data.contexts[i];
-        ComputeContext::WorkThread& thread = cl.getWorkThread();
+        CudaContext& cu = *data.contexts[i];
+        ComputeContext::WorkThread& thread = cu.getWorkThread();
         thread.addTask(new Task(context, getKernel(i), includeForces, includeEnergy, includeDirect, includeReciprocal, data.contextEnergy[i]));
     }
     return 0.0;
 }
 
-void OpenCLParallelCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
+void CudaParallelCalcSlicedPmeForceKernel::copyParametersToContext(ContextImpl& context, const SlicedPmeForce& force) {
     for (int i = 0; i < (int) kernels.size(); i++)
         getKernel(i).copyParametersToContext(context, force);
 }
 
-void OpenCLParallelCalcSlicedPmeForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    dynamic_cast<const OpenCLCalcSlicedPmeForceKernel&>(kernels[0].getImpl()).getPMEParameters(alpha, nx, ny, nz);
+void CudaParallelCalcSlicedPmeForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
+    dynamic_cast<const CudaCalcSlicedPmeForceKernel&>(kernels[0].getImpl()).getPMEParameters(alpha, nx, ny, nz);
 }
 
-class OpenCLParallelCalcSlicedNonbondedForceKernel::Task : public OpenCLContext::WorkTask {
+class CudaParallelCalcSlicedNonbondedForceKernel::Task : public CudaContext::WorkTask {
 public:
-    Task(ContextImpl& context, OpenCLCalcSlicedNonbondedForceKernel& kernel, bool includeForce,
+    Task(ContextImpl& context, CudaCalcSlicedNonbondedForceKernel& kernel, bool includeForce,
             bool includeEnergy, bool includeDirect, bool includeReciprocal, double& energy) : context(context), kernel(kernel),
             includeForce(includeForce), includeEnergy(includeEnergy), includeDirect(includeDirect), includeReciprocal(includeReciprocal), energy(energy) {
     }
@@ -71,40 +73,40 @@ public:
     }
 private:
     ContextImpl& context;
-    OpenCLCalcSlicedNonbondedForceKernel& kernel;
+    CudaCalcSlicedNonbondedForceKernel& kernel;
     bool includeForce, includeEnergy, includeDirect, includeReciprocal;
     double& energy;
 };
 
-OpenCLParallelCalcSlicedNonbondedForceKernel::OpenCLParallelCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLPlatform::PlatformData& data, const System& system) :
+CudaParallelCalcSlicedNonbondedForceKernel::CudaParallelCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaPlatform::PlatformData& data, const System& system) :
         CalcSlicedNonbondedForceKernel(name, platform), data(data) {
     for (int i = 0; i < (int) data.contexts.size(); i++)
-        kernels.push_back(Kernel(new OpenCLCalcSlicedNonbondedForceKernel(name, platform, *data.contexts[i], system)));
+        kernels.push_back(Kernel(new CudaCalcSlicedNonbondedForceKernel(name, platform, *data.contexts[i], system)));
 }
 
-void OpenCLParallelCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
+void CudaParallelCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
     for (int i = 0; i < (int) kernels.size(); i++)
         getKernel(i).initialize(system, force);
 }
 
-double OpenCLParallelCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double CudaParallelCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
     for (int i = 0; i < (int) data.contexts.size(); i++) {
-        OpenCLContext& cl = *data.contexts[i];
-        ComputeContext::WorkThread& thread = cl.getWorkThread();
+        CudaContext& cu = *data.contexts[i];
+        ComputeContext::WorkThread& thread = cu.getWorkThread();
         thread.addTask(new Task(context, getKernel(i), includeForces, includeEnergy, includeDirect, includeReciprocal, data.contextEnergy[i]));
     }
     return 0.0;
 }
 
-void OpenCLParallelCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force) {
+void CudaParallelCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force) {
     for (int i = 0; i < (int) kernels.size(); i++)
         getKernel(i).copyParametersToContext(context, force);
 }
 
-void OpenCLParallelCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    dynamic_cast<const OpenCLCalcSlicedNonbondedForceKernel&>(kernels[0].getImpl()).getPMEParameters(alpha, nx, ny, nz);
+void CudaParallelCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
+    dynamic_cast<const CudaCalcSlicedNonbondedForceKernel&>(kernels[0].getImpl()).getPMEParameters(alpha, nx, ny, nz);
 }
 
-void OpenCLParallelCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    dynamic_cast<const OpenCLCalcSlicedNonbondedForceKernel&>(kernels[0].getImpl()).getLJPMEParameters(alpha, nx, ny, nz);
+void CudaParallelCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
+    dynamic_cast<const CudaCalcSlicedNonbondedForceKernel&>(kernels[0].getImpl()).getLJPMEParameters(alpha, nx, ny, nz);
 }

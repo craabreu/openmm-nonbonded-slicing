@@ -26,7 +26,7 @@
 #define __ReferenceCoulomb14_H__
 
 #include "openmm/reference/ReferenceBondIxn.h"
-#include "internal/windowsExportPmeSlicing.h"
+#include "internal/windowsExportNonbondedSlicing.h"
 
 using namespace OpenMM;
 

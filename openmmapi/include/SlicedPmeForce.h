@@ -19,7 +19,7 @@
 #include <set>
 #include <utility>
 #include <vector>
-#include "internal/windowsExportPmeSlicing.h"
+#include "internal/windowsExportNonbondedSlicing.h"
 
 namespace NonbondedSlicing {
 

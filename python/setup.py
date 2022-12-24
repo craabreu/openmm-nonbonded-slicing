@@ -17,7 +17,7 @@ if platform.system() == 'Darwin':
     extra_link_args += ['-stdlib=libc++', '-mmacosx-version-min=10.7', '-Wl', '-rpath', openmm_dir+'/lib']
 
 extension = Extension(name='_pmeslicing',
-                      sources=['PmeSlicingWrapper.cpp'],
+                      sources=['NonbondedSlicingWrapper.cpp'],
                       libraries=['OpenMM', 'NonbondedSlicing'],
                       include_dirs=[os.path.join(openmm_dir, 'include'), pmeslicing_header_dir],
                       library_dirs=[os.path.join(openmm_dir, 'lib'), pmeslicing_library_dir],

@@ -1,4 +1,4 @@
-set(WRAP_FILE PmeSlicingWrapper.cpp)
+set(WRAP_FILE NonbondedSlicingWrapper.cpp)
 set(MODULE_NAME pmeslicing)
 
 # Execute SWIG to generate source code for the Python module.

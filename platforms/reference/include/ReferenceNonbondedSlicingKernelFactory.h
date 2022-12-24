@@ -1,3 +1,6 @@
+#ifndef OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
+#define OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
+
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
@@ -9,20 +12,22 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#ifdef WIN32
-  #define _USE_MATH_DEFINES // Needed to get M_PI
-#endif
-#include "openmm/reference/ReferencePlatform.h"
+#include "openmm/KernelFactory.h"
+#include <string.h>
 
-extern "C" OPENMM_EXPORT void registerPmeSlicingReferenceKernelFactories();
+using namespace OpenMM;
 
-OpenMM::ReferencePlatform platform;
+namespace NonbondedSlicing {
 
-void initializeTests(int argc, char* argv[]) {
-    registerPmeSlicingReferenceKernelFactories();
-    platform = dynamic_cast<OpenMM::ReferencePlatform&>(OpenMM::Platform::getPlatformByName("Reference"));
-    if (argc > 1)
-        platform.setPropertyDefaultValue("Precision", std::string(argv[1]));
-    if (argc > 2)
-        platform.setPropertyDefaultValue("DeviceIndex", std::string(argv[2]));
-}
+/**
+ * This KernelFactory creates kernels for the reference implementation of the NonbondedSlicing plugin.
+ */
+
+class ReferenceNonbondedSlicingKernelFactory : public KernelFactory {
+public:
+    KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
+};
+
+} // namespace NonbondedSlicing
+
+#endif /*OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_*/

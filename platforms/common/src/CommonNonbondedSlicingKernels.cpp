@@ -9,8 +9,12 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "CommonPmeSlicingKernelSources.h"
+#include "CommonNonbondedSlicingKernels.h"
+#include "CommonNonbondedSlicingKernelSources.h"
+#include "openmm/common/BondedUtilities.h"
+#include "openmm/common/ComputeForceInfo.h"
+#include "openmm/internal/ContextImpl.h"
 
 using namespace NonbondedSlicing;
+using namespace OpenMM;
 using namespace std;
-

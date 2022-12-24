@@ -26,20 +26,20 @@
 
 #if defined(WIN32)
     #include <windows.h>
-    extern "C" OPENMM_EXPORT_PMESLICING void registerPmeSlicingSerializationProxies();
+    extern "C" OPENMM_EXPORT_PMESLICING void registerNonbondedSlicingSerializationProxies();
     BOOL WINAPI DllMain(HANDLE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
         if (ul_reason_for_call == DLL_PROCESS_ATTACH)
-            registerPmeSlicingSerializationProxies();
+            registerNonbondedSlicingSerializationProxies();
         return TRUE;
     }
 #else
-    extern "C" void __attribute__((constructor)) registerPmeSlicingSerializationProxies();
+    extern "C" void __attribute__((constructor)) registerNonbondedSlicingSerializationProxies();
 #endif
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
 
-extern "C" OPENMM_EXPORT_PMESLICING void registerPmeSlicingSerializationProxies() {
+extern "C" OPENMM_EXPORT_PMESLICING void registerNonbondedSlicingSerializationProxies() {
     SerializationProxy::registerProxy(typeid(SlicedPmeForce), new SlicedPmeForceProxy());
     SerializationProxy::registerProxy(typeid(SlicedNonbondedForce), new SlicedNonbondedForceProxy());
 }
