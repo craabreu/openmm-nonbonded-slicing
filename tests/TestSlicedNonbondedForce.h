@@ -991,8 +991,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
-    const double L = 10.0;
-    double tol = platform.getName() != "Reference" && platform.getPropertyDefaultValue("Precision") == string("single") ? 1e-4 : 1e-5;
+    const double L = exceptions ? 7.0 : 10.0;
+    double tol = (platform.getName() != "Reference" && platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 5e-4;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
@@ -1006,6 +1006,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     nonbonded->setCutoffDistance(cutoff);
     nonbonded->setUseDispersionCorrection(true);
     nonbonded->setReciprocalSpaceForceGroup(1);
+    nonbonded->setEwaldErrorTolerance(1e-4);
     vector<Vec3> positions(numParticles);
 
     auto q = [](int k) { return 1-2*(k%2); };
