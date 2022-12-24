@@ -13,7 +13,7 @@
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/OpenMMException.h"
 
-using namespace PmeSlicing;
+using namespace NonbondedSlicing;
 using namespace OpenMM;
 
 extern "C" OPENMM_EXPORT void registerPlatforms() {

@@ -46,7 +46,7 @@ using namespace std;
 
 typedef int    ivec[3];
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 struct sliced_pme
 {

@@ -1,5 +1,5 @@
 #---------------------------------------------------
-# OpenMM PmeSlicing Plugin OPENCL Platform
+# OpenMM NonbondedSlicing Plugin OPENCL Platform
 #----------------------------------------------------
 
 # Collect up information about the version of the OpenMM library we're building

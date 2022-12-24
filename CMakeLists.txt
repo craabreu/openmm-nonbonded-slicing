@@ -1,5 +1,5 @@
 #---------------------------------------------------
-# OpenMM PmeSlicing Plugin
+# OpenMM NonbondedSlicing Plugin
 #----------------------------------------------------
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
@@ -34,7 +34,7 @@ ENDIF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
 SET(PMESLICING_SOURCE_SUBDIRS openmmapi serialization)
 
 # Set the library name
-SET(PMESLICING_LIBRARY_NAME PmeSlicing)
+SET(PMESLICING_LIBRARY_NAME NonbondedSlicing)
 SET(SHARED_PMESLICING_TARGET ${PMESLICING_LIBRARY_NAME})
 
 # These are all the places to search for header files which are to be part of the API.

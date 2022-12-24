@@ -2,14 +2,14 @@
 #define REFERENCE_PMESLICING_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
- *                             OpenMM PME Slicing                             *
- *                             ==================                             *
+ *                          OpenMM Nonbonded Slicing                          *
+ *                          ========================                          *
  *                                                                            *
- * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
- * of atom pairs and applying a different switching parameter to each slice.  *
+ * An OpenMM plugin for slicing nonbonded potential calculations on the basis *
+ * of atom pairs and for applying scaling parameters to selected slices.      *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
- * https://github.com/craabreu/openmm-pme-slicing                             *
+ * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 #include "PmeSlicingKernels.h"
@@ -21,7 +21,7 @@
 
 using namespace std;
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 /**
  * This kernel is invoked by SlicedPmeForce to calculate the forces acting on the system.
@@ -166,6 +166,6 @@ private:
     vector<vector<int>> sliceScalingParamDerivs;
 };
 
-} // namespace PmeSlicing
+} // namespace NonbondedSlicing
 
 #endif /*REFERENCE_PMESLICING_KERNELS_H_*/

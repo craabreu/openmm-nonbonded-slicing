@@ -18,7 +18,7 @@ if platform.system() == 'Darwin':
 
 extension = Extension(name='_pmeslicing',
                       sources=['PmeSlicingWrapper.cpp'],
-                      libraries=['OpenMM', 'PmeSlicing'],
+                      libraries=['OpenMM', 'NonbondedSlicing'],
                       include_dirs=[os.path.join(openmm_dir, 'include'), pmeslicing_header_dir],
                       library_dirs=[os.path.join(openmm_dir, 'lib'), pmeslicing_library_dir],
                       extra_compile_args=extra_compile_args,

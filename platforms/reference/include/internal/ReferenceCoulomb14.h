@@ -30,7 +30,7 @@
 
 using namespace OpenMM;
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 class ReferenceCoulomb14 : public ReferenceBondIxn {
 
@@ -83,6 +83,6 @@ private:
     OpenMM::Vec3 periodicBoxVectors[3];
 };
 
-} // namespace PmeSlicing
+} // namespace NonbondedSlicing
 
 #endif // __ReferenceCoulomb14_H__

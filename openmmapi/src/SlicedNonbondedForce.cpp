@@ -1,12 +1,15 @@
 /* -------------------------------------------------------------------------- *
- *                             OpenMM PME Slicing                             *
- *                             ==================                             *
+ *                          OpenMM Nonbonded Slicing                          *
+ *                          ========================                          *
  *                                                                            *
- * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
- * of atom pairs and applying a different switching parameter to each slice.  *
+ *                          OpenMM Nonbonded Slicing                          *
+ *                          ========================                          *
+ *                                                                            *
+ * An OpenMM plugin for slicing nonbonded potential calculations on the basis *
+ * of atom pairs and for applying scaling parameters to selected slices.      *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
- * https://github.com/craabreu/openmm-pme-slicing                             *
+ * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 #include "SlicedNonbondedForce.h"
@@ -17,7 +20,7 @@
 
 using namespace std;
 using namespace OpenMM;
-using namespace PmeSlicing;
+using namespace NonbondedSlicing;
 
 #define ASSERT_VALID(name, value, number) {if (value < 0 || value >= number) throwException(__FILE__, __LINE__, name " out of range");};
 
@@ -71,6 +74,30 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
         force.getExceptionParameterOffset(i, parameter, index, chargeProdScale, sigmaScale, epsilonScale);
         addExceptionParameterOffset(parameter, index, chargeProdScale, sigmaScale, epsilonScale);
     }
+}
+
+string SlicedNonbondedForce::getNonbondedMethodName() const {
+    NonbondedMethod method = getNonbondedMethod();
+    string name = "Unknown";
+    if (method == NoCutoff)
+        name = "NoCutoff";
+    else if (method == CutoffNonPeriodic)
+        name = "CutoffNonPeriodic";
+    else if (method == CutoffPeriodic)
+        name = "CutoffPeriodic";
+    else if (method == Ewald)
+        name = "Ewald";
+    else if (method == PME)
+        name = "PME";
+    else if (method == LJPME)
+        name = "LJPME";
+    return name;
+}
+
+int SlicedNonbondedForce::getSliceIndex(int subset1, int subset2) const {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    return subset1>subset2 ? subset1*(subset1+1)/2+subset2 : subset2*(subset2+1)/2+subset1;
 }
 
 void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
@@ -177,22 +204,4 @@ void SlicedNonbondedForce::getLJPMEParametersInContext(const Context& context, d
 
 void SlicedNonbondedForce::updateParametersInContext(Context& context) {
     dynamic_cast<SlicedNonbondedForceImpl&>(getImplInContext(context)).updateParametersInContext(getContextImpl(context));
-}
-
-string SlicedNonbondedForce::getNonbondedMethodName() const {
-    NonbondedMethod method = getNonbondedMethod();
-    string name = "Unknown";
-    if (method == NoCutoff)
-        name = "NoCutoff";
-    else if (method == CutoffNonPeriodic)
-        name = "CutoffNonPeriodic";
-    else if (method == CutoffPeriodic)
-        name = "CutoffPeriodic";
-    else if (method == Ewald)
-        name = "Ewald";
-    else if (method == PME)
-        name = "PME";
-    else if (method == LJPME)
-        name = "LJPME";
-    return name;
 }

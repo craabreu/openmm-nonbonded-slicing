@@ -30,7 +30,7 @@
 
 using namespace std;
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 class ReferenceCoulombIxn {
 
@@ -126,6 +126,6 @@ class ReferenceCoulombIxn {
                              bool includeDirect, bool includeReciprocal) const;
 };
 
-} // namespace PmeSlicing
+} // namespace NonbondedSlicing
 
 #endif // __ReferenceCoulombIxn_H__

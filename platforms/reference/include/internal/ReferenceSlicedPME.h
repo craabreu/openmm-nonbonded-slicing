@@ -38,7 +38,7 @@
 
 using namespace OpenMM;
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 typedef double rvec[3];
 
@@ -97,6 +97,6 @@ pme_exec(sliced_pme_t pme,
 int
 pme_destroy(sliced_pme_t    pme);
 
-} // namespace PmeSlicing
+} // namespace NonbondedSlicing
 
 #endif // __ReferenceSlicedPME_H__

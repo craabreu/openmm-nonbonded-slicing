@@ -2,14 +2,14 @@
 #define OPENMM_SLICEDPMEFORCE_H_
 
 /* -------------------------------------------------------------------------- *
- *                             OpenMM PME Slicing                             *
- *                             ==================                             *
+ *                          OpenMM Nonbonded Slicing                          *
+ *                          ========================                          *
  *                                                                            *
- * An OpenMM plugin for slicing Particle Mesh Ewald calculations on the basis *
- * of atom pairs and applying a different switching parameter to each slice.  *
+ * An OpenMM plugin for slicing nonbonded potential calculations on the basis *
+ * of atom pairs and for applying scaling parameters to selected slices.      *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
- * https://github.com/craabreu/openmm-pme-slicing                             *
+ * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 #include "openmm/Context.h"
@@ -21,7 +21,7 @@
 #include <vector>
 #include "internal/windowsExportPmeSlicing.h"
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 /**
  * Documentation for this class is available in the file python/pmeslicing.i

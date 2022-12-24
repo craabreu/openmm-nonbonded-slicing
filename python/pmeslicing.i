@@ -24,40 +24,40 @@ from openmm import unit
  * Add units to function outputs.
 */
 
-%pythonappend PmeSlicing::SlicedPmeForce::getCutoffDistance() const %{
+%pythonappend NonbondedSlicing::SlicedPmeForce::getCutoffDistance() const %{
     val = unit.Quantity(val, unit.nanometers)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getParticleCharge(int index) const %{
+%pythonappend NonbondedSlicing::SlicedPmeForce::getParticleCharge(int index) const %{
     val = unit.Quantity(val, unit.elementary_charge)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getPMEParameters(
+%pythonappend NonbondedSlicing::SlicedPmeForce::getPMEParameters(
         double& alpha, int& nx, int& ny, int& nz) const %{
     val[0] = unit.Quantity(val[0], 1/unit.nanometers)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getExceptionParameters(
+%pythonappend NonbondedSlicing::SlicedPmeForce::getExceptionParameters(
         int index, int& particle1, int& particle2, double& chargeProd) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getParticleChargeOffset(
+%pythonappend NonbondedSlicing::SlicedPmeForce::getParticleChargeOffset(
     int index, std::string& parameter, int& particleIndex, double& chargeScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge)
 %}
 
-%pythonappend PmeSlicing::SlicedPmeForce::getExceptionChargeOffset(
+%pythonappend NonbondedSlicing::SlicedPmeForce::getExceptionChargeOffset(
     int index, std::string& parameter, int& exceptionIndex, double& chargeProdScale) const %{
     val[3] = unit.Quantity(val[3], unit.elementary_charge**2)
 %}
 
-%pythonappend PmeSlicing::SlicedNonbondedForce::getPMEParametersInContext(
+%pythonappend NonbondedSlicing::SlicedNonbondedForce::getPMEParametersInContext(
         const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
     val[0] = unit.Quantity(val[0], 1/unit.nanometers)
 %}
 
-%pythonappend PmeSlicing::SlicedNonbondedForce::getLJPMEParametersInContext(
+%pythonappend NonbondedSlicing::SlicedNonbondedForce::getLJPMEParametersInContext(
         const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
     val[0] = unit.Quantity(val[0], 1/unit.nanometers)
 %}
@@ -90,7 +90,7 @@ from openmm import unit
 %apply int& OUTPUT {int& exceptionIndex};
 %apply double& OUTPUT {double& chargeProdScale};
 
-namespace PmeSlicing {
+namespace NonbondedSlicing {
 
 /**
  * This class implements a Coulomb force to represent electrostatic interactions between particles
@@ -848,12 +848,12 @@ public:
     */
 
     %extend {
-        static PmeSlicing::SlicedPmeForce& cast(OpenMM::Force& force) {
-            return dynamic_cast<PmeSlicing::SlicedPmeForce&>(force);
+        static NonbondedSlicing::SlicedPmeForce& cast(OpenMM::Force& force) {
+            return dynamic_cast<NonbondedSlicing::SlicedPmeForce&>(force);
         }
 
         static bool isinstance(OpenMM::Force& force) {
-            return (dynamic_cast<PmeSlicing::SlicedPmeForce*>(&force) != NULL);
+            return (dynamic_cast<NonbondedSlicing::SlicedPmeForce*>(&force) != NULL);
         }
     }
 };
@@ -1221,12 +1221,12 @@ public:
     */
 
     %extend {
-        static PmeSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
-            return dynamic_cast<PmeSlicing::SlicedNonbondedForce&>(force);
+        static NonbondedSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
+            return dynamic_cast<NonbondedSlicing::SlicedNonbondedForce&>(force);
         }
 
         static bool isinstance(OpenMM::Force& force) {
-            return (dynamic_cast<PmeSlicing::SlicedNonbondedForce*>(&force) != NULL);
+            return (dynamic_cast<NonbondedSlicing::SlicedNonbondedForce*>(&force) != NULL);
         }
     }
 };

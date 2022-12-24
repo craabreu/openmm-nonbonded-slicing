@@ -1,5 +1,5 @@
 #---------------------------------------------------
-# OpenMM PmeSlicing Plugin CUDA Platform
+# OpenMM NonbondedSlicing Plugin CUDA Platform
 #----------------------------------------------------
 
 # Collect up information about the version of the OpenMM library we're building

@@ -1,5 +1,5 @@
 #---------------------------------------------------
-# OpenMM PmeSlicing Plugin Reference Platform
+# OpenMM NonbondedSlicing Plugin Reference Platform
 #----------------------------------------------------
 
 # Collect up information about the version of the OpenMM library we're building

@@ -41,7 +41,7 @@
 using std::set;
 using std::vector;
 using namespace OpenMM;
-using namespace PmeSlicing;
+using namespace NonbondedSlicing;
 
 /**---------------------------------------------------------------------------------------
 
