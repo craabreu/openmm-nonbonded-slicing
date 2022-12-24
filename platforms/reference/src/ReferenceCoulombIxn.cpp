@@ -159,7 +159,7 @@ void ReferenceCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Vec3>& coo
         // **************************************************************************************
 
         int numSlices = sliceEnergies.size();
-        pme_t pmedata; /* abstract handle for PME data */
+        sliced_pme_t pmedata; /* abstract handle for PME data */
         pme_init(&pmedata, alphaEwald, numberOfAtoms, numSubsets, meshDim, 5, 1);
         pme_exec(pmedata, coords, subsets, sliceLambda, forces, charges, periodicBoxVectors, sliceEnergies);
         pme_destroy(pmedata);

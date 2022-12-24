@@ -1397,7 +1397,7 @@ static inline VkFFTResult VkDivReal(VkFFTSpecializationConstantsLayout* sc, cons
 }
 static inline VkFFTResult VkPermute(VkFFTSpecializationConstantsLayout* sc, const uint64_t* permute, const uint64_t num_elem, const uint64_t type, char** regIDs, const char* temp) {
 	VkFFTResult res = VKFFT_SUCCESS;
-	char temp_ID[33][20];
+	char temp_ID[33][40];
 	/*uint64_t permute_complete[33];
 	uint64_t num_completed = 0;
 	uint64_t start = 0;

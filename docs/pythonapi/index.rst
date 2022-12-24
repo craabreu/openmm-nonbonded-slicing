@@ -17,6 +17,7 @@ Implemented subclass of :OpenMM:`Force`:
     :glob:
 
     SlicedPmeForce
+    SlicedNonbondedForce
 
 
 .. testsetup::

@@ -1,6 +1,3 @@
-#ifndef OPENMM_SLICEDPMEFORCE_PROXY_H_
-#define OPENMM_SLICEDPMEFORCE_PROXY_H_
-
 /* -------------------------------------------------------------------------- *
  *                             OpenMM PME Slicing                             *
  *                             ==================                             *
@@ -12,24 +9,8 @@
  * https://github.com/craabreu/openmm-pme-slicing                             *
  * -------------------------------------------------------------------------- */
 
-#include "internal/windowsExportPmeSlicing.h"
-#include "openmm/serialization/SerializationProxy.h"
+#include "ReferencePmeSlicingTests.h"
+#include "TestSlicedNonbondedForce.h"
 
-using namespace OpenMM;
-
-namespace PmeSlicing {
-
-/**
- * This is a proxy for serializing SlicedPmeForce objects.
- */
-
-class OPENMM_EXPORT_PMESLICING SlicedPmeForceProxy : public SerializationProxy {
-public:
-    SlicedPmeForceProxy();
-    void serialize(const void* object, SerializationNode& node) const;
-    void* deserialize(const SerializationNode& node) const;
-};
-
-} // namespace PmeSlicing
-
-#endif /*OPENMM_SLICEDPMEFORCE_PROXY_H_*/
+void runPlatformTests() {
+}

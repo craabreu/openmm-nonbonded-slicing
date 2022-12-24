@@ -1,5 +1,5 @@
-#ifndef OPENMM_SLICEDPMEFORCE_PROXY_H_
-#define OPENMM_SLICEDPMEFORCE_PROXY_H_
+#ifndef OPENMM_SLICEDNONBONDEDFORCE_PROXY_H_
+#define OPENMM_SLICEDNONBONDEDFORCE_PROXY_H_
 
 /* -------------------------------------------------------------------------- *
  *                             OpenMM PME Slicing                             *
@@ -20,16 +20,16 @@ using namespace OpenMM;
 namespace PmeSlicing {
 
 /**
- * This is a proxy for serializing SlicedPmeForce objects.
+ * This is a proxy for serializing SlicedNonbondedForce objects.
  */
 
-class OPENMM_EXPORT_PMESLICING SlicedPmeForceProxy : public SerializationProxy {
+class OPENMM_EXPORT_PMESLICING SlicedNonbondedForceProxy : public SerializationProxy {
 public:
-    SlicedPmeForceProxy();
+    SlicedNonbondedForceProxy();
     void serialize(const void* object, SerializationNode& node) const;
     void* deserialize(const SerializationNode& node) const;
 };
 
-} // namespace PmeSlicing
+} // namespace OpenMM
 
-#endif /*OPENMM_SLICEDPMEFORCE_PROXY_H_*/
+#endif /*OPENMM_SLICEDNONBONDEDFORCE_PROXY_H_*/

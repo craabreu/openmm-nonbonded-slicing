@@ -47,9 +47,9 @@ find_path(OPENCL_INCLUDE_DIR
 
 if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
     if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
-      set(path_suffixes "lib/x86_64")
+      set(path_suffixes "lib/x86_64" "lib64")
     else("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
-      set(path_suffixes "lib/x86")
+      set(path_suffixes "lib/x86" "lib")
     endif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
 elseif(MSVC)
     if(CMAKE_CL_64)
@@ -94,10 +94,6 @@ find_library(OPENCL_LIBRARY
 )
 
 find_package_handle_standard_args(OPENCL DEFAULT_MSG OPENCL_LIBRARY OPENCL_INCLUDE_DIR)
-
-include(CMakePrintHelpers)
-
-cmake_print_variables(OPENCL_FOUND)
 
 if(OPENCL_FOUND)
   set(OPENCL_LIBRARIES ${OPENCL_LIBRARY})
