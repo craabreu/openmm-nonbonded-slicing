@@ -305,8 +305,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
                             tab_qxyz[n] = atomParameters[n][QIndex]*(tab_xy[n]*conj(EIR(subset, -rz, n, 2)));
                         }
 
-                    double cs[numberOfSubsets] = {0.0f};
-                    double ss[numberOfSubsets] = {0.0f};
+                    vector<double> cs(numberOfSubsets, 0);
+                    vector<double> ss(numberOfSubsets, 0);
 
                     for (int n = 0; n < numberOfAtoms; n++) {
                         int subset = atomSubsets[n];
