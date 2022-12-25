@@ -12,7 +12,7 @@ OpenMM Nonbonded Slicing
 
    <a class="github-button" href="https://github.com/craabreu/openmm-nonbonded-slicing" data-show-count="true" aria-label="Star craabreu/openmm-nonbonded-slicing on GitHub">Star</a>
 
-========
+
 Contents
 ========
 
