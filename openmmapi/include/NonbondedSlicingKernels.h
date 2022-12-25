@@ -1,5 +1,5 @@
-#ifndef PMESLICING_KERNELS_H_
-#define PMESLICING_KERNELS_H_
+#ifndef NONBONDED_SLICING_KERNELS_H_
+#define NONBONDED_SLICING_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -207,4 +207,4 @@ public:
 
 } // namespace NonbondedSlicing
 
-#endif /*PMESLICING_KERNELS_H_*/
+#endif /*NONBONDED_SLICING_KERNELS_H_*/

@@ -6,7 +6,7 @@ To use the plugin from your Python script:
 .. code-block:: python
 
     import openmm as mm
-    import pmeslicing as plugin
+    import nonbondedslicing as plugin
     system = mm.System()
     force = plugin.SlicedPmeForce(1)
     system.addForce(force)
@@ -22,4 +22,4 @@ Implemented subclass of :OpenMM:`Force`:
 
 .. testsetup::
 
-    from pmeslicing import *
+    from nonbondedslicing import *

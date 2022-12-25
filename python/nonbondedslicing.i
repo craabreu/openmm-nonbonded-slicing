@@ -1,4 +1,4 @@
-%module pmeslicing
+%module nonbondedslicing
 
 %import(module="openmm") "swig/OpenMMSwigHeaders.i"
 %include "swig/typemaps.i"
@@ -798,7 +798,7 @@ public:
     /**
      * Get whether periodic boundary conditions should be applied to exceptions.  Usually this is not
      * appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and
-     * 1-4 pairs), but there are situations when it does make sense.  For pmeslicing, you may want to simulate
+     * 1-4 pairs), but there are situations when it does make sense.  For nonbondedslicing, you may want to simulate
      * an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic
      * copy.
      *

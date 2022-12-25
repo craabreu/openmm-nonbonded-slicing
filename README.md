@@ -1,33 +1,29 @@
-OpenMM PME Slicing Plugin
-=========================
+OpenMM Nonbonded Slicing Plugin
+===============================
 
-[![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3ALinux)
-[![GH Actions Status](https://github.com/craabreu/openmm-pme-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-pme-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
-[![Documentation Status](https://readthedocs.org/projects/openmm-pme-slicing/badge/?version=latest)](https://openmm-pme-slicing.readthedocs.io/en/latest/?badge=latest)
+[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3ALinux)
+[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
+[![Documentation Status](https://readthedocs.org/projects/openmm-nonbonded-slicing/badge/?version=latest)](https://openmm-nonbonded-slicing.readthedocs.io/en/latest/?badge=latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-This [OpenMM] plugin implements the **SlicedPmeForce** class, a variant of the smooth Particle Mesh
-Ewald (PME) method. By partitioning all particles among _n_ disjoint subsets, the total potential
-energy becomes a sum of contributions from subset pairs, that is,
+This [OpenMM] plugin implements the **SlicedNonbondedForce** class, a variant of OpenMM's [NonbondedForce].
+By partitioning all particles among _n_ disjoint subsets, the total potential energy becomes a sum of
+contributions from subset pairs, that is,
 
 ![equation](https://latex.codecogs.com/svg.image?E&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;E_{I,J})
 
 where $E_{I,J}$ is an energy slice defined as the sum over every pair formed by a particle in
 subset _I_ and particle in subset _J_.
 
-With the SlicedPmeForce class, the user can change _E_ from a simple sum into a linear combination
-of energy slices, with coefficients being the values of [Context] global parameters. Derivatives
-with respect to these parameters can be requested as a way of reporting individual energy slices or
-sums thereof.
-
-**Note**: In [OpenMM], Lennard-Jones and other pairwise potentials can undergo similar slicing
-by means of the `addInteractionGroup` method of [CustomNonbondedForce]. There are no built-in
-alternatives for lattice-sum Coulomb interactions.
+With the SlicedNonbondedForce class, the user can change _E_ from a simple sum into a linear combination
+of Coulomb and Lennard-Jones contributions to the energy slices, with coefficients being the values of
+[Context] global parameters. Derivatives with respect to these parameters can be requested as a way of
+reporting individual energy-slice contributions or sums thereof.
 
 Documentation
 =============
 
-https://openmm-pme-slicing.readthedocs.io/en/latest
+https://openmm-nonbonded-slicing.readthedocs.io/en/latest
 
 Building the Plugin
 ===================
@@ -48,10 +44,10 @@ the OpenMM header files and libraries.
 this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
 
 6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that PMESLICING_BUILD_OPENCL_LIB is selected.
+OPENCL_LIBRARY are set correctly, and that PLUGIN_BUILD_OPENCL_LIB is selected.
 
 7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that PMESLICING_BUILD_CUDA_LIB is selected.
+and that PLUGIN_BUILD_CUDA_LIB is selected.
 
 8. Press "Configure" again if necessary, then press "Generate".
 
@@ -71,9 +67,9 @@ Once you do that, you can use the plugin from your Python scripts:
 
 ```py
     import openmm as mm
-    import pmeslicing as plugin
+    import nonbondedslicing as plugin
     system = mm.System()
-    force = plugin.SlicedPmeForce(2)
+    force = plugin.Nonbonded(2)
     system.addForce(force)
 ```
 
@@ -86,7 +82,7 @@ To run the Python test cases, build the "PythonTest" target by typing `make Pyth
 
 
 [CMake]:                http://www.cmake.org
-[CustomNonbondedForce]: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html
+[NonbondedForce]:       http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
 [Context]:              http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html
 [OpenMM]:               https://openmm.org
 [SWIG]:                 http://www.swig.org

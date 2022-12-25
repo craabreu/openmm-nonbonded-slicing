@@ -1,11 +1,11 @@
 ==================
-PME Slicing Theory
+Nonbonded Slicing Theory
 ==================
 
 Potential Energy Slicing
 ========================
 
-This section contains the equations used to implement the :class:`~pmeslicing.SlicedPmeForce`
+This section contains the equations used to implement the :class:`~nonbondedslicing.SlicedPmeForce`
 class. Even though the class API follows Python's 0-based indexing, the equations follow the
 conventional 1-based indexing for simplicity.
 
@@ -107,7 +107,7 @@ Each subset-specific structure factor :math:`S(\mathbf k)` can be calculated usi
 Particle Mesh Ewald method :cite:`Essmann_1995`. This requires *n* FFT calculations for evaluating
 all slice energies. In the case of forces, *n* additional inverse FFT calculations are necessary.
 Therefore, in a single serial processor and for a fixed number of particles, the computation effort
-of :class:`~pmeslicing.SlicedPmeForce` scales approximately linearly with the number of subsets,
+of :class:`~nonbondedslicing.SlicedPmeForce` scales approximately linearly with the number of subsets,
 rather than the number of slices. In the OpenCL and CUDA instances of :OpenMM:`Platform`, it takes
 advantage the vkFFT_ or cuFFT_ package capability to speed-up parallel FFT calculations via batched
 transforms.

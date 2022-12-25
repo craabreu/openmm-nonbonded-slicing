@@ -1,5 +1,5 @@
-#ifndef OPENMM_CUDAPMESLICINGKERNELFACTORY_H_
-#define OPENMM_CUDAPMESLICINGKERNELFACTORY_H_
+#ifndef OPENMM_CUDANONBONDED_SLICINGKERNELFACTORY_H_
+#define OPENMM_CUDANONBONDED_SLICINGKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -27,4 +27,4 @@ public:
 
 } // namespace OpenMM
 
-#endif /*OPENMM_CUDAPMESLICINGKERNELFACTORY_H_*/
+#endif /*OPENMM_CUDANONBONDED_SLICINGKERNELFACTORY_H_*/

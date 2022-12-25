@@ -27,7 +27,7 @@ namespace NonbondedSlicing {
  * This is the internal implementation of SlicedNonbondedForce.
  */
 
-class OPENMM_EXPORT_PMESLICING SlicedNonbondedForceImpl : public NonbondedForceImpl {
+class OPENMM_EXPORT_NONBONDED_SLICING SlicedNonbondedForceImpl : public NonbondedForceImpl {
 public:
     SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner);
     ~SlicedNonbondedForceImpl();

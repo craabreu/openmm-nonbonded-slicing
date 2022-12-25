@@ -20,7 +20,7 @@ using namespace OpenMM;
 
 namespace NonbondedSlicing {
 
-class OPENMM_EXPORT_PMESLICING ReferenceSlicedLJCoulomb14 {
+class OPENMM_EXPORT_NONBONDED_SLICING ReferenceSlicedLJCoulomb14 {
 
 public:
 

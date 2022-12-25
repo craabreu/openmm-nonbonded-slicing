@@ -1,5 +1,5 @@
-#ifndef OPENMM_WINDOWSEXPORTPMESLICING_H_
-#define OPENMM_WINDOWSEXPORTPMESLICING_H_
+#ifndef OPENMM_WINDOWSEXPORTNONBONDED_SLICING_H_
+#define OPENMM_WINDOWSEXPORTNONBONDED_SLICING_H_
 
 /*
  * Shared libraries are messy in Visual Studio. We have to distinguish three
@@ -12,7 +12,7 @@
  *       being compiled with the expectation of linking with the
  *       OpenMM static library (nothing special needed)
  * In the CMake script for building this library, we define one of the symbols
- *     PMESLICING_BUILDING_{SHARED|STATIC}_LIBRARY
+ *     PLUGIN_BUILDING_{SHARED|STATIC}_LIBRARY
  * Client code normally has no special symbol defined, in which case we'll
  * assume it wants to use the shared library. However, if the client defines
  * the symbol OPENMM_USE_STATIC_LIBRARIES we'll suppress the dllimport so
@@ -27,15 +27,15 @@
     #pragma warning(disable:4996)
     // Keep MS VC++ quiet about lack of dll export of private members.
     #pragma warning(disable:4251)
-    #if defined(PMESLICING_BUILDING_SHARED_LIBRARY)
-        #define OPENMM_EXPORT_PMESLICING __declspec(dllexport)
-    #elif defined(PMESLICING_BUILDING_STATIC_LIBRARY) || defined(PMESLICING_USE_STATIC_LIBRARIES)
-        #define OPENMM_EXPORT_PMESLICING
+    #if defined(PLUGIN_BUILDING_SHARED_LIBRARY)
+        #define OPENMM_EXPORT_NONBONDED_SLICING __declspec(dllexport)
+    #elif defined(PLUGIN_BUILDING_STATIC_LIBRARY) || defined(NONBONDED_SLICING_USE_STATIC_LIBRARIES)
+        #define OPENMM_EXPORT_NONBONDED_SLICING
     #else
-        #define OPENMM_EXPORT_PMESLICING __declspec(dllimport)   // i.e., a client of a shared library
+        #define OPENMM_EXPORT_NONBONDED_SLICING __declspec(dllimport)   // i.e., a client of a shared library
     #endif
 #else
-    #define OPENMM_EXPORT_PMESLICING // Linux, Mac
+    #define OPENMM_EXPORT_NONBONDED_SLICING // Linux, Mac
 #endif
 
-#endif // OPENMM_WINDOWSEXPORTPMESLICING_H_
+#endif // OPENMM_WINDOWSEXPORTNONBONDED_SLICING_H_

@@ -1,5 +1,5 @@
-#ifndef OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_
-#define OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_
+#ifndef OPENMM_OPENCLPARALLELNONBONDED_SLICINGKERNELS_H_
+#define OPENMM_OPENCLPARALLELNONBONDED_SLICINGKERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -128,4 +128,4 @@ private:
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENMM_OPENCLPARALLELPMESLICINGKERNELS_H_*/
+#endif /*OPENMM_OPENCLPARALLELNONBONDED_SLICINGKERNELS_H_*/

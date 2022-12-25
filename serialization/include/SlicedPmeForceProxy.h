@@ -23,7 +23,7 @@ namespace NonbondedSlicing {
  * This is a proxy for serializing SlicedPmeForce objects.
  */
 
-class OPENMM_EXPORT_PMESLICING SlicedPmeForceProxy : public SerializationProxy {
+class OPENMM_EXPORT_NONBONDED_SLICING SlicedPmeForceProxy : public SerializationProxy {
 public:
     SlicedPmeForceProxy();
     void serialize(const void* object, SerializationNode& node) const;

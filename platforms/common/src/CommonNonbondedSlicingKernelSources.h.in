@@ -1,5 +1,5 @@
-#ifndef OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
-#define OPENMM_COMMONPMESLICINGKERNELSOURCES_H_
+#ifndef OPENMM_COMMONNONBONDED_SLICINGKERNELSOURCES_H_
+#define OPENMM_COMMONNONBONDED_SLICINGKERNELSOURCES_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -29,4 +29,4 @@ public:
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENMM_COMMONPMESLICINGKERNELSOURCES_H_*/
+#endif /*OPENMM_COMMONNONBONDED_SLICINGKERNELSOURCES_H_*/

@@ -22,7 +22,7 @@ using namespace std;
 
 namespace NonbondedSlicing {
 
-class OPENMM_EXPORT_PMESLICING SlicedNonbondedForce : public NonbondedForce {
+class OPENMM_EXPORT_NONBONDED_SLICING SlicedNonbondedForce : public NonbondedForce {
 public:
     SlicedNonbondedForce(int numSubsets);
     SlicedNonbondedForce(const OpenMM::NonbondedForce& force, int numSubsets);
@@ -94,7 +94,7 @@ public:
         return j*(j+1)/2+i;
     }
     bool clashesWith(const ScalingParameterInfo& info) {
-        return getSlice() == info.getSlice() && (includeLJ && info.includeLJ || includeCoulomb && info.includeCoulomb);
+        return getSlice() == info.getSlice() && ((includeLJ && info.includeLJ) || (includeCoulomb && info.includeCoulomb));
     }
 };
 

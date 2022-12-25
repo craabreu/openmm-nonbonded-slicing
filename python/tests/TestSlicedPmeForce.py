@@ -1,6 +1,6 @@
 import math
 
-import pmeslicing as plugin
+import nonbondedslicing as plugin
 import numpy as np
 import openmm as mm
 import pytest

@@ -24,10 +24,10 @@
 namespace NonbondedSlicing {
 
 /**
- * Documentation for this class is available in the file python/pmeslicing.i
+ * Documentation for this class is available in the file python/nonbondedslicing.i
  */
 
-class OPENMM_EXPORT_PMESLICING SlicedPmeForce : public OpenMM::Force {
+class OPENMM_EXPORT_NONBONDED_SLICING SlicedPmeForce : public OpenMM::Force {
 public:
     SlicedPmeForce(int numSubsets);
     SlicedPmeForce(const OpenMM::NonbondedForce&, int numSubsets);
@@ -133,8 +133,6 @@ private:
  */
 class SlicedPmeForce::ParticleInfo {
 public:
-    int subset;
-    double charge;
     ParticleInfo() {
         charge = 0.0;
         subset = 0;
@@ -142,6 +140,8 @@ public:
     ParticleInfo(double charge, int subset) :
         charge(charge), subset(subset) {
     }
+    int subset;
+    double charge;
 };
 
 /**
@@ -150,8 +150,6 @@ public:
  */
 class SlicedPmeForce::ExceptionInfo {
 public:
-    int particle1, particle2;
-    double chargeProd;
     ExceptionInfo() {
         particle1 = particle2 = -1;
         chargeProd = 0.0;
@@ -159,6 +157,8 @@ public:
     ExceptionInfo(int particle1, int particle2, double chargeProd) :
         particle1(particle1), particle2(particle2), chargeProd(chargeProd) {
     }
+    int particle1, particle2;
+    double chargeProd;
 };
 
 /**

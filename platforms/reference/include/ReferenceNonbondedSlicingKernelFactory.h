@@ -1,5 +1,5 @@
-#ifndef OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
-#define OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_
+#ifndef OPENMM_REFERENCENONBONDED_SLICINGKERNELFACTORY_H_
+#define OPENMM_REFERENCENONBONDED_SLICINGKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -30,4 +30,4 @@ public:
 
 } // namespace NonbondedSlicing
 
-#endif /*OPENMM_REFERENCEPMESLICINGKERNELFACTORY_H_*/
+#endif /*OPENMM_REFERENCENONBONDED_SLICINGKERNELFACTORY_H_*/

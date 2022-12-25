@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 import os
-import pmeslicing
+import nonbondedslicing
 import openmm
 
 
@@ -35,8 +35,8 @@ def create_rst_file(cls):
         ])
 
 
-create_rst_file(pmeslicing.SlicedPmeForce)
-create_rst_file(pmeslicing.SlicedNonbondedForce)
+create_rst_file(nonbondedslicing.SlicedPmeForce)
+create_rst_file(nonbondedslicing.SlicedNonbondedForce)
 
 extensions = [
     'sphinx.ext.autodoc',
@@ -58,7 +58,7 @@ if os.getenv('SPELLCHECK'):
 source_suffix = '.rst'
 master_doc = 'index'
 
-project = 'OpenMM PME Slicing'
+project = 'Nonbonded Slicing'
 copyright = ('2022, Charlles Abreu. Project based on OpenMM')
 author = 'Charlles Abreu'
 
@@ -70,8 +70,8 @@ release = ''
 pygments_style = 'trac'
 templates_path = ['.']
 extlinks = {
-    'issue': ('https://github.com/craabreu/openmm-pme-slicing/issues/%s', '#'),
-    'pr': ('https://github.com/craabreu/openmm-pme-slicing/pull/%s', 'PR #'),
+    'issue': ('https://github.com/craabreu/openmm-nonbonded-slicing/issues/%s', '#'),
+    'pr': ('https://github.com/craabreu/openmm-nonbonded-slicing/pull/%s', 'PR #'),
 }
 
 # on_rtd is whether we are on readthedocs.org
@@ -87,7 +87,7 @@ html_theme_options = {
     'logo_name': True,
     'github_button': False,
     'github_user': 'craabreu',
-    'github_repo': 'openmm-pme-slicing',
+    'github_repo': 'openmm-nonbonded-slicing',
 }
 html_sidebars = {
    '**': ['about.html', 'globaltoc.html', 'searchbox.html'],

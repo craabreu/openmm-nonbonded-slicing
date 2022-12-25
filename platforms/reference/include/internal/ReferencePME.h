@@ -40,7 +40,7 @@ pme_t;
  * pme_order   Interpolation order, almost always 4
  * epsilon_r   Dielectric coefficient, typically 1.0.
  */
-int OPENMM_EXPORT_PMESLICING
+int OPENMM_EXPORT_NONBONDED_SLICING
 pme_init(pme_t* ppme,
          double ewaldcoeff,
          int natoms,
@@ -61,7 +61,7 @@ pme_init(pme_t* ppme,
  * box         Simulation cell dimensions (nm)
  * energy      Total energy (will be written in units of kJ/mol)
  */
-int OPENMM_EXPORT_PMESLICING
+int OPENMM_EXPORT_NONBONDED_SLICING
 pme_exec(pme_t pme,
          const vector<OpenMM::Vec3>& atomCoordinates,
          const vector<int>& atomSubsets,
@@ -84,7 +84,7 @@ pme_exec(pme_t pme,
  * box         Simulation cell dimensions (nm)
  * energy      Total energy (will be written in units of kJ/mol)
  */
-int OPENMM_EXPORT_PMESLICING
+int OPENMM_EXPORT_NONBONDED_SLICING
 pme_exec_dpme(pme_t pme,
          const vector<OpenMM::Vec3>& atomCoordinates,
          const vector<int>& atomSubsets,
@@ -98,7 +98,7 @@ pme_exec_dpme(pme_t pme,
 
 
 /* Release all memory in pme structure */
-int OPENMM_EXPORT_PMESLICING
+int OPENMM_EXPORT_NONBONDED_SLICING
 pme_destroy(pme_t    pme);
 
 } // namespace OpenMM
