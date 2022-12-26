@@ -2,8 +2,7 @@
  *                          OpenMM Nonbonded Slicing                          *
  *                          ========================                          *
  *                                                                            *
- * An OpenMM plugin for slicing nonbonded potential calculations on the basis *
- * of atom pairs and for applying scaling parameters to selected slices.      *
+ * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
  * Copyright (c) 2022 Charlles Abreu                                          *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
@@ -1185,30 +1184,30 @@ int main(int argc, char* argv[]) {
     init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
-        for (auto method : nonbondedMethods)
-            testInstantiateFromNonbondedForce(method);
-        testCoulomb();
-        testLJ();
-        testExclusionsAnd14();
-        testCutoff();
-        testCutoff14();
-        testPeriodic();
-        testPeriodicExceptions();
-        testTriclinic();
-        testLargeSystem();
-        testDispersionCorrection();
-        testChangingParameters();
-        testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
-        testSwitchingFunction(SlicedNonbondedForce::PME);
-        testTwoForces();
-        testParameterOffsets();
-        testEwaldExceptions();
-        testDirectAndReciprocal();
+        // for (auto method : nonbondedMethods)
+        //     testInstantiateFromNonbondedForce(method);
+        // testCoulomb();
+        // testLJ();
+        // testExclusionsAnd14();
+        // testCutoff();
+        // testCutoff14();
+        // testPeriodic();
+        // testPeriodicExceptions();
+        // testTriclinic();
+        // testLargeSystem();
+        // testDispersionCorrection();
+        // testChangingParameters();
+        // testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
+        // testSwitchingFunction(SlicedNonbondedForce::PME);
+        // testTwoForces();
+        // testParameterOffsets();
+        // testEwaldExceptions();
+        // testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
             for (auto exceptions : booleanValues)
                 for (auto lj : booleanValues)
                     testNonbondedSlicing(sfmt, method, exceptions, lj);
-        runPlatformTests();
+        // runPlatformTests();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;
