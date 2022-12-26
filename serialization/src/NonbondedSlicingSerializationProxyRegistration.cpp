@@ -17,8 +17,6 @@
 #include <cstdlib>
 #endif
 
-#include "SlicedPmeForce.h"
-#include "SlicedPmeForceProxy.h"
 #include "SlicedNonbondedForce.h"
 #include "SlicedNonbondedForceProxy.h"
 #include "openmm/serialization/SerializationProxy.h"
@@ -39,6 +37,5 @@ using namespace NonbondedSlicing;
 using namespace OpenMM;
 
 extern "C" OPENMM_EXPORT_NONBONDED_SLICING void registerNonbondedSlicingSerializationProxies() {
-    SerializationProxy::registerProxy(typeid(SlicedPmeForce), new SlicedPmeForceProxy());
     SerializationProxy::registerProxy(typeid(SlicedNonbondedForce), new SlicedNonbondedForceProxy());
 }

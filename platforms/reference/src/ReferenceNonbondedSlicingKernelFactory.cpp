@@ -19,7 +19,6 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         Platform& platform = Platform::getPlatform(i);
         if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
             ReferenceNonbondedSlicingKernelFactory* factory = new ReferenceNonbondedSlicingKernelFactory();
-            platform.registerKernelFactory(CalcSlicedPmeForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcSlicedNonbondedForceKernel::Name(), factory);
         }
     }
@@ -31,9 +30,7 @@ extern "C" OPENMM_EXPORT void registerNonbondedSlicingReferenceKernelFactories()
 
 KernelImpl* ReferenceNonbondedSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
     ReferencePlatform::PlatformData& data = *static_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    if (name == CalcSlicedPmeForceKernel::Name())
-        return new ReferenceCalcSlicedPmeForceKernel(name, platform);
-    else if (name == CalcSlicedNonbondedForceKernel::Name())
+    if (name == CalcSlicedNonbondedForceKernel::Name())
         return new ReferenceCalcSlicedNonbondedForceKernel(name, platform);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

@@ -23,7 +23,6 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
     try {
         Platform& platform = Platform::getPlatformByName("OpenCL");
         OpenCLNonbondedSlicingKernelFactory* factory = new OpenCLNonbondedSlicingKernelFactory();
-        platform.registerKernelFactory(CalcSlicedPmeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcSlicedNonbondedForceKernel::Name(), factory);
     }
     catch (std::exception ex) {
@@ -44,16 +43,12 @@ extern "C" OPENMM_EXPORT void registerNonbondedSlicingOpenCLKernelFactories() {
 KernelImpl* OpenCLNonbondedSlicingKernelFactory::createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const {
     OpenCLPlatform::PlatformData& data = *static_cast<OpenCLPlatform::PlatformData*>(context.getPlatformData());
     if (data.contexts.size() > 1) {
-        if (name == CalcSlicedPmeForceKernel::Name())
-            return new OpenCLParallelCalcSlicedPmeForceKernel(name, platform, data, context.getSystem());
-        else if (name == CalcSlicedNonbondedForceKernel::Name())
+        if (name == CalcSlicedNonbondedForceKernel::Name())
             return new OpenCLParallelCalcSlicedNonbondedForceKernel(name, platform, data, context.getSystem());
         throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
     }
     OpenCLContext& cl = *data.contexts[0];
-    if (name == CalcSlicedPmeForceKernel::Name())
-        return new OpenCLCalcSlicedPmeForceKernel(name, platform, cl, context.getSystem());
-    else if (name == CalcSlicedNonbondedForceKernel::Name())
+    if (name == CalcSlicedNonbondedForceKernel::Name())
         return new OpenCLCalcSlicedNonbondedForceKernel(name, platform, cl, context.getSystem());
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

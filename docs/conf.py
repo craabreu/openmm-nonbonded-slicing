@@ -35,7 +35,6 @@ def create_rst_file(cls):
         ])
 
 
-create_rst_file(nonbondedslicing.SlicedPmeForce)
 create_rst_file(nonbondedslicing.SlicedNonbondedForce)
 
 extensions = [

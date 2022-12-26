@@ -8,7 +8,7 @@ To use the plugin from your Python script:
     import openmm as mm
     import nonbondedslicing as plugin
     system = mm.System()
-    force = plugin.SlicedPmeForce(1)
+    force = plugin.SlicedNonbondedForce(1)
     system.addForce(force)
 
 Implemented subclass of :OpenMM:`Force`:
@@ -16,7 +16,6 @@ Implemented subclass of :OpenMM:`Force`:
 .. toctree::
     :glob:
 
-    SlicedPmeForce
     SlicedNonbondedForce
 
 

@@ -12,7 +12,7 @@ energy becomes a sum of contributions from subset pairs, that is,
 where :math:`E_{I,J}` is the sum over every pair formed by a particle in subset *I* and particle in
 subset *J*.
 
-With the :class:`~nonbondedslicing.SlicedPmeForce` class, the user can change *E* from a simple sum into
+With the :class:`~nonbondedslicing.SlicedNonbondedForce` class, the user can change *E* from a simple sum into
 a linear combination of energy slices, with coefficients being the values of :OpenMM:`Context`
 global parameters. Derivatives with respect to these parameters can be requested as a way of
 reporting individual energy slices or sums thereof.
