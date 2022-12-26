@@ -159,7 +159,7 @@ class OpenCLCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
 public:
     OpenCLCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, OpenCLContext& cl, const System& system) :
             CalcSlicedNonbondedForceKernel(name, platform), hasInitializedKernel(false), cl(cl), sort(NULL),
-            fft(NULL), dispersionFft(NULL), pmeio(NULL), usePmeQueue(false) {};
+            fft(NULL), dispersionFft(NULL), usePmeQueue(false) {};
     ~OpenCLCalcSlicedNonbondedForceKernel();
     /**
      * Initialize the kernel.
@@ -216,9 +216,6 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
     class AddEnergyPostComputation;
@@ -257,8 +254,6 @@ private:
     cl::Event pmeSyncEvent;
     OpenCLVkFFT3D* fft;
     OpenCLVkFFT3D* dispersionFft;
-    Kernel cpuPme;
-    PmeIO* pmeio;
     AddEnergyPostComputation* addEnergy;
     cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
     cl::Kernel ewaldSumsKernel;

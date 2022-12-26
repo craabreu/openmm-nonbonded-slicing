@@ -159,7 +159,7 @@ class CudaCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel
 public:
     CudaCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, CudaContext& cu, const System& system) :
             CalcSlicedNonbondedForceKernel(name, platform), cu(cu), hasInitializedFFT(false), sort(NULL),
-            dispersionFft(NULL), fft(NULL), pmeio(NULL), usePmeStream(false) {};
+            dispersionFft(NULL), fft(NULL), usePmeStream(false) {};
     ~CudaCalcSlicedNonbondedForceKernel();
     /**
      * Initialize the kernel.
@@ -216,9 +216,6 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
-    class PmeIO;
-    class PmePreComputation;
-    class PmePostComputation;
     class SyncStreamPreComputation;
     class AddEnergyPostComputation;
     class SyncStreamPostComputation;
@@ -251,8 +248,6 @@ private:
     CudaArray pmeEnergyBuffer;
     CudaArray ljpmeEnergyBuffer;
     CudaSort* sort;
-    Kernel cpuPme;
-    PmeIO* pmeio;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
