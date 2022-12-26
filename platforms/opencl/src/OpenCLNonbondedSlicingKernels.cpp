@@ -1049,23 +1049,22 @@ public:
         int numSlices = sliceLambdas.getSize();
         bool doLJPME = ljpmeEnergyBuffer.isInitialized();
         bufferSize = pmeEnergyBuffer.getSize()/numSlices;
-        vector<string> requestedDerivs;
+        vector<int> requestedDerivs;
         for (auto indices : sliceScalingParamDerivs)
             if (indices.x != -1 || (doLJPME && indices.y != -1))
-                requestedDerivs.push_back(scalingParams[max(indices.x, indices.y)]);
+                requestedDerivs.push_back(max(indices.x, indices.y));
         hasDerivatives = requestedDerivs.size() > 0;
         stringstream code;
         if (hasDerivatives) {
             const vector<string>& allDerivs = cl.getEnergyParamDerivNames();
-            for (int index = 0; index < requestedDerivs.size(); index++) {
-                int derivIndex = find(allDerivs.begin(), allDerivs.end(), requestedDerivs[index]) - allDerivs.begin();
-                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<derivIndex<<"] += ";
-                int position = 0;
+            for (int index : requestedDerivs) {
+                int position = find(allDerivs.begin(), allDerivs.end(), scalingParams[index]) - allDerivs.begin();
+                code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<position<<"] += ";
                 for (int slice = 0; slice < numSlices; slice++) {
                     if (sliceScalingParamDerivs[slice].x == index)
-                        code<<(position++ ? " + " : "")<<"clEnergy["<<slice<<"]";
+                        code<<"+clEnergy["<<slice<<"]";
                     if (doLJPME && sliceScalingParamDerivs[slice].y == index)
-                        code<<(position++ ? " + " : "")<<"ljEnergy["<<slice<<"]";
+                        code<<"+ljEnergy["<<slice<<"]";
                 }
                 code<<";"<<endl;
             }
