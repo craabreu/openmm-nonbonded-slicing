@@ -38,7 +38,7 @@ SET(PLUGIN_LIBRARY_NAME NonbondedSlicing)
 SET(SHARED_NONBONDED_SLICING_TARGET ${PLUGIN_LIBRARY_NAME})
 
 # These are all the places to search for header files which are to be part of the API.
-SET(API_INCLUDE_DIRS "openmmapi/include" "openmmapi/include/internal")
+SET(API_INCLUDE_DIRS "openmmapi/include")
 
 # Locate header files.
 SET(API_INCLUDE_FILES)
