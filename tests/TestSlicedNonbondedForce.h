@@ -992,7 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() != "Reference" && platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 5e-4;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
