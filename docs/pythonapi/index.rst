@@ -1,20 +1,20 @@
 Python API
 ==========
 
-To use the plugin from your Python script:
+To use the plugin from your Python script, you can do:
 
 .. code-block:: python
 
     import openmm as mm
     import nonbondedslicing as plugin
     system = mm.System()
-    force = plugin.SlicedNonbondedForce(1)
+    force = plugin.SlicedNonbondedForce(2)
     system.addForce(force)
 
-Implemented subclass of :OpenMM:`Force`:
+This is the implemented subclass of :OpenMM:`Force`:
 
 .. toctree::
-    :glob:
+    :titlesonly:
 
     SlicedNonbondedForce
 

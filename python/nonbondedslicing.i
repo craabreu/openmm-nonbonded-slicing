@@ -59,11 +59,14 @@ namespace NonbondedSlicing {
 %apply bool& OUTPUT {bool& includeCoulomb};
 
 /**
- * This class implements nonbonded interactions between particles, including a Coulomb force to represent
+ * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
  * electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
  * periodic boundary conditions and cutoffs for long range interactions.  Lennard-Jones interactions are
  * calculated with the Lorentz-Berthelot combining rule: it uses the arithmetic mean of the sigmas and the
  * geometric mean of the epsilons for the two interacting particles.
+ *
+ * The particles are classified into *n* disjoint subsets, thus creating :math:`n(n+1)/2` distinct types of
+ * particle pairs. Then, the total potential energy is sliced into the contributions of such pair types.
  *
  * To use this class, create a NonbondedForce object, then call :func:`addParticle` once for each particle in the
  * System to define its parameters.  The number of particles for which you define nonbonded parameters must
@@ -216,7 +219,14 @@ public:
      */
     int getNumSlices() const;
     /**
-     * Get the index of an energy sliced formed by two given particle subsets.
+     * Get the index of a slice corresponding to the interactions between particles of two
+     * specified subsets. Such index is calculated by:
+     *
+     * .. code-block:: python
+     *
+     *      i = min(subset1, subset2)
+     *      j = max(subset1, subset2)
+     *      index = j*(j+1)/2 + i
      *
      * Parameters
      * ----------

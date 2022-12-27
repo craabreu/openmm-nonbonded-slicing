@@ -2,20 +2,24 @@
 Overview
 ========
 
-This OpenMM_ plugin implements a sliced variant of the smooth Particle Mesh Ewald (PME) method
-:cite:`Essmann_1995`. By partitioning all particles among *n* disjoint subsets, the total potential
-energy becomes a sum of contributions from subset pairs, that is,
+This OpenMM_ plugin implements a sliced variant of OpenMM_'s NonbondedForce class.
+
+the smooth Particle Mesh Ewald (PME) method
+By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
+combination of contributions from pairs of subsets like
 
 .. math::
-   E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} E_{I,J},
+   E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} (\lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J}),
 
-where :math:`E_{I,J}` is the sum over every pair formed by a particle in subset *I* and particle in
-subset *J*.
+where each slice is defined by subsets *I* and *J*, superscripts *vdW* and *elec* denote van
+der Waals and electrostatic contributions, :math:`E_{I,J}` is the potential energy of all particle pairs
+formed by one particle in subset *I* and one in subset *J*, and :math:`\lambda_{I,J}` is a scaling parameter.
 
-With the :class:`~nonbondedslicing.SlicedNonbondedForce` class, the user can change *E* from a simple sum into
-a linear combination of energy slices, with coefficients being the values of :OpenMM:`Context`
-global parameters. Derivatives with respect to these parameters can be requested as a way of
-reporting individual energy slices or sums thereof.
+By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
+scaling parameters into variables and store their values in :OpenMM:`Context` global parameters. Derivatives
+with respect to these variables can be requested and used, for instance, to report individual energy
+slice contributions or sums thereof via :OpenMM:`Context`'s ``getState`` method with option
+``getParameterDerivatives=True``.
 
 Building the Plugin
 ===================

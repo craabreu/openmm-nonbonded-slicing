@@ -6,27 +6,29 @@ OpenMM Nonbonded Slicing Plugin
 [![Documentation Status](https://readthedocs.org/projects/openmm-nonbonded-slicing/badge/?version=latest)](https://openmm-nonbonded-slicing.readthedocs.io/en/latest/?badge=latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-This [OpenMM] plugin implements the **SlicedNonbondedForce** class, a variant of OpenMM's [NonbondedForce].
-By partitioning all particles among _n_ disjoint subsets, the total potential energy becomes a sum of
-contributions from subset pairs, that is,
+This [OpenMM] plugin contains the **SlicedNonbondedForce** class, a variant of OpenMM's [NonbondedForce].
+By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
+combination of contributions from pairs of subsets like
 
-![equation](https://latex.codecogs.com/svg.image?E&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;E_{I,J})
+![equation](https://latex.codecogs.com/svg.image?E&space;=&space;\sum_{I=0}^{n-1}&space;\sum_{J=I}^{n-1}&space;(\lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J}))
 
-where $E_{I,J}$ is an energy slice defined as the sum over every pair formed by a particle in
-subset _I_ and particle in subset _J_.
+where each slice is defined by subsets $I$ and $J$, superscripts _vdW_ and _elec_ denote van
+der Waals and electrostatic contributions, $E_{I,J}$ is the potential energy of all particle pairs
+formed by one particle in subset $I$ and one in subset $J$, and $\lambda_{I,J}$ is a scaling parameter.
 
-With the SlicedNonbondedForce class, the user can change _E_ from a simple sum into a linear combination
-of Coulomb and Lennard-Jones contributions to the energy slices, with coefficients being the values of
-[Context] global parameters. Derivatives with respect to these parameters can be requested as a way of
-reporting individual energy-slice contributions or sums thereof.
+By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
+scaling parameters into variables and store their values in [Context] global parameters. Derivatives
+with respect to these variables can be requested and used, for instance, to report individual energy
+slice contributions or sums thereof via [getState] with option `getParameterDerivatives=True`.
 
 Documentation
 =============
 
-https://openmm-nonbonded-slicing.readthedocs.io/en/latest
+A complete documentation for this plugin, including its Python API and the theory behind energy
+slicing is available [here](https://openmm-nonbonded-slicing.readthedocs.io/en/latest).
 
-Building the Plugin
-===================
+Installing from Source
+======================
 
 This project uses [CMake] for its build system.  To build it, follow these steps:
 
@@ -54,8 +56,8 @@ and that PLUGIN_BUILD_CUDA_LIB is selected.
 9. Use the build system you selected to build and install the plugin.  For example, if you
 selected Unix Makefiles, type `make install`.
 
-Python API
-==========
+Python Wrapper and API
+======================
 
 As [OpenMM], this project uses [SWIG] to generate its Python API.  SWIG takes an "interface
 file", which is essentially a C++ header file with some extra annotations added, as its input.
@@ -84,5 +86,6 @@ To run the Python test cases, build the "PythonTest" target by typing `make Pyth
 [CMake]:                http://www.cmake.org
 [NonbondedForce]:       http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
 [Context]:              http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html
+[getState]:             http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState
 [OpenMM]:               https://openmm.org
 [SWIG]:                 http://www.swig.org
