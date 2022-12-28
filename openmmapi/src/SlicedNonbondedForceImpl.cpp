@@ -333,7 +333,7 @@ vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System&
             int s2 = get<2>(class2->first);
             double sigma = 0.5*(sigma1+sigma2);
             double epsilon = sqrt(epsilon1*epsilon2);
-            int slice = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+            int slice = sliceIndex(s1, s2);
             int count = class1->second*class2->second;
             double sigmaSq = sigma*sigma;
             double sigma6 = sigmaSq*sigmaSq*sigmaSq;

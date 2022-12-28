@@ -81,7 +81,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         int i, j;
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, scalingParams[index], i, j, includeCoulomb, includeLJ);
-        int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
+        int slice = sliceIndex(i, j);
         sliceScalingParams[slice] = {includeCoulomb ? index : -1, includeLJ ? index : -1};
         int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
         if (pos < numDerivs)
@@ -131,7 +131,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         bonded14IndexArray[i][1] = particle2;
         int s1 = subsets[particle1];
         int s2 = subsets[particle2];
-        bonded14SliceArray[i] = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+        bonded14SliceArray[i] = sliceIndex(s1, s2);
     }
     for (int i = 0; i < force.getNumParticleParameterOffsets(); i++) {
         string param;
@@ -298,7 +298,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
         bonded14IndexArray[i][1] = particle2;
         int s1 = subsets[particle1];
         int s2 = subsets[particle2];
-        bonded14SliceArray[i] = s1 > s2 ? s1*(s1+1)/2+s2 : s2*(s2+1)/2+s1;
+        bonded14SliceArray[i] = sliceIndex(s1, s2);
     }
 
     // Recompute the coefficient for the dispersion correction.

@@ -247,31 +247,6 @@ public:
      */
     int getNumSlices() const;
     /**
-     * Get the index of a slice corresponding to the interactions between particles of two
-     * specified subsets. Such index is calculated by:
-     *
-     * .. code-block:: python
-     *
-     *      i = min(subset1, subset2)
-     *      j = max(subset1, subset2)
-     *      index = j*(j+1)/2 + i
-     *
-     * Parameters
-     * ----------
-     *     subset1 : int
-     *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
-     *     subset2 : int
-     *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
-     *
-     * Returns
-     * -------
-     *     slice : int
-     *         the index of the slice
-     */
-    int getSliceIndex(int subset1, int subset2) const;
-    /**
      * Get the subset to which a particle belongs.
      *
      * Parameters

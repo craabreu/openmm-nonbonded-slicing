@@ -98,12 +98,6 @@ string SlicedNonbondedForce::getNonbondedMethodName() const {
     return name;
 }
 
-int SlicedNonbondedForce::getSliceIndex(int subset1, int subset2) const {
-    ASSERT_VALID("Subset", subset1, numSubsets);
-    ASSERT_VALID("Subset", subset2, numSubsets);
-    return subset1>subset2 ? subset1*(subset1+1)/2+subset2 : subset2*(subset2+1)/2+subset1;
-}
-
 void SlicedNonbondedForce::setParticleSubset(int index, int subset) {
     ASSERT_VALID("Index", index, getNumParticles());
     ASSERT_VALID("Subset", subset, numSubsets);

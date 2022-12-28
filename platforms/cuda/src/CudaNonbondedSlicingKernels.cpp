@@ -55,12 +55,16 @@ public:
         particles[1] = particle2;
     }
     bool areGroupsIdentical(int group1, int group2) {
-        int particle1, particle2;
+        int particle1, particle2, subset1, subset2;
         double chargeProd1, chargeProd2, sigma1, sigma2, epsilon1, epsilon2;
         force.getExceptionParameters(group1, particle1, particle2, chargeProd1, sigma1, epsilon1);
-        int slice1 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+        subset1 = force.getParticleSubset(particle1);
+        subset2 = force.getParticleSubset(particle2);
+        int slice1 = sliceIndex(subset1, subset2);
         force.getExceptionParameters(group2, particle1, particle2, chargeProd2, sigma2, epsilon2);
-        int slice2 = force.getSliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+        subset1 = force.getParticleSubset(particle1);
+        subset2 = force.getParticleSubset(particle2);
+        int slice2 = sliceIndex(subset1, subset2);
         return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2 && slice1 == slice2);
     }
 private:
@@ -261,7 +265,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         int subset1, subset2;
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeCoulomb, includeLJ);
-        int slice = force.getSliceIndex(subset1, subset2);
+        int slice = sliceIndex(subset1, subset2);
         sliceScalingParams[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
         if (derivs.find(scalingParams[index]) != derivs.end())
             sliceScalingParamDerivsVec[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
@@ -785,7 +789,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             exceptionAtoms[i] = make_pair(atoms[i][0], atoms[i][1]);
             int subset1 = force.getParticleSubset(atoms[i][0]);
             int subset2 = force.getParticleSubset(atoms[i][1]);
-            exceptionSlicesVec[i] = force.getSliceIndex(subset1, subset2);
+            exceptionSlicesVec[i] = sliceIndex(subset1, subset2);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
         exceptionPairs.upload(exceptionAtoms);

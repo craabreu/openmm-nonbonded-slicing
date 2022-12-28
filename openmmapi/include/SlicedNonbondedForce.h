@@ -19,6 +19,8 @@
 using namespace OpenMM;
 using namespace std;
 
+#define sliceIndex(i, j) (i>j ? i*(i+1)/2+j : j*(j+1)/2+i)
+
 namespace NonbondedSlicing {
 
 class OPENMM_EXPORT_NONBONDED_SLICING SlicedNonbondedForce : public NonbondedForce {
@@ -35,7 +37,6 @@ public:
     int getNumSlices() const {
         return numSubsets*(numSubsets+1)/2;
     }
-    int getSliceIndex(int subset1, int subset2) const;
     int getNumScalingParameters() const {
         return scalingParameters.size();
     }
@@ -88,7 +89,7 @@ public:
             throwException(__FILE__, __LINE__, "Scaling at least one contribution, LJ or Coulomb, is mandatory");
     }
     int getSlice() const {
-        return subset1 > subset2 ? subset1*(subset1+1)/2+subset2 : subset2*(subset2+1)/2+subset1;
+        return sliceIndex(subset1, subset2);
     }
     bool clashesWith(const ScalingParameterInfo& info) {
         return getSlice() == info.getSlice() && ((includeCoulomb && info.includeLJ) || (includeCoulomb && info.includeLJ));
