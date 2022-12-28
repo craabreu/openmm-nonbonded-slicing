@@ -61,7 +61,7 @@ As the summations over indices *i* and *j* run for all particles, we can write
     \Bigg(\sum_{i=1}^N q_i e^{\text{ⅈ} {\mathbf k}\cdot{\mathbf r}_i} \Bigg)
     \Bigg(\sum_{j=1}^N q_j e^{-\text{ⅈ} {\mathbf k}\cdot{\mathbf r}_j}\Bigg).
 
-The first term between parentheses is the charge structuce factor
+The first term inside parentheses is the charge structure factor
 
 .. math::
 
