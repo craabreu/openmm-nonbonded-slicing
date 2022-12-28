@@ -24,8 +24,6 @@
 #include <algorithm>
 #include <iostream>
 
-#include "internal/ReferenceCoulombIxn.h"
-#include "internal/ReferenceCoulomb14.h"
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
 #include "internal/ReferenceSlicedLJCoulomb14.h"
 

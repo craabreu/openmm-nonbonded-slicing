@@ -15,7 +15,7 @@
 #include <iostream>
 
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
-#include "internal/ReferencePME.h"
+#include "internal/ReferenceSlicedPME.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/OpenMMException.h"

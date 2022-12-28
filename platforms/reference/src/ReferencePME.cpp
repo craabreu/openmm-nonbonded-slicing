@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <complex>
 
-#include "internal/ReferencePME.h"
+#include "internal/ReferenceSlicedPME.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 
 #ifdef _MSC_VER
