@@ -65,19 +65,46 @@ namespace NonbondedSlicing {
  * calculated with the Lorentz-Berthelot combining rule: it uses the arithmetic mean of the sigmas and the
  * geometric mean of the epsilons for the two interacting particles.
  *
- * The particles are classified into *n* disjoint subsets, thus creating :math:`n(n+1)/2` distinct types of
- * particle pairs. Then, the total potential energy is sliced into the contributions of such pair types.
+ * The particles are classified into :math:`n` disjoint subsets, thus creating :math:`n(n+1)/2` distinct types
+ * of particle pairs.  Then, the total potential energy is sliced into this many parts by distinguishing the
+ * contributions of such pair types.  Optionally, variables stored as an :OpenMM:`Context` global parameters
+ * can multiply the Coulomb and/or Lennard-Jones parts of selected potential energy slices.  Changes in the
+ * values of these global parameters via setParameter_ will automatically modify the total potential energy of
+ * a SlicedNonbondedForce.  Derivatives with respect to scaling parameters can also be calculated upon request.
  *
- * To use this class, create a NonbondedForce object, then call :func:`addParticle` once for each particle in the
- * System to define its parameters.  The number of particles for which you define nonbonded parameters must
- * be exactly equal to the number of particles in the System, or else an exception will be thrown when you
- * try to create a Context.  After a particle has been added, you can modify its force field parameters
- * by calling :func:`setParticleParameters`.  This will have no effect on Contexts that already exist unless you
- * call :func:`updateParametersInContext`.
+ * .. _setParameter: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.setParameter
  *
- * NonbondedForce also lets you specify "exceptions", particular pairs of particles whose interactions should be
- * computed based on different parameters than those defined for the individual particles.  This can be used to
- * completely exclude certain interactions from the force calculation, or to alter how they interact with each other.
+ * To use this class, create a SlicedNonbondedForce object, specifying the number :math:`n` of particle subsets.
+ * Then, call :func:`addParticle` once for every single particle in the System to define its force field
+ * parameters.  Alternatively, you can pass an existing :OpenMM:`NonbondedForce` object when creating a
+ * SlicedNonbondedForce object, so that the latter inherits all properties of the former.  After a particle has
+ * been added, you can modify its subset index from 0, the default value, to any positive integer lower than
+ * :math:`n` by calling :func:`setParticleSubset`.  You can also modify the force field parameters of an added
+ * particle by calling :func:`setParticleParameters`.  These two methods will have no effect on Contexts that
+ * already exist unless you call :func:`updateParametersInContext`.
+ *
+ * SlicedNonbondedForce also lets you specify *exceptions* via :func:`addException` and modify their parameters
+ * via :func:`setExceptionParameters`.  Exceptions are particular pairs of particles whose interactions should
+ * be computed based on different parameters than those defined for the individual particles.  This can be used
+ * to exclude certain interactions from the force calculation.
+ *
+ * By default, all energy slices of a SlicedNonbondedForce are added together, yielding the same total
+ * potential energy as a NonbondedForce with equal particle and exception parameters.  In addition, you can
+ * select one or more slices and multiply their Coulomb and/or Lennard-Jones contributions by variables
+ * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
+ * a new Context parameter, then pass its name to :func:`addScalingParameter`.  The same scaling parameter
+ * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
+ * multiply the Coulomb and Lennard-Jones parts of that slice separately.
+ *
+ * With :func:`setScalingParameterDerivative`, you can request the derivative with respect to a scaling
+ * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
+ * its getEnergyParameterDerivatives_ method.  For this, such State must have been generated from an
+ * :OpenMM:`Context` by passing ``True`` to the keyword ``getParameterDerivatives`` of the Context's
+ * getState_ method.
+ *
+ * .. _getState: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState
+ *
+ * .. _getEnergyParameterDerivatives: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html#openmm.openmm.State.getEnergyParameterDerivatives
  *
  * Many molecular force fields omit Coulomb and Lennard-Jones interactions between particles separated by one
  * or two bonds, while using modified parameters for those separated by three bonds (known as "1-4 interactions").
@@ -115,10 +142,11 @@ namespace NonbondedSlicing {
  *    sigma = baseSigma + param*sigmaScale
  *    epsilon = baseEpsilon + param*epsilonScale
  *
- * where the "base" values are the ones specified by :func:`addParticle` and "oaram" is the current value
+ * where the ``base`` values are the ones specified by :func:`addParticle` and ``param`` is the current value
  * of the Context parameter.  A single Context parameter can apply offsets to multiple particles,
  * and multiple parameters can be used to apply offsets to the same particle.  Parameters can also be used
- * to modify exceptions in exactly the same way by calling :func:`addExceptionParameterOffset`.
+ * to modify exceptions in exactly the same way by calling :func:`addExceptionParameterOffset`.  A context
+ * parameter cannot be used simultaneously to apply offsets and scale energy terms.
  */
 class SlicedNonbondedForce : public OpenMM::NonbondedForce {
 public:
@@ -344,7 +372,7 @@ public:
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the sum of particular energy slices. The parameter must have already
-     * been added with :func:`addGlobalParameter` and :func:`addSwithingParameter`.
+     * been added with :func:`addGlobalParameter` and :func:`addScalingParameter`.
      *
      * Parameters
      * ----------
