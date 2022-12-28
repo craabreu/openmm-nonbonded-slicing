@@ -259,8 +259,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     scalingParams.resize(numScalingParams);
     for (int index = 0; index < numScalingParams; index++) {
         int subset1, subset2;
-        bool includeLJ, includeCoulomb;
-        force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeLJ, includeCoulomb);
+        bool includeCoulomb, includeLJ;
+        force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeCoulomb, includeLJ);
         int slice = force.getSliceIndex(subset1, subset2);
         sliceScalingParams[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
         if (derivs.find(scalingParams[index]) != derivs.end())

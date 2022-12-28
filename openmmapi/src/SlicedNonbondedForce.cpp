@@ -123,10 +123,10 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
-int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb) {
+int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ) {
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ);
     for (auto param : scalingParameters)
         if (param.clashesWith(info))
             throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
@@ -134,7 +134,7 @@ int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subse
     return scalingParameters.size()-1;
 }
 
-void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeLJ, bool& includeCoulomb) const {
+void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const {
     ASSERT_VALID("Index", index, scalingParameters.size());
     ScalingParameterInfo* info = (ScalingParameterInfo*) &scalingParameters[index];
     parameter = getGlobalParameterName(info->globalParamIndex);
@@ -144,11 +144,11 @@ void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int
     includeCoulomb = info->includeCoulomb;
 }
 
-void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb) {
+void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ) {
     ASSERT_VALID("Index", index, scalingParameters.size());
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeLJ, includeCoulomb);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ);
     ScalingParameterInfo old = scalingParameters[index];
     if (!old.clashesWith(info))
         for (auto param : scalingParameters)

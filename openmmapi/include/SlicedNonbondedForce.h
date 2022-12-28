@@ -44,9 +44,9 @@ public:
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
-    int addScalingParameter(const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
-    void getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeLJ, bool& includeCoulomb) const;
-    void setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
+    int addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    void getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
+    void setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     int addScalingParameterDerivative(const string& parameter);
     const string& getScalingParameterDerivativeName(int index) const;
     void setScalingParameterDerivative(int index, const string& parameter);
@@ -76,24 +76,22 @@ private:
 class SlicedNonbondedForce::ScalingParameterInfo {
 public:
     int globalParamIndex, subset1, subset2, slice;
-    bool includeLJ, includeCoulomb;
+    bool includeCoulomb, includeLJ;
     ScalingParameterInfo() {
         globalParamIndex = subset1 = subset2 = -1;
-        includeLJ = includeCoulomb = false;
+        includeCoulomb = includeLJ = false;
     }
-    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeLJ, bool includeCoulomb) :
+    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeCoulomb, bool includeLJ) :
             globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
-            includeLJ(includeLJ), includeCoulomb(includeCoulomb) {
-        if (!(includeLJ || includeCoulomb))
+            includeCoulomb(includeCoulomb), includeLJ(includeLJ) {
+        if (!(includeCoulomb || includeLJ))
             throwException(__FILE__, __LINE__, "Scaling at least one contribution, LJ or Coulomb, is mandatory");
     }
     int getSlice() const {
-        int i = min(subset1, subset2);
-        int j = max(subset1, subset2);
-        return j*(j+1)/2+i;
+        return subset1 > subset2 ? subset1*(subset1+1)/2+subset2 : subset2*(subset2+1)/2+subset1;
     }
     bool clashesWith(const ScalingParameterInfo& info) {
-        return getSlice() == info.getSlice() && ((includeLJ && info.includeLJ) || (includeCoulomb && info.includeCoulomb));
+        return getSlice() == info.getSlice() && ((includeCoulomb && info.includeLJ) || (includeCoulomb && info.includeLJ));
     }
 };
 

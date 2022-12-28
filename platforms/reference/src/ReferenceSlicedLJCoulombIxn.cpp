@@ -164,7 +164,7 @@ void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
    @param atomCoordinates  atom coordinates
    @param atomSubsets      atom subsets
    @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-   @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+   @param sliceLambda      Coulomb and LJ scaling parameters for each slice
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
@@ -499,7 +499,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(int numberOfAtoms, vector<Ve
    @param atomCoordinates  atom coordinates
    @param atomSubsets      atom subsets
    @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-   @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+   @param sliceLambda      Coulomb and LJ scaling parameters for each slice
    @param exclusions       atom exclusion indices
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
@@ -544,7 +544,7 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(int numberOfAtoms, vector<Vec
      @param atomCoordinates  atom coordinates
      @param atomSubsets      atom subsets
      @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-     @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+     @param sliceLambda      Coulomb and LJ scaling parameters for each slice
      @param forces           force array (forces added)
      @param sliceEnergies    the energy of each slice
 

@@ -73,6 +73,8 @@ public:
      */
     void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 private:
+    static const int Coul = 0;
+    static const int vdW = 1;
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
     vector<vector<int>>bonded14IndexArray;

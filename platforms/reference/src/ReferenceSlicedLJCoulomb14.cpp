@@ -77,8 +77,8 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    double dEdR      = sliceLambdas[0]*parameters[1]*(12.0*sig6 - 6.0)*sig6;
-           dEdR     += sliceLambdas[1]*ONE_4PI_EPS0*parameters[2]*inverseR;
+    double dEdR      = sliceLambdas[vdW]*parameters[1]*(12.0*sig6 - 6.0)*sig6;
+           dEdR     += sliceLambdas[Coul]*ONE_4PI_EPS0*parameters[2]*inverseR;
            dEdR     *= inverseR*inverseR;
 
     // accumulate forces
@@ -90,6 +90,6 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     }
 
     // accumulate energies
-    sliceEnergies[0] += parameters[1]*(sig6 - 1.0)*sig6;
-    sliceEnergies[1] += ONE_4PI_EPS0*parameters[2]*inverseR;
+    sliceEnergies[vdW] += parameters[1]*(sig6 - 1.0)*sig6;
+    sliceEnergies[Coul] += ONE_4PI_EPS0*parameters[2]*inverseR;
 }

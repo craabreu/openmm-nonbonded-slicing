@@ -114,7 +114,7 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
     set<string> offsetParams;
     string parameter;
     int offset, subset1, subset2;
-    bool includeLJ, includeCoulomb;
+    bool includeCoulomb, includeLJ;
     double charge, sigma, epsilon;
     for (int index = 0; index < owner.getNumParticleParameterOffsets(); index++) {
         owner.getParticleParameterOffset(index, parameter, offset, charge, sigma, epsilon);
@@ -125,7 +125,7 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         offsetParams.insert(parameter);
     }
     for (int index = 0; index < owner.getNumScalingParameters(); index++) {
-        owner.getScalingParameter(index, parameter, subset1, subset2, includeLJ, includeCoulomb);
+        owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
     }

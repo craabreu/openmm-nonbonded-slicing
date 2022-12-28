@@ -154,9 +154,9 @@ void testSerialization() {
     for (int i = 0; i < force.getNumScalingParameters(); i++) {
         string parameter1, parameter2;
         int subset11, subset21, subset12, subset22;
-        bool includeLJ1, includeCoulomb1, includeLJ2, includeCoulomb2;
-        force.getScalingParameter(i, parameter1, subset11, subset21, includeLJ1, includeCoulomb1);
-        force2.getScalingParameter(i, parameter2, subset12, subset22, includeLJ2, includeCoulomb2);
+        bool includeCoulomb1, includeLJ1, includeCoulomb2, includeLJ2;
+        force.getScalingParameter(i, parameter1, subset11, subset21, includeCoulomb1, includeLJ1);
+        force2.getScalingParameter(i, parameter2, subset12, subset22, includeCoulomb2, includeLJ2);
         ASSERT_EQUAL(parameter1, parameter2);
         ASSERT_EQUAL(subset11, subset12);
         ASSERT_EQUAL(subset21, subset22);

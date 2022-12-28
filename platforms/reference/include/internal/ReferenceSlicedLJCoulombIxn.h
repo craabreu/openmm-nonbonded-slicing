@@ -42,8 +42,8 @@ class ReferenceSlicedLJCoulombIxn {
       static const int EpsIndex = 1;
       static const int   QIndex = 2;
 
-      static const int   vdW = 0;
-      static const int   Coul = 1;
+      static const int   Coul = 0;
+      static const int   vdW = 1;
 
       /**---------------------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ class ReferenceSlicedLJCoulombIxn {
          @param atomCoordinates  atom coordinates
          @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+         @param sliceLambda      Coulomb and LJ scaling parameters for each slice
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
 
@@ -169,7 +169,7 @@ class ReferenceSlicedLJCoulombIxn {
          @param atomCoordinates  atom coordinates
          @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+         @param sliceLambda      Coulomb and LJ scaling parameters for each slice
          @param exclusions       atom exclusion indices
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
@@ -192,7 +192,7 @@ private:
          @param atomCoordinates  atom coordinates
          @param atomSubsets      atom subsets
          @param atomParameters   atom parameters (charges, c6, c12, ...)     atomParameters[atomIndex][paramterIndex]
-         @param sliceLambda      LJ and Coulomb scaling parameters for each slice
+         @param sliceLambda      Coulomb and LJ scaling parameters for each slice
          @param exclusions       atom exclusion indices
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)

@@ -67,8 +67,10 @@ public:
                           vector<double>& sliceLambdas, vector<double>& sliceEnergies);
 
 private:
-    bool periodic;
-    OpenMM::Vec3 periodicBoxVectors[3];
+   static const int   Coul = 0;
+   static const int   vdW = 1;
+   bool periodic;
+   OpenMM::Vec3 periodicBoxVectors[3];
 };
 
 } // namespace NonbondedSlicing

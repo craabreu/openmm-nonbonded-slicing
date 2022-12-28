@@ -79,13 +79,13 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     scalingParams.resize(numScalingParams);
     for (int index = 0; index < numScalingParams; index++) {
         int i, j;
-        bool includeLJ, includeCoulomb;
-        force.getScalingParameter(index, scalingParams[index], i, j, includeLJ, includeCoulomb);
+        bool includeCoulomb, includeLJ;
+        force.getScalingParameter(index, scalingParams[index], i, j, includeCoulomb, includeLJ);
         int slice = i > j ? i*(i+1)/2+j : j*(j+1)/2+i;
-        sliceScalingParams[slice] = {includeLJ ? index : -1, includeCoulomb ? index : -1};
+        sliceScalingParams[slice] = {includeCoulomb ? index : -1, includeLJ ? index : -1};
         int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
         if (pos < numDerivs)
-            sliceScalingParamDerivs[slice] = {includeLJ ? pos : -1, includeCoulomb ? pos : -1};
+            sliceScalingParamDerivs[slice] = {includeCoulomb ? pos : -1, includeLJ ? pos : -1};
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -236,7 +236,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
             Vec3* boxVectors = extractBoxVectors(context);
             double volume = boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2];
             for (int slice = 0; slice < numSlices; slice++)
-                sliceEnergies[slice][0] += dispersionCoefficients[slice]/volume;
+                sliceEnergies[slice][vdW] += dispersionCoefficients[slice]/volume;
         }
     }
 

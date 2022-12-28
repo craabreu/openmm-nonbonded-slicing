@@ -308,17 +308,17 @@ public:
      *     subset2 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
      *         :func:`getNumSubsets`
-     *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
      *
      * Returns
      * -------
      *     index : int
      *         the index of scaling parameter that was added
      */
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     /**
      * Get the number of scaling parameters.
      */
@@ -339,12 +339,12 @@ public:
      *         the smallest index of the two particle subsets
      *     subset2 : int
      *         the largest index of the two particle subsets
-     *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
      */
-    void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeLJ, bool& includeCoulomb) const;
+    void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeCoulomb, bool& includeLJ) const;
  	/**
      * Modify an added scaling parameter.
      *
@@ -363,12 +363,12 @@ public:
      *     subset2 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
      *         :func:`getNumSubsets`
-     *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
+     *     includeLJ : bool
+     *         whether this scaling parameter applies to Lennard-Jones interactions
      */
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeLJ, bool includeCoulomb);
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the sum of particular energy slices. The parameter must have already

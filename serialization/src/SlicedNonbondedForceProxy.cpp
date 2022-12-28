@@ -91,9 +91,9 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     for (int i = 0; i < force.getNumScalingParameters(); i++) {
         string parameter;
         int subset1, subset2;
-        bool includeLJ, includeCoulomb;
-        force.getScalingParameter(i, parameter, subset1, subset2, includeLJ, includeCoulomb);
-        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeLJ", includeLJ).setBoolProperty("includeCoulomb", includeCoulomb);
+        bool includeCoulomb, includeLJ;
+        force.getScalingParameter(i, parameter, subset1, subset2, includeCoulomb, includeLJ);
+        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ);
     }
     SerializationNode& scalingParameterDerivatives = node.createChildNode("scalingParameterDerivatives");
     for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
@@ -149,7 +149,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
             force->setParticleSubset(subset.getIntProperty("index"), subset.getIntProperty("subset"));
         const SerializationNode& scalingParameters = node.getChildNode("scalingParameters");
         for (auto& param : scalingParameters.getChildren())
-            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeLJ"), param.getBoolProperty("includeCoulomb"));
+            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"));
         const SerializationNode& scalingParameterDerivatives = node.getChildNode("scalingParameterDerivatives");
         for (auto& param : scalingParameterDerivatives.getChildren())
             force->addScalingParameterDerivative(param.getStringProperty("parameter"));

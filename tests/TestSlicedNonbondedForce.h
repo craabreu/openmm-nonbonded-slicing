@@ -1036,7 +1036,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     }
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
-    cout<<sliced->getNonbondedMethodName()<<" (exceptions="<<exceptions<<", lj="<<includeLJ<<", coul="<<includeCoulomb<<")"<<endl;
+    cout<<sliced->getNonbondedMethodName()<<" (exceptions="<<exceptions<<", coul="<<includeCoulomb<<", lj="<<includeLJ<<")"<<endl;
 
     for (int k = 0; k < numParticles; k++)
         if (genrand_real2(sfmt) < 0.5)
@@ -1044,11 +1044,11 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     string param1 = includeCoulomb ? "lambda" : "sqrtLambda";
     sliced->addGlobalParameter(param1, 1);
-    sliced->addScalingParameter(param1, 0, 1, includeLJ, includeCoulomb);
+    sliced->addScalingParameter(param1, 0, 1, includeCoulomb, includeLJ);
 
     string param2 = includeCoulomb ? "lambdaSq" : "lambda";
     sliced->addGlobalParameter(param2, 1);
-    sliced->addScalingParameter(param2, 1, 1, includeLJ, includeCoulomb);
+    sliced->addScalingParameter(param2, 1, 1, includeCoulomb, includeLJ);
 
     system1.addForce(nonbonded);
     system2.addForce(sliced);
@@ -1159,7 +1159,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     double energy = state1.getPotentialEnergy();
 
     sliced->addGlobalParameter("remainder", 1.0);
-    sliced->addScalingParameter("remainder", 0, 0, includeLJ, includeCoulomb);
+    sliced->addScalingParameter("remainder", 0, 0, includeCoulomb, includeLJ);
     sliced->addScalingParameterDerivative("remainder");
     context2.reinitialize(true);
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);

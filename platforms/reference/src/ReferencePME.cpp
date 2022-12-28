@@ -27,6 +27,9 @@ typedef int    ivec[3];
 
 using namespace OpenMM;
 
+#define Coul 0
+#define vdW 1
+
 namespace NonbondedSlicing {
 
 struct pme
@@ -481,10 +484,10 @@ pme_reciprocal_convolution(pme_t     pme,
                     ptr->imag(d2*eterm);
 
                     /* Long-range PME contribution to the energy for this frequency */
-                    sliceEnergies[j*(j+3)/2][1] += 0.5*eterm*(d1*d1 + d2*d2);
+                    sliceEnergies[j*(j+3)/2][Coul] += 0.5*eterm*(d1*d1 + d2*d2);
                     for (int i = 0; i < j; i++) {
                         ptr = pme->grid + ((i*nx + kx)*ny + ky)*nz + kz;
-                        sliceEnergies[j*(j+1)/2+i][1] += d1*ptr->real() + d2*ptr->imag();
+                        sliceEnergies[j*(j+1)/2+i][Coul] += d1*ptr->real() + d2*ptr->imag();
                     }
                 }
             }
@@ -580,10 +583,10 @@ dpme_reciprocal_convolution(pme_t pme,
                     ptr->imag(d2*eterm);
 
                     /* Long-range PME contribution to the energy for this frequency */
-                    sliceEnergies[j*(j+3)/2][0] += 0.5*eterm*(d1*d1 + d2*d2);
+                    sliceEnergies[j*(j+3)/2][vdW] += 0.5*eterm*(d1*d1 + d2*d2);
                     for (int i = 0; i < j; i++) {
                         ptr = pme->grid + ((i*nx + kx)*ny + ky)*nz + kz;
-                        sliceEnergies[j*(j+1)/2+i][0] += d1*ptr->real() + d2*ptr->imag();
+                        sliceEnergies[j*(j+1)/2+i][vdW] += d1*ptr->real() + d2*ptr->imag();
                     }
                 }
             }
@@ -802,7 +805,7 @@ int pme_exec(pme_t       pme,
     }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces,1);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,charges,forces,Coul);
 
     return 0;
 }
@@ -862,7 +865,7 @@ int pme_exec_dpme(pme_t       pme,
     }
 
     /* Get the particle forces from the grid and bsplines in the pme structure */
-    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces,0);
+    pme_grid_interpolate_force(pme,recipBoxVectors,atomSubsets,sliceLambdas,c6s,forces,vdW);
 
     return 0;
 }
