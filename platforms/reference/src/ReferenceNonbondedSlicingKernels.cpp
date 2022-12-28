@@ -60,30 +60,29 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
     numSlices = force.getNumSlices();
-    sliceLambdas.resize(numSlices, (vector<double>){1, 1});
-    sliceScalingParams.resize(numSlices, (vector<int>){-1, -1});
-    sliceScalingParamDerivs.resize(numSlices, (vector<int>){-1, -1});
+    sliceLambdas.resize(numSlices, vector<double>(2));
+    sliceScalingParams.resize(numSlices, vector<ScalingParameterInfo>(2));
 
     subsets.resize(numParticles);
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
 
-    int numDerivs = force.getNumScalingParameterDerivatives();
-    vector<string> derivs(numDerivs);
-    for (int i = 0; i < numDerivs; i++)
-        derivs[i] = force.getScalingParameterDerivativeName(i);
+    set<string> derivs;
+    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
+        derivs.insert(force.getScalingParameterDerivativeName(i));
 
-    int numScalingParams = force.getNumScalingParameters();
-    scalingParams.resize(numScalingParams);
-    for (int index = 0; index < numScalingParams; index++) {
+    for (int index = 0; index < force.getNumScalingParameters(); index++) {
+        string name;
         int i, j;
         bool includeCoulomb, includeLJ;
-        force.getScalingParameter(index, scalingParams[index], i, j, includeCoulomb, includeLJ);
+        force.getScalingParameter(index, name, i, j, includeCoulomb, includeLJ);
         int slice = sliceIndex(i, j);
-        sliceScalingParams[slice] = {includeCoulomb ? index : -1, includeLJ ? index : -1};
-        int pos = find(derivs.begin(), derivs.end(), scalingParams[index]) - derivs.begin();
-        if (pos < numDerivs)
-            sliceScalingParamDerivs[slice] = {includeCoulomb ? pos : -1, includeLJ ? pos : -1};
+        bool hasDerivative = derivs.find(name) != derivs.end();
+        ScalingParameterInfo info = ScalingParameterInfo(name, hasDerivative);
+        if (includeCoulomb)
+            sliceScalingParams[slice][0] = info;
+        if (includeLJ)
+            sliceScalingParams[slice][1] = info;
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -247,9 +246,9 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     map<string, double>& energyParamDerivs = extractEnergyParameterDerivatives(context);
     for (int slice = 0; slice < numSlices; slice++)
         for (int term = 0; term < 2; term++) {
-            int index = sliceScalingParamDerivs[slice][term];
-            if (index != -1)
-                energyParamDerivs[scalingParams[index]] += sliceEnergies[slice][term];
+            ScalingParameterInfo info = sliceScalingParams[slice][term];
+            if (info.hasDerivative)
+                energyParamDerivs[info.name] += sliceEnergies[slice][term];
         }
 
     return energy;
@@ -328,15 +327,11 @@ void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& con
 
     // Compute scaling parameter values.
 
-    for (int slice = 0; slice < numSlices; slice++) {
-        vector<int> indices = sliceScalingParams[slice];
-        int index = max(indices[0], indices[1]);
-        if (index != -1) {
-            double paramValue = context.getParameter(scalingParams[index]);
-            for (int i = 0; i < 2; i++)
-                sliceLambdas[slice][i] = indices[i] == -1 ? 1.0 : paramValue;
+    for (int slice = 0; slice < numSlices; slice++)
+        for (int term = 0; term < 2; term++) {
+            ScalingParameterInfo info = sliceScalingParams[slice][term];
+            sliceLambdas[slice][term] = info.exists() ? context.getParameter(info.name) : 1.0;
         }
-    }
 
     // Compute particle parameters.
 
