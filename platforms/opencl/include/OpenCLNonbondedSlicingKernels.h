@@ -162,13 +162,11 @@ private:
     int numSubsets, numSlices;
     bool hasDerivatives;
     vector<int> subsetsVec;
-    vector<string> scalingParams;
+    vector<double> dispersionCoefficients;
     vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
     vector<ScalingParameterInfo> sliceScalingParams;
-    vector<double> dispersionCoefficients;
     OpenCLArray subsets;
     OpenCLArray sliceLambdas;
-    OpenCLArray sliceScalingParamDerivs;
 
     vector<mm_float2> double2Tofloat2(vector<mm_double2> input) {
         vector<mm_float2> output(input.size());
@@ -182,14 +180,34 @@ private:
 
 class OpenCLCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
 public:
-    bool includeCoulomb;
-    bool includeLJ;
-    int index;
-    bool hasDerivative;
-    ScalingParameterInfo() : includeCoulomb(false), includeLJ(false), index(-1), hasDerivative(false) {
+    string nameCoulomb, nameLJ;
+    bool includeCoulomb, includeLJ;
+    int indexCoulomb, indexLJ;
+    bool hasDerivativeCoulomb, hasDerivativeLJ;
+    ScalingParameterInfo() : nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false), indexCoulomb(-1), indexLJ(-1), hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
     }
-    ScalingParameterInfo(bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) :
-        includeCoulomb(includeCoulomb), includeLJ(includeLJ), index(index), hasDerivative(hasDerivative) {
+    void addInfo(string name, bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) {
+        if (includeCoulomb) {
+            this->includeCoulomb = true;
+            nameCoulomb = name;
+            indexCoulomb = index;
+            hasDerivativeCoulomb = hasDerivative;
+        }
+        if (includeLJ) {
+            this->includeLJ = true;
+            nameLJ = name;
+            indexLJ = index;
+            hasDerivativeLJ = hasDerivative;
+        }
+    }
+    mm_int2 getDerivativeIndices() {
+        return mm_int2(hasDerivativeCoulomb ? indexCoulomb : -1, hasDerivativeLJ ? indexLJ : -1);
+    }
+    string getEnergyFunction(string param, bool conditionCoulomb, bool conditionLJ) {
+        string clEnergy = (conditionCoulomb && nameCoulomb == param) ? "clEnergy" : "";
+        string ljEnergy = (conditionLJ && nameLJ == param) ? "ljEnergy" : "";
+        string plusSign = (clEnergy == "" || ljEnergy == "") ? "" : "+";
+        return clEnergy + plusSign + ljEnergy;
     }
 };
 

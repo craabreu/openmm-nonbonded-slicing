@@ -103,9 +103,6 @@ public:
     bool hasDerivative;
     ScalingParameterInfo() : name(""), hasDerivative(false) {}
     ScalingParameterInfo(string name, bool hasDerivative) : name(name), hasDerivative(hasDerivative) {}
-    bool exists() const {
-        return name != "";
-    }
 };
 
 } // namespace NonbondedSlicing

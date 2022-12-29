@@ -164,13 +164,11 @@ private:
     int numSubsets, numSlices;
     bool hasDerivatives;
     vector<int> subsetsVec;
-    vector<string> scalingParams;
+    vector<double> dispersionCoefficients;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;
     vector<ScalingParameterInfo> sliceScalingParams;
-    vector<double> dispersionCoefficients;
     CudaArray subsets;
     CudaArray sliceLambdas;
-    CudaArray sliceScalingParamDerivs;
 
     vector<float2> double2Tofloat2(vector<double2> input) {
         vector<float2> output(input.size());
@@ -184,14 +182,31 @@ private:
 
 class CudaCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
 public:
-    bool includeCoulomb;
-    bool includeLJ;
-    int index;
-    bool hasDerivative;
-    ScalingParameterInfo() : includeCoulomb(false), includeLJ(false), index(-1), hasDerivative(false) {
+    string nameCoulomb, nameLJ;
+    bool includeCoulomb, includeLJ;
+    int indexCoulomb, indexLJ;
+    bool hasDerivativeCoulomb, hasDerivativeLJ;
+    ScalingParameterInfo() : nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false), indexCoulomb(-1), indexLJ(-1), hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
     }
-    ScalingParameterInfo(bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) :
-        includeCoulomb(includeCoulomb), includeLJ(includeLJ), index(index), hasDerivative(hasDerivative) {
+    void addInfo(string name, bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) {
+        if (includeCoulomb) {
+            this->includeCoulomb = true;
+            nameCoulomb = name;
+            indexCoulomb = index;
+            hasDerivativeCoulomb = hasDerivative;
+        }
+        if (includeLJ) {
+            this->includeLJ = true;
+            nameLJ = name;
+            indexLJ = index;
+            hasDerivativeLJ = hasDerivative;
+        }
+    }
+    string getEnergyFunction(string param, bool conditionCoulomb, bool conditionLJ) {
+        string clEnergy = (conditionCoulomb && nameCoulomb == param) ? "clEnergy" : "";
+        string ljEnergy = (conditionLJ && nameLJ == param) ? "ljEnergy" : "";
+        string plusSign = (clEnergy == "" || ljEnergy == "") ? "" : "+";
+        return clEnergy + plusSign + ljEnergy;
     }
 };
 

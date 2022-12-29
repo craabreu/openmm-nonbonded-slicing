@@ -67,9 +67,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
 
-    set<string> derivs;
+    set<string> requestedDerivatives;
     for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
-        derivs.insert(force.getScalingParameterDerivativeName(i));
+        requestedDerivatives.insert(force.getScalingParameterDerivativeName(i));
 
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;
@@ -77,12 +77,12 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, name, i, j, includeCoulomb, includeLJ);
         int slice = sliceIndex(i, j);
-        bool hasDerivative = derivs.find(name) != derivs.end();
+        bool hasDerivative = requestedDerivatives.find(name) != requestedDerivatives.end();
         ScalingParameterInfo info = ScalingParameterInfo(name, hasDerivative);
         if (includeCoulomb)
-            sliceScalingParams[slice][0] = info;
+            sliceScalingParams[slice][Coul] = info;
         if (includeLJ)
-            sliceScalingParams[slice][1] = info;
+            sliceScalingParams[slice][vdW] = info;
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -330,7 +330,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& con
     for (int slice = 0; slice < numSlices; slice++)
         for (int term = 0; term < 2; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
-            sliceLambdas[slice][term] = info.exists() ? context.getParameter(info.name) : 1.0;
+            sliceLambdas[slice][term] = info.name == "" ? 1.0 : context.getParameter(info.name);
         }
 
     // Compute particle parameters.
