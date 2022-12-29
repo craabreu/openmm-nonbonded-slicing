@@ -91,6 +91,7 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
+    class ScalingParameterInfo;
     class SyncStreamPreComputation;
     class AddEnergyPostComputation;
     class SyncStreamPostComputation;
@@ -165,7 +166,7 @@ private:
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;
-    vector<int2> sliceScalingParams, sliceScalingParamDerivsVec;
+    vector<ScalingParameterInfo> sliceScalingParams;
     vector<double> dispersionCoefficients;
     CudaArray subsets;
     CudaArray sliceLambdas;
@@ -178,6 +179,19 @@ private:
             [](double2 v) -> float2 { return make_float2(v.x, v.y); }
         );
         return output;
+    }
+};
+
+class CudaCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
+public:
+    bool includeCoulomb;
+    bool includeLJ;
+    int index;
+    bool hasDerivative;
+    ScalingParameterInfo() : includeCoulomb(false), includeLJ(false), index(-1), hasDerivative(false) {
+    }
+    ScalingParameterInfo(bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) :
+        includeCoulomb(includeCoulomb), includeLJ(includeLJ), index(index), hasDerivative(hasDerivative) {
     }
 };
 

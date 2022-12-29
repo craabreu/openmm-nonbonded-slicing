@@ -75,6 +75,7 @@ public:
 private:
     static const int Coul = 0;
     static const int vdW = 1;
+    class ScalingParameterInfo;
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
     vector<vector<int>>bonded14IndexArray;
@@ -92,10 +93,19 @@ private:
 
     int numSubsets, numSlices;
     vector<int> subsets;
-    vector<string> scalingParams;
     vector<vector<double>> sliceLambdas;
-    vector<vector<int>> sliceScalingParams;
-    vector<vector<int>> sliceScalingParamDerivs;
+    vector<vector<ScalingParameterInfo>> sliceScalingParams;
+};
+
+class ReferenceCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
+public:
+    string name;
+    bool hasDerivative;
+    ScalingParameterInfo() : name(""), hasDerivative(false) {}
+    ScalingParameterInfo(string name, bool hasDerivative) : name(name), hasDerivative(hasDerivative) {}
+    bool exists() const {
+        return name != "";
+    }
 };
 
 } // namespace NonbondedSlicing

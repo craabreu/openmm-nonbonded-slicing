@@ -86,6 +86,7 @@ private:
         const char* getSortKey() const {return "value.y";}
     };
     class ForceInfo;
+    class ScalingParameterInfo;
     class SyncQueuePreComputation;
     class SyncQueuePostComputation;
     class AddEnergyPostComputation;
@@ -163,7 +164,7 @@ private:
     vector<int> subsetsVec;
     vector<string> scalingParams;
     vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
-    vector<mm_int2> sliceScalingParams, sliceScalingParamDerivsVec;
+    vector<ScalingParameterInfo> sliceScalingParams;
     vector<double> dispersionCoefficients;
     OpenCLArray subsets;
     OpenCLArray sliceLambdas;
@@ -176,6 +177,19 @@ private:
             [](mm_double2 v) -> mm_float2 { return mm_float2(v.x, v.y); }
         );
         return output;
+    }
+};
+
+class OpenCLCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
+public:
+    bool includeCoulomb;
+    bool includeLJ;
+    int index;
+    bool hasDerivative;
+    ScalingParameterInfo() : includeCoulomb(false), includeLJ(false), index(-1), hasDerivative(false) {
+    }
+    ScalingParameterInfo(bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) :
+        includeCoulomb(includeCoulomb), includeLJ(includeLJ), index(index), hasDerivative(hasDerivative) {
     }
 };
 

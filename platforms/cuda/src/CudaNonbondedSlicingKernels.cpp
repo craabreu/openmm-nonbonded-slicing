@@ -18,6 +18,7 @@
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "openmm/common/ContextSelector.h"
 #include <cstring>
+#include <map>
 #include <algorithm>
 #include <iostream>
 
@@ -106,14 +107,15 @@ class CudaCalcSlicedNonbondedForceKernel::AddEnergyPostComputation : public Cuda
 public:
     AddEnergyPostComputation(CudaContext& cu, int forceGroup) : cu(cu), forceGroup(forceGroup), initialized(false) {
     }
-    void initialize(CudaArray& pmeEnergyBuffer, CudaArray& ljpmeEnergyBuffer, CudaArray& sliceLambdas, vector<string> scalingParams, vector<int2> sliceScalingParamDerivs) {
+    void initialize(CudaArray& pmeEnergyBuffer, CudaArray& ljpmeEnergyBuffer, CudaArray& sliceLambdas,
+                    vector<string> scalingParams, vector<ScalingParameterInfo> sliceScalingParams) {
         int numSlices = sliceLambdas.getSize();
         bool doLJPME = ljpmeEnergyBuffer.isInitialized();
         bufferSize = pmeEnergyBuffer.getSize()/numSlices;
         vector<int> requestedDerivs;
-        for (auto indices : sliceScalingParamDerivs)
-            if (indices.x != -1 || (doLJPME && indices.y != -1))
-                requestedDerivs.push_back(max(indices.x, indices.y));
+        for (ScalingParameterInfo info : sliceScalingParams)
+            if (info.hasDerivative && (info.includeCoulomb || (doLJPME && info.includeLJ)))
+                requestedDerivs.push_back(info.index);
         hasDerivatives = requestedDerivs.size() > 0;
         stringstream code;
         if (hasDerivatives) {
@@ -122,9 +124,10 @@ public:
                 int position = find(allDerivs.begin(), allDerivs.end(), scalingParams[index]) - allDerivs.begin();
                 code<<"energyParamDerivs[index*"<<allDerivs.size()<<"+"<<position<<"] += ";
                 for (int slice = 0; slice < numSlices; slice++) {
-                    if (sliceScalingParamDerivs[slice].x == index)
+                    ScalingParameterInfo info = sliceScalingParams[slice];
+                    if (info.includeCoulomb && info.index == index)
                         code<<"+clEnergy["<<slice<<"]";
-                    if (doLJPME && sliceScalingParamDerivs[slice].y == index)
+                    if (doLJPME && info.includeLJ && info.index == index)
                         code<<"+ljEnergy["<<slice<<"]";
                 }
                 code<<";"<<endl;
@@ -169,12 +172,16 @@ private:
 
 class CudaCalcSlicedNonbondedForceKernel::DispersionCorrectionPostComputation : public CudaContext::ForcePostComputation {
 public:
-    DispersionCorrectionPostComputation(CudaContext& cu, vector<double>& dispersionCoefficients, vector<double2>& sliceLambdas, vector<string>& scalingParams, vector<int2>& sliceScalingParamDerivs, int forceGroup) :
-                cu(cu), dispersionCoefficients(dispersionCoefficients), sliceLambdas(sliceLambdas), scalingParams(scalingParams), sliceScalingParamDerivs(sliceScalingParamDerivs), forceGroup(forceGroup) {
+    DispersionCorrectionPostComputation(CudaContext& cu, vector<double>& dispersionCoefficients, vector<double2>& sliceLambdas,
+                vector<string>& scalingParams, vector<ScalingParameterInfo>& sliceScalingParams, int forceGroup) :
+                cu(cu), dispersionCoefficients(dispersionCoefficients), sliceLambdas(sliceLambdas),
+                scalingParams(scalingParams), sliceScalingParams(sliceScalingParams), forceGroup(forceGroup) {
         numSlices = dispersionCoefficients.size();
         hasDerivatives = false;
-        for (int slice = 0; slice < numSlices; slice++)
-            hasDerivatives = hasDerivatives || sliceScalingParamDerivs[slice].y != -1;
+        for (int slice = 0; slice < numSlices; slice++) {
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            hasDerivatives = hasDerivatives || (info.hasDerivative && info.includeLJ);
+        }
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         double energy = 0.0;
@@ -186,9 +193,9 @@ public:
             if (hasDerivatives) {
                 map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
                 for (int slice = 0; slice < numSlices; slice++) {
-                    int index = sliceScalingParamDerivs[slice].y;
-                    if (index != -1)
-                        energyParamDerivs[scalingParams[index]] += dispersionCoefficients[slice]/volume;
+                    ScalingParameterInfo info = sliceScalingParams[slice];
+                    if (info.hasDerivative && info.includeLJ)
+                        energyParamDerivs[scalingParams[info.index]] += dispersionCoefficients[slice]/volume;
                 }
             }
         }
@@ -199,7 +206,7 @@ private:
     vector<double>& dispersionCoefficients;
     vector<double2>& sliceLambdas;
     vector<string>& scalingParams;
-    vector<int2>& sliceScalingParamDerivs;
+    vector<ScalingParameterInfo>& sliceScalingParams;
     int forceGroup;
     int numSlices;
     bool hasDerivatives;
@@ -243,9 +250,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     numSubsets = force.getNumSubsets();
     numSlices = force.getNumSlices();
     sliceLambdasVec.resize(numSlices, make_double2(1, 1));
-    sliceScalingParams.resize(numSlices, make_int2(-1, -1));
-    sliceScalingParamDerivsVec.resize(numSlices, make_int2(-1, -1));
     subsetSelfEnergy.resize(numSlices, make_double2(0, 0));
+    sliceScalingParams.resize(numSlices, ScalingParameterInfo());
 
     subsetsVec.resize(cu.getPaddedNumAtoms(), 0);
     for (int i = 0; i < numParticles; i++)
@@ -266,9 +272,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, scalingParams[index], subset1, subset2, includeCoulomb, includeLJ);
         int slice = sliceIndex(subset1, subset2);
-        sliceScalingParams[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
-        if (derivs.find(scalingParams[index]) != derivs.end())
-            sliceScalingParamDerivsVec[slice] = make_int2(includeCoulomb ? index : -1, includeLJ ? index : -1);
+        bool hasDerivative = derivs.find(scalingParams[index]) != derivs.end();
+        sliceScalingParams[slice] = ScalingParameterInfo(includeCoulomb, includeLJ, index, hasDerivative);
     }
 
     size_t sizeOfReal = cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
@@ -279,7 +284,12 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
 
     if (hasDerivatives) {
-        sliceScalingParamDerivs.initialize<int2>(cu, numSlices, "sliceScalingParamDerivs");
+        sliceScalingParamDerivs.initialize<int>(cu, numSlices, "sliceScalingParamDerivs");
+        vector<int> sliceScalingParamDerivsVec(numSlices);
+        for (int slice = 0; slice < numSlices; slice++) {
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            sliceScalingParamDerivsVec[slice] = info.hasDerivative ? info.index : -1;
+        }
         sliceScalingParamDerivs.upload(sliceScalingParamDerivsVec);
     }
 
@@ -396,7 +406,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             for (int i = 0; i < numParticles; i++)
                 subsetSelfEnergy[subsetsVec[i]].x -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
             for (int i = 0; i < numSubsets; i++)
-                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x;
+                ewaldSelfEnergy += sliceLambdasVec[sliceIndex(i, i)].x*subsetSelfEnergy[i].x;
 
             // Create the reciprocal space kernels.
 
@@ -462,8 +472,10 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 for (int i = 0; i < numParticles; i++)
                     subsetSelfEnergy[subsetsVec[i]].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
             }
-            for (int i = 0; i < numSubsets; i++)
-                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
+            for (int i = 0; i < numSubsets; i++) {
+                int slice = sliceIndex(i, i);
+                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            }
             char deviceName[100];
             cuDeviceGetName(deviceName, 100, cu.getDevice());
             usePmeStream = (!cu.getPlatformData().disablePmeStream && string(deviceName) != "GeForce GTX 980"); // Using a separate stream is slower on GTX 980
@@ -695,17 +707,16 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
             stringstream code;
             if (hasDerivatives) {
-                string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int2");
-                code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+                string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int");
+                code<<"int which = "<<derivIndices<<"[slice];"<<endl;
                 for (int slice = 0; slice < numSlices; slice++) {
-                    int2 indices = sliceScalingParamDerivsVec[slice];
-                    int index = max(indices.x, indices.y);
-                    if (index != -1) {
-                        string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
-                        if (indices.x == index)
-                            code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
-                        if (doLJPME && indices.y == index)
-                            code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                    ScalingParameterInfo info = sliceScalingParams[slice];
+                    if (info.hasDerivative) {
+                        string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[info.index]);
+                        if (info.includeCoulomb)
+                            code<<paramDeriv<<" += which == "<<info.index<<" ? clEnergy : 0;"<<endl;
+                        if (doLJPME && info.includeLJ)
+                            code<<paramDeriv<<" += which == "<<info.index<<" ? ljEnergy : 0;"<<endl;
                     }
                 }
             }
@@ -747,17 +758,16 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     stringstream code;
     if (hasDerivatives) {
         string derivIndices = prefix+"derivIndices";
-        cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(derivIndices, "int", 2, 2*sizeof(int), sliceScalingParamDerivs.getDevicePointer()));
-        code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+        cu.getNonbondedUtilities().addArgument(CudaNonbondedUtilities::ParameterInfo(derivIndices, "int", 1, sizeof(int), sliceScalingParamDerivs.getDevicePointer()));
+        code<<"int which = "<<derivIndices<<"[slice];"<<endl;
         for (int slice = 0; slice < numSlices; slice++) {
-            int2 indices = sliceScalingParamDerivsVec[slice];
-            int index = max(indices.x, indices.y);
-            if (index != -1) {
-                string paramDeriv = cu.getNonbondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
-                if (hasCoulomb && indices.x == index)
-                    code<<paramDeriv<<" += (which.x == "<<index<<" ? interactionScale*clEnergy : 0);"<<endl;
-                if (hasLJ && indices.y == index)
-                    code<<paramDeriv<<" += (which.y == "<<index<<" ? interactionScale*ljEnergy : 0);"<<endl;
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            if (info.hasDerivative) {
+                string paramDeriv = cu.getNonbondedUtilities().addEnergyParameterDerivative(scalingParams[info.index]);
+                if (hasCoulomb && info.includeCoulomb)
+                    code<<paramDeriv<<" += which == "<<info.index<<" ? interactionScale*clEnergy : 0;"<<endl;
+                if (hasLJ && info.includeLJ)
+                    code<<paramDeriv<<" += which == "<<info.index<<" ? interactionScale*ljEnergy : 0;"<<endl;
             }
         }
     }
@@ -800,17 +810,16 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
         stringstream code;
         if (hasDerivatives) {
-            string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int2");
-            code<<"int2 which = "<<derivIndices<<"[slice];"<<endl;
+            string derivIndices = cu.getBondedUtilities().addArgument(sliceScalingParamDerivs.getDevicePointer(), "int");
+            code<<"int which = "<<derivIndices<<"[slice];"<<endl;
             for (int slice = 0; slice < numSlices; slice++) {
-                int2 indices = sliceScalingParamDerivsVec[slice];
-                int index = max(indices.x, indices.y);
-                if (index != -1) {
-                    string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[index]);
-                    if (hasCoulomb && indices.x == index)
-                        code<<paramDeriv<<" += (which.x == "<<index<<" ? clEnergy : 0);"<<endl;
-                    if (hasLJ && indices.y == index)
-                        code<<paramDeriv<<" += (which.y == "<<index<<" ? ljEnergy : 0);"<<endl;
+                ScalingParameterInfo info = sliceScalingParams[slice];
+                if (info.hasDerivative) {
+                    string paramDeriv = cu.getBondedUtilities().addEnergyParameterDerivative(scalingParams[info.index]);
+                    if (hasCoulomb && info.includeCoulomb)
+                        code<<paramDeriv<<" += which == "<<info.index<<" ? clEnergy : 0;"<<endl;
+                    if (hasLJ && info.includeLJ)
+                        code<<paramDeriv<<" += which == "<<info.index<<" ? ljEnergy : 0;"<<endl;
                 }
             }
         }
@@ -892,7 +901,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     // Add post-computation for dispersion correction.
 
     if (dispersionCoefficients.size() > 0 && force.getIncludeDirectSpace())
-        cu.addPostComputation(new DispersionCorrectionPostComputation(cu, dispersionCoefficients, sliceLambdasVec, scalingParams, sliceScalingParamDerivsVec, force.getForceGroup()));
+        cu.addPostComputation(new DispersionCorrectionPostComputation(cu, dispersionCoefficients, sliceLambdasVec, scalingParams, sliceScalingParams, force.getForceGroup()));
 
     // Initialize the kernel for updating parameters.
 
@@ -910,21 +919,23 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
 
     bool scalingParamChanged = false;
     for (int slice = 0; slice < numSlices; slice++) {
-        int2 indices = sliceScalingParams[slice];
-        int index = max(indices.x, indices.y);
-        if (index != -1) {
-            double paramValue = context.getParameter(scalingParams[index]);
-            double oldValue = indices.x != -1 ? sliceLambdasVec[slice].x : sliceLambdasVec[slice].y;
+        ScalingParameterInfo info = sliceScalingParams[slice];
+        if (info.includeCoulomb || info.includeLJ) {
+            double paramValue = context.getParameter(scalingParams[info.index]);
+            double oldValue = info.includeCoulomb ? sliceLambdasVec[slice].x : sliceLambdasVec[slice].y;
             if (oldValue != paramValue) {
-                sliceLambdasVec[slice] = make_double2(indices.x == -1 ? 1.0 : paramValue, indices.y == -1 ? 1.0 : paramValue);
+                sliceLambdasVec[slice].x = info.includeCoulomb ? paramValue : 1.0;
+                sliceLambdasVec[slice].y = info.includeLJ ? paramValue : 1.0;
                 scalingParamChanged = true;
             }
         }
     }
     if (scalingParamChanged) {
         ewaldSelfEnergy = 0.0;
-        for (int i = 0; i < numSubsets; i++)
-            ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
+        for (int i = 0; i < numSubsets; i++) {
+            int slice = sliceIndex(i, i);
+            ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+        }
         if (cu.getUseDoublePrecision())
             sliceLambdas.upload(sliceLambdasVec);
         else
@@ -983,7 +994,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
 
     if (cosSinSums.isInitialized() && includeReciprocal) {
         if (!addEnergy->isInitialized())
-            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParamDerivsVec);
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParams);
         void* sumsArgs[] = {&pmeEnergyBuffer.getDevicePointer(), &cu.getPosq().getDevicePointer(),
                 &subsets.getDevicePointer(), &cosSinSums.getDevicePointer(), cu.getPeriodicBoxSizePointer()};
         cu.executeKernel(ewaldSumsKernel, sumsArgs, cosSinSums.getSize()/numSubsets);
@@ -993,7 +1004,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (!addEnergy->isInitialized())
-            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParamDerivsVec);
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, scalingParams, sliceScalingParams);
 
         if (usePmeStream)
             cu.setCurrentStream(pmeStream);
@@ -1111,15 +1122,14 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
     }
     if (!hasOffsets) {
         map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
-        for (int j = 0; j < numSubsets; j++) {
-            int2 indices = sliceScalingParamDerivsVec[j*(j+3)/2];
-            int index = max(indices.x, indices.y);
-            if (index != -1) {
-                string param = scalingParams[index];
-                if (indices.x != -1)
-                    energyParamDerivs[param] += subsetSelfEnergy[j].x;
-                if (doLJPME && indices.y != -1)
-                    energyParamDerivs[param] += subsetSelfEnergy[j].y;
+        for (int i = 0; i < numSubsets; i++) {
+            ScalingParameterInfo info = sliceScalingParams[sliceIndex(i, i)];
+            if (info.hasDerivative) {
+                string param = scalingParams[info.index];
+                if (info.includeCoulomb)
+                    energyParamDerivs[param] += subsetSelfEnergy[i].x;
+                if (doLJPME && info.includeLJ)
+                    energyParamDerivs[param] += subsetSelfEnergy[i].y;
             }
         }
     }
@@ -1205,8 +1215,10 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
                 if (doLJPME)
                     subsetSelfEnergy[subsetsVec[i]].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
             }
-            for (int i = 0; i < force.getNumSubsets(); i++)
-                ewaldSelfEnergy += sliceLambdasVec[i*(i+3)/2].x*subsetSelfEnergy[i].x + sliceLambdasVec[i*(i+3)/2].y*subsetSelfEnergy[i].y;
+            for (int i = 0; i < force.getNumSubsets(); i++) {
+                int slice = sliceIndex(i, i);
+                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            }
         }
     }
     if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && (nonbondedMethod == CutoffPeriodic || nonbondedMethod == Ewald || nonbondedMethod == PME))
