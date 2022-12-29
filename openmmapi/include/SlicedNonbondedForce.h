@@ -86,13 +86,13 @@ public:
             globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
             includeCoulomb(includeCoulomb), includeLJ(includeLJ) {
         if (!(includeCoulomb || includeLJ))
-            throwException(__FILE__, __LINE__, "Scaling at least one contribution, LJ or Coulomb, is mandatory");
+            throwException(__FILE__, __LINE__, "Keywords 'includeCoulomb' and 'includeLJ' cannot be both false");
     }
     int getSlice() const {
         return sliceIndex(subset1, subset2);
     }
     bool clashesWith(const ScalingParameterInfo& info) {
-        return getSlice() == info.getSlice() && ((includeCoulomb && info.includeLJ) || (includeCoulomb && info.includeLJ));
+        return getSlice() == info.getSlice() && ((includeCoulomb && info.includeCoulomb) || (includeLJ && info.includeLJ));
     }
 };
 

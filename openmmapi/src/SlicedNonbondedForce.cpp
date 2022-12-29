@@ -123,7 +123,7 @@ int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subse
     ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ);
     for (auto param : scalingParameters)
         if (param.clashesWith(info))
-            throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
+            throwException(__FILE__, __LINE__, "Clash detected between scaling parameters");
     scalingParameters.push_back(info);
     return scalingParameters.size()-1;
 }
