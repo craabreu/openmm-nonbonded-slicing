@@ -1095,7 +1095,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             cu.restoreDefaultStream();
         }
     }
-    if (!hasOffsets) {
+    if (!hasOffsets && includeReciprocal) {
         map<string, double>& energyParamDerivs = cu.getEnergyParamDerivWorkspace();
         for (int i = 0; i < numSubsets; i++) {
             ScalingParameterInfo info = sliceScalingParams[sliceIndex(i, i)];

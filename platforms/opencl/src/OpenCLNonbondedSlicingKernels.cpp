@@ -1200,7 +1200,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             cl.restoreDefaultQueue();
         }
     }
-    if (!hasOffsets) {
+    if (!hasOffsets && includeReciprocal) {
         map<string, double>& energyParamDerivs = cl.getEnergyParamDerivWorkspace();
         for (int i = 0; i < numSubsets; i++) {
             ScalingParameterInfo info = sliceScalingParams[sliceIndex(i, i)];
