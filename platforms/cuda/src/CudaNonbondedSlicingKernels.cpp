@@ -235,6 +235,32 @@ CudaCalcSlicedNonbondedForceKernel::~CudaCalcSlicedNonbondedForceKernel() {
     }
 }
 
+string CudaCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ) {
+    stringstream exprCoulomb, exprLJ, exprBoth;
+    int countCoulomb = 0, countLJ = 0, countBoth = 0;
+    for (int slice = 0; slice < numSlices; slice++) {
+        ScalingParameterInfo info = sliceScalingParams[slice];
+        bool coulomb = conditionCoulomb && info.nameCoulomb == param;
+        bool lj = conditionLJ && info.nameLJ == param;
+        if (coulomb && lj)
+            exprBoth<<(countBoth++ ? " || " : "")<<"slice=="<<slice;
+        else if (coulomb)
+            exprCoulomb<<(countCoulomb++ ? " || " : "")<<"slice=="<<slice;
+        else if (lj)
+            exprLJ<<(countLJ++ ? " || " : "")<<"slice=="<<slice;
+    }
+
+    stringstream derivative;
+    if (countBoth)
+        derivative<<"("<<exprBoth.str()<<")*(clEnergy + ljEnergy)";
+    if (countCoulomb)
+        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy";
+    if (countLJ)
+        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy";
+
+    return derivative.str();
+}
+
 void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
     ContextSelector selector(cu);
     int forceIndex;
@@ -269,7 +295,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, name, subset1, subset2, includeCoulomb, includeLJ);
         bool hasDerivative = requestedDerivatives.find(name) != requestedDerivatives.end();
-        sliceScalingParams[sliceIndex(subset1, subset2)].addInfo(name, includeCoulomb, includeLJ, index, hasDerivative);
+        sliceScalingParams[sliceIndex(subset1, subset2)].addInfo(name, includeCoulomb, includeLJ, hasDerivative);
     }
 
     size_t sizeOfReal = cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
@@ -694,12 +720,9 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             stringstream code;
             for (string param : requestedDerivatives) {
                 string variableName = cu.getBondedUtilities().addEnergyParameterDerivative(param);
-                for (int slice = 0; slice < numSlices; slice++) {
-                    ScalingParameterInfo info = sliceScalingParams[slice];
-                    string energyFunction = info.getEnergyFunction(param, hasCoulomb, doLJPME);
-                    if (energyFunction != "")
-                        code<<variableName<<" += slice == "<<slice<<" ? "<<energyFunction<<" : 0;"<<endl;
-                }
+                string expression = getDerivativeExpression(param, hasCoulomb, doLJPME);
+                if (expression.length() > 0)
+                    code<<variableName<<" += "<<expression<<";"<<endl;
             }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
@@ -739,12 +762,9 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cu.getNonbondedUtilities().addEnergyParameterDerivative(param);
-        for (int slice = 0; slice < numSlices; slice++) {
-            ScalingParameterInfo info = sliceScalingParams[slice];
-            string energyFunction = info.getEnergyFunction(param, hasCoulomb, hasLJ);
-            if (energyFunction != "")
-                code<<variableName<<" += slice == "<<slice<<" ? interactionScale*("<<energyFunction<<") : 0;"<<endl;
-        }
+        string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
+        if (expression.length() > 0)
+            code<<variableName<<" += interactionScale*("<<expression<<");"<<endl;
     }
     replacements["COMPUTE_DERIVATIVES"] = code.str();
     source = cu.replaceStrings(source, replacements);
@@ -786,12 +806,9 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cu.getBondedUtilities().addEnergyParameterDerivative(param);
-            for (int slice = 0; slice < numSlices; slice++) {
-                ScalingParameterInfo info = sliceScalingParams[slice];
-                string energyFunction = info.getEnergyFunction(param, hasCoulomb, hasLJ);
-                if (energyFunction != "")
-                    code<<variableName<<" += slice == "<<slice<<" ? "<<energyFunction<<" : 0;"<<endl;
-            }
+            string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
+            if (expression.length() > 0)
+                code<<variableName<<" += "<<expression<<";"<<endl;
         }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())

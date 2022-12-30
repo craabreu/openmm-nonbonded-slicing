@@ -170,6 +170,8 @@ private:
     CudaArray subsets;
     CudaArray sliceLambdas;
 
+    string getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ);
+
     vector<float2> double2Tofloat2(vector<double2> input) {
         vector<float2> output(input.size());
         transform(
@@ -184,29 +186,22 @@ class CudaCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
 public:
     string nameCoulomb, nameLJ;
     bool includeCoulomb, includeLJ;
-    int indexCoulomb, indexLJ;
     bool hasDerivativeCoulomb, hasDerivativeLJ;
-    ScalingParameterInfo() : nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false), indexCoulomb(-1), indexLJ(-1), hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
+    ScalingParameterInfo() :
+        nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false),
+        hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
     }
-    void addInfo(string name, bool includeCoulomb, bool includeLJ, int index, bool hasDerivative) {
+    void addInfo(string name, bool includeCoulomb, bool includeLJ, bool hasDerivative) {
         if (includeCoulomb) {
             this->includeCoulomb = true;
             nameCoulomb = name;
-            indexCoulomb = index;
             hasDerivativeCoulomb = hasDerivative;
         }
         if (includeLJ) {
             this->includeLJ = true;
             nameLJ = name;
-            indexLJ = index;
             hasDerivativeLJ = hasDerivative;
         }
-    }
-    string getEnergyFunction(string param, bool conditionCoulomb, bool conditionLJ) {
-        string clEnergy = (conditionCoulomb && nameCoulomb == param) ? "clEnergy" : "";
-        string ljEnergy = (conditionLJ && nameLJ == param) ? "ljEnergy" : "";
-        string plusSign = (clEnergy == "" || ljEnergy == "") ? "" : "+";
-        return clEnergy + plusSign + ljEnergy;
     }
 };
 
