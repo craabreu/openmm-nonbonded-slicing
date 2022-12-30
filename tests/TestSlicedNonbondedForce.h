@@ -603,6 +603,7 @@ void testDispersionCorrection() {
     int numParticles = gridSize*gridSize*gridSize;
     double boxSize = gridSize*0.7;
     double cutoff = boxSize/3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
     System system;
     VerletIntegrator integrator(0.01);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(1);
@@ -633,7 +634,7 @@ void testDispersionCorrection() {
     double term1 = (0.5*pow(1.1, 12)/pow(cutoff, 9))/9;
     double term2 = (0.5*pow(1.1, 6)/pow(cutoff, 3))/3;
     double expected = 8*M_PI*numParticles*numParticles*(term1-term2)/(boxSize*boxSize*boxSize);
-    assertEqualTo(expected, energy1-energy2, 1e-4);
+    assertEqualTo(expected, energy1-energy2, tol);
 
     // Now modify half the particles to be different, and see if it is still correct.
 
@@ -660,7 +661,7 @@ void testDispersionCorrection() {
     term1 /= (numParticles*(numParticles+1))/2;
     term2 /= (numParticles*(numParticles+1))/2;
     expected = 8*M_PI*numParticles*numParticles*(term1-term2)/(boxSize*boxSize*boxSize);
-    assertEqualTo(expected, energy1-energy2, 1e-4);
+    assertEqualTo(expected, energy1-energy2, tol);
 }
 
 void testChangingParameters() {
@@ -991,7 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
