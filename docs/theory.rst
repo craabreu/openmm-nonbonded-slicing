@@ -102,8 +102,8 @@ numbers *x* and *y*. It is now clear that the energy of a slice *I, J* should be
     \sum_{\mathbf n \neq \mathbf 0} \frac{e^{-\frac{k^2}{4\alpha^2}}}{k^2}
     S_I(\mathbf k) \cdot S_J(\mathbf k),
 
-where a prefactor :math:`\alpha_{I,J} = \frac{2}{1+\delta_{I,J}}` accounts for the fact that
-:math:`S_I(\mathbf k) \cdot S_J(\mathbf k)` appears twice in the :math:`E^{rec}_{I,J}` definition
+where a prefactor :math:`\alpha_{I,J} = 2-\delta_{I,J}` accounts for the fact that
+:math:`S_I(\mathbf k) \cdot S_J(\mathbf k)` shows up twice in the :math:`E^{rec}_{I,J}` definition
 whenever :math:`I \neq J`.
 
 Sliced PME Implementation
