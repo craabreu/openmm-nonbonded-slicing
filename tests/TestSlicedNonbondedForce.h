@@ -992,6 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
     double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
+
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
         system1.addParticle(1.0);
@@ -1014,21 +1015,17 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     double epsij = 2;
 
     int M = (int) pow(numMolecules, 1.0/3.0);
-    if (M*M*M < numMolecules) M++;
-    const double sqrt3 = sqrt(3);
+    if (M*M*M < numMolecules)
+        M++;
     for (int k = 0; k < numMolecules; k++) {
         int iz = k/(M*M);
         int iy = (k - iz*M*M)/M;
         int ix = k - M*(iy + iz*M);
-        double x = (ix + 0.5)*L/M;
-        double y = (iy + 0.5)*L/M;
-        double z = (iz + 0.5)*L/M;
-        double dx = (0.5 - ix%2)/2;
-        double dy = (0.5 - iy%2)/2;
-        double dz = (0.5 - iz%2)/2;
+        Vec3 center = Vec3(ix+0.5, iy+0.5, iz+0.5)*L/M;
+        Vec3 delta = Vec3(0.5-ix%2, 0.5-iy%2, 0.5-iz%2)/2;
         int i = 2*k, j = i+1;
-        positions[i] = Vec3(x+dx, y+dy, z+dz);
-        positions[j] = Vec3(x-dx, y-dy, z-dz);
+        positions[i] = center + delta;
+        positions[j] = center - delta;
         nonbonded->addParticle(q(i), 1, eps);
         nonbonded->addParticle(q(j), 1, eps);
         if (exceptions)
@@ -1036,7 +1033,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     }
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
-    cout<<sliced->getNonbondedMethodName()<<" (exceptions="<<exceptions<<", coul="<<includeCoulomb<<", lj="<<includeLJ<<")"<<endl;
 
     for (int k = 0; k < numParticles; k++)
         if (genrand_real2(sfmt) < 0.5)
@@ -1145,7 +1141,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     sliced->addScalingParameterDerivative(param2);
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
-    auto derivatives = state2.getEnergyParameterDerivatives();
+    map<string, double> derivatives = state2.getEnergyParameterDerivatives();
     assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], tol);
 
     // Sum of derivatives
@@ -1166,6 +1162,134 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     derivatives = state2.getEnergyParameterDerivatives();
     double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
     assertEqualTo(energy, sum, tol);
+}
+
+void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions) {
+    const int numMolecules = 100;
+    const int numParticles = numMolecules*2;
+    const double cutoff = 3.5;
+    const double L = exceptions ? 7.0 : 10.0;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
+
+    System system1, system2;
+    for (int i = 0; i < numParticles; i++) {
+        system1.addParticle(1.0);
+        system2.addParticle(1.0);
+    }
+    system1.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    system2.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+
+    NonbondedForce* nonbonded = new NonbondedForce();
+    nonbonded->setNonbondedMethod(method);
+    nonbonded->setCutoffDistance(cutoff);
+    nonbonded->setUseDispersionCorrection(true);
+    nonbonded->setReciprocalSpaceForceGroup(1);
+    nonbonded->setEwaldErrorTolerance(1e-4);
+    vector<Vec3> positions(numParticles);
+
+    auto q = [](int k) { return 1-2*(k%2); };
+    double qiqj = -0.5;
+    double eps = 1;
+    double epsij = 2;
+
+    int M = (int) pow(numMolecules, 1.0/3.0);
+    if (M*M*M < numMolecules)
+        M++;
+    for (int k = 0; k < numMolecules; k++) {
+        int iz = k/(M*M);
+        int iy = (k - iz*M*M)/M;
+        int ix = k - M*(iy + iz*M);
+        Vec3 center = Vec3(ix+0.5, iy+0.5, iz+0.5)*L/M;
+        Vec3 delta = Vec3(0.5-ix%2, 0.5-iy%2, 0.5-iz%2)/2;
+        int i = 2*k, j = i+1;
+        positions[i] = center + delta;
+        positions[j] = center - delta;
+        nonbonded->addParticle(q(i), 1, eps);
+        nonbonded->addParticle(q(j), 1, eps);
+        if (exceptions)
+            nonbonded->addException(i, j, qiqj, 1, epsij);
+    }
+
+    SlicedNonbondedForce* sliced1 = new SlicedNonbondedForce(*nonbonded, 2);
+    SlicedNonbondedForce* sliced2 = new SlicedNonbondedForce(*nonbonded, 2);
+
+    for (int k = 0; k < numParticles; k++)
+        if (genrand_real2(sfmt) < 0.5) {
+            sliced1->setParticleSubset(k, 1);
+            sliced2->setParticleSubset(k, 1);
+        }
+
+    double lambda = 0.5;
+    sliced1->addGlobalParameter("lambda", lambda);
+    sliced1->addScalingParameter("lambda", 0, 1, true, true);
+    sliced1->addScalingParameterDerivative("lambda");
+    sliced2->addGlobalParameter("lambdaCoulomb", lambda);
+    sliced2->addGlobalParameter("lambdaLJ", lambda);
+    sliced2->addScalingParameter("lambdaCoulomb", 0, 1, true, false);
+    sliced2->addScalingParameter("lambdaLJ", 0, 1, false, true);
+    sliced2->addScalingParameterDerivative("lambdaCoulomb");
+    sliced2->addScalingParameterDerivative("lambdaLJ");
+
+    double value = 0.3;
+    sliced1->addGlobalParameter("alpha", value);
+    sliced1->addScalingParameter("alpha", 0, 0, true, true);
+    sliced1->addScalingParameterDerivative("alpha");
+
+    sliced1->addGlobalParameter("beta", value);
+    sliced1->addScalingParameter("beta", 1, 1, true, true);
+    sliced1->addScalingParameterDerivative("beta");
+
+    sliced2->addGlobalParameter("gamma", value);
+    sliced2->addScalingParameter("gamma", 0, 0, true, true);
+    sliced2->addScalingParameter("gamma", 1, 1, true, true);
+    sliced2->addScalingParameterDerivative("gamma");
+
+    system1.addForce(sliced1);
+    system2.addForce(sliced2);
+
+    VerletIntegrator integrator1(0.01);
+    Context context1(system1, integrator1, platform);
+    context1.setPositions(positions);
+
+    VerletIntegrator integrator2(0.01);
+    Context context2(system2, integrator2, platform);
+    context2.setPositions(positions);
+
+    // Overall
+
+    State state1 = context1.getState(State::Energy | State::Forces | State::ParameterDerivatives);
+    State state2 = context2.getState(State::Energy | State::Forces | State::ParameterDerivatives);
+    map<string, double> derivatives1 = state1.getEnergyParameterDerivatives();
+    map<string, double> derivatives2 = state2.getEnergyParameterDerivatives();
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+    assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
+    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
+
+    // Direct space
+
+    state1 = context1.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<0);
+    state2 = context2.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<0);
+    derivatives1 = state1.getEnergyParameterDerivatives();
+    derivatives2 = state2.getEnergyParameterDerivatives();
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+    assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
+    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
+
+    // // Reciprocal space
+
+    state1 = context1.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<1);
+    derivatives1 = state1.getEnergyParameterDerivatives();
+    derivatives2 = state2.getEnergyParameterDerivatives();
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+    assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
+    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
 }
 
 void runPlatformTests();
@@ -1204,10 +1328,11 @@ int main(int argc, char* argv[]) {
         testEwaldExceptions();
         testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
-            for (auto exceptions : booleanValues)
+            for (auto exceptions : booleanValues) {
                 for (auto lj : booleanValues)
                     testNonbondedSlicing(sfmt, method, exceptions, lj);
-        runPlatformTests();
+                testScalingParameterSeparation(sfmt, method, exceptions);
+            }
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;
