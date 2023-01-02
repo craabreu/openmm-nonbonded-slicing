@@ -6,9 +6,9 @@ To use the plugin from your Python script, you can do:
 .. code-block:: python
 
     import openmm as mm
-    import nonbondedslicing as plugin
+    import nonbondedslicing as nbs
     system = mm.System()
-    force = plugin.SlicedNonbondedForce(2)
+    force = nbs.SlicedNonbondedForce(2)
     system.addForce(force)
 
 This is the implemented subclass of :OpenMM:`Force`:

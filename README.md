@@ -69,9 +69,9 @@ Once you do that, you can use the plugin from your Python scripts:
 
 ```py
     import openmm as mm
-    import nonbondedslicing as plugin
+    import nonbondedslicing as nbs
     system = mm.System()
-    force = plugin.Nonbonded(2)
+    force = nbs.SlicedNonbondedForce(2)
     system.addForce(force)
 ```
 
