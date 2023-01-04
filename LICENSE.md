@@ -23,8 +23,8 @@ SOFTWARE.
 
 ---
 
-This software is based on and shares part of its source code with
-[OpenMM](https://openmm.org/), whose original copyright notice follows:
+This software is heavily based on the source code of [OpenMM](https://openmm.org/),
+whose original copyright notice follows:
 
 ```
 This is part of the OpenMM molecular simulation toolkit originating from

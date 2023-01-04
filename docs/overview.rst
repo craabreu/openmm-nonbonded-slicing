@@ -3,8 +3,6 @@ Overview
 ========
 
 This OpenMM_ plugin implements a sliced variant of OpenMM_'s NonbondedForce class.
-
-the smooth Particle Mesh Ewald (PME) method
 By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
 combination of contributions from pairs of subsets like
 
