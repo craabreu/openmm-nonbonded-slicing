@@ -25,7 +25,7 @@ Documentation
 =============
 
 A complete documentation for this plugin, including its Python API and the theory behind energy
-slicing is available [here](https://openmm-nonbonded-slicing.readthedocs.io/en/latest).
+slicing is available [here](https://openmm-nonbonded-slicing.readthedocs.io/en/stable).
 
 Installing from Source
 ======================
