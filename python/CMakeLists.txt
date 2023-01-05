@@ -1,5 +1,6 @@
 set(WRAP_FILE NonbondedSlicingWrapper.cpp)
 set(MODULE_NAME nonbondedslicing)
+configure_file(nonbondedslicing.i ${CMAKE_CURRENT_BINARY_DIR})
 
 # Execute SWIG to generate source code for the Python module.
 
@@ -10,8 +11,8 @@ add_custom_command(
         -doxygen
         -o "${WRAP_FILE}"
         "-I${OPENMM_DIR}/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/nonbondedslicing.i"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/nonbondedslicing.i"
+        "nonbondedslicing.i"
+    DEPENDS "nonbondedslicing.i"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
 

@@ -4,7 +4,7 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-PROJECT(OpenMMNonbondedSlicing)
+PROJECT(OpenMMNonbondedSlicing VERSION 0.1)
 
 # We need to know where OpenMM is installed so we can access the headers and libraries.
 SET(OPENMM_DIR "/usr/local/openmm" CACHE PATH "Where OpenMM is installed")
