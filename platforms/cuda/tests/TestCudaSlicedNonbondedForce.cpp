@@ -161,13 +161,76 @@ void testDeterministicForces() {
 //     return (memory >= 4L*(1<<30));
 // }
 
+void testUseCuFFT() {
+    const int numMolecules = 100;
+    const int numParticles = numMolecules*2;
+    const double cutoff = 3.5;
+    const double L = 10.0;
+    double tol = platform.getPropertyDefaultValue("Precision") == "double" ? 1e-5 : 1e-3;
+
+    System system1, system2;
+    for (int i = 0; i < numParticles; i++) {
+        system1.addParticle(1.0);
+        system2.addParticle(1.0);
+    }
+    system1.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    system2.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+
+    SlicedNonbondedForce* nonbonded1 = new SlicedNonbondedForce(2);
+    nonbonded1->setNonbondedMethod(nonbonded1->PME);
+    nonbonded1->setCutoffDistance(cutoff);
+    nonbonded1->setUseDispersionCorrection(true);
+    nonbonded1->setReciprocalSpaceForceGroup(1);
+    nonbonded1->setEwaldErrorTolerance(1e-4);
+
+    vector<Vec3> positions(numParticles);
+
+    int M = (int) pow(numMolecules, 1.0/3.0);
+    if (M*M*M < numMolecules)
+        M++;
+    for (int k = 0; k < numMolecules; k++) {
+        int iz = k/(M*M);
+        int iy = (k - iz*M*M)/M;
+        int ix = k - M*(iy + iz*M);
+        Vec3 center = Vec3(ix+0.5, iy+0.5, iz+0.5)*L/M;
+        Vec3 delta = Vec3(0.5-ix%2, 0.5-iy%2, 0.5-iz%2)/2;
+        int i = 2*k, j = i+1;
+        positions[i] = center + delta;
+        positions[j] = center - delta;
+        nonbonded1->addParticle(1, 1, 1);
+        nonbonded1->addParticle(-1, 1, 1);
+    }
+
+    SlicedNonbondedForce* nonbonded2 = new SlicedNonbondedForce(*nonbonded1, 2);
+    nonbonded2->setUseCuFFT(!nonbonded1->getUseCudaFFT());
+    assertEqualTo(nonbonded1->getUseCudaFFT(), !nonbonded2->getUseCudaFFT(), tol);
+
+    system1.addForce(nonbonded1);
+    system2.addForce(nonbonded2);
+
+    VerletIntegrator integrator1(0.01);
+    Context context1(system1, integrator1, platform);
+    context1.setPositions(positions);
+
+    VerletIntegrator integrator2(0.01);
+    Context context2(system2, integrator2, platform);
+    context2.setPositions(positions);
+
+    State state1 = context1.getState(State::Energy | State::Forces);
+    State state2 = context2.getState(State::Energy | State::Forces);
+
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+}
+
 void runPlatformTests() {
     testParallelComputation(SlicedNonbondedForce::NoCutoff);
-    // testParallelComputation(SlicedNonbondedForce::Ewald);
+    testParallelComputation(SlicedNonbondedForce::Ewald);
     testParallelComputation(SlicedNonbondedForce::PME);
     testParallelComputation(SlicedNonbondedForce::LJPME);
     testReordering();
     testDeterministicForces();
+    testUseCuFFT();
     // if (canRunHugeTest())
     //     testHugeSystem();
 }

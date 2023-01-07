@@ -218,20 +218,10 @@ CudaCalcSlicedNonbondedForceKernel::~CudaCalcSlicedNonbondedForceKernel() {
         delete fft;
     if (dispersionFft != NULL)
         delete dispersionFft;
-    if (hasInitializedFFT) {
-        if (useCudaFFT) {
-            cufftDestroy(fftForward);
-            cufftDestroy(fftBackward);
-            if (doLJPME) {
-                cufftDestroy(dispersionFftForward);
-                cufftDestroy(dispersionFftBackward);
-            }
-        }
-        if (usePmeStream) {
-            cuStreamDestroy(pmeStream);
-            cuEventDestroy(pmeSyncEvent);
-            cuEventDestroy(paramsSyncEvent);
-        }
+    if (hasInitializedFFT && usePmeStream) {
+        cuStreamDestroy(pmeStream);
+        cuEventDestroy(pmeSyncEvent);
+        cuEventDestroy(paramsSyncEvent);
     }
 }
 
@@ -564,6 +554,27 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             pmeEnergyBuffer.initialize(cu, numSlices*bufferSize, energyElementSize, "pmeEnergyBuffer");
             cu.clearBuffer(pmeEnergyBuffer);
             sort = new CudaSort(cu, new SortTrait(), cu.getNumAtoms());
+
+            // Prepare for doing PME on its own stream.
+
+            int recipForceGroup = force.getReciprocalSpaceForceGroup();
+            if (recipForceGroup < 0)
+                recipForceGroup = force.getForceGroup();
+            if (usePmeStream) {
+                pmeDefines["USE_PME_STREAM"] = "1";
+                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
+                // CHECK_RESULT(cuEventCreate(&pmeSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
+                // CHECK_RESULT(cuEventCreate(&paramsSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
+                CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
+                CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
+                cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
+                cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
+            }
+            else
+                pmeStream = cu.getCurrentStream();
+
+            cu.addPostComputation(addEnergy = new AddEnergyPostComputation(cu, recipForceGroup));
+
             int cufftVersion;
             cufftGetVersion(&cufftVersion);
             useCudaFFT = force.getUseCudaFFT() && (cufftVersion >= 7050); // There was a critical bug in version 7.0
@@ -579,31 +590,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 else
                     dispersionFft = (CudaFFT3D*) new CudaVkFFT3D(cu, pmeStream, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true, pmeGrid1, pmeGrid2);
             }
-
-            // Prepare for doing PME on its own stream.
-
-            int recipForceGroup = force.getReciprocalSpaceForceGroup();
-            if (recipForceGroup < 0)
-                recipForceGroup = force.getForceGroup();
-            if (usePmeStream) {
-                pmeDefines["USE_PME_STREAM"] = "1";
-                cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
-                if (useCudaFFT) {
-                    cufftSetStream(fftForward, pmeStream);
-                    cufftSetStream(fftBackward, pmeStream);
-                    if (doLJPME) {
-                        cufftSetStream(dispersionFftForward, pmeStream);
-                        cufftSetStream(dispersionFftBackward, pmeStream);
-                    }
-                }
-                // CHECK_RESULT(cuEventCreate(&pmeSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
-                // CHECK_RESULT(cuEventCreate(&paramsSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
-                CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
-                CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
-                cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
-                cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
-            }
-            cu.addPostComputation(addEnergy = new AddEnergyPostComputation(cu, recipForceGroup));
             hasInitializedFFT = true;
 
             // Initialize the b-spline moduli.

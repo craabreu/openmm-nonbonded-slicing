@@ -127,11 +127,7 @@ private:
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
-    cufftHandle fftForward;
-    cufftHandle fftBackward;
     CudaFFT3D* dispersionFft;
-    cufftHandle dispersionFftForward;
-    cufftHandle dispersionFftBackward;
     CUfunction computeParamsKernel, computeExclusionParamsKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;
