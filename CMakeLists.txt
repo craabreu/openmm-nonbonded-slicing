@@ -6,8 +6,15 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
 PROJECT(OpenMMNonbondedSlicing VERSION 0.1)
 
-# We need to know where OpenMM is installed so we can access the headers and libraries.
-SET(OPENMM_DIR "/usr/local/openmm" CACHE PATH "Where OpenMM is installed")
+execute_process(COMMAND conda info OUTPUT_VARIABLE CONDA_INFO_OUTPUT)
+string(REGEX MATCH "active env location : ([^\n]+)" ACTIVE_ENV_MATCH "${CONDA_INFO_OUTPUT}")
+string(REGEX REPLACE "active env location : ([^\n]+)" "\\1" ACTIVE_ENV_PATH "${ACTIVE_ENV_MATCH}")
+SET (CONDA_OPENMM_INCLUDE "${ACTIVE_ENV_PATH}/include/openmm")
+IF(CONDA_OPENMM_INCLUDE)
+    SET(OPENMM_DIR "${ACTIVE_ENV_PATH}" CACHE PATH "Where OpenMM is installed")
+    SET(CMAKE_INSTALL_PREFIX "${ACTIVE_ENV_PATH}" CACHE PATH "Where to install the plugin")
+ENDIF(CONDA_OPENMM_INCLUDE)
+
 INCLUDE_DIRECTORIES("${OPENMM_DIR}/include")
 LINK_DIRECTORIES("${OPENMM_DIR}/lib" "${OPENMM_DIR}/lib/plugins")
 
@@ -25,7 +32,7 @@ IF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
     IF(WIN32)
         SET(CMAKE_INSTALL_PREFIX "$ENV{ProgramFiles}/OpenMM" CACHE PATH "Where to install the plugin" FORCE)
     ELSE(WIN32)
-        SET(CMAKE_INSTALL_PREFIX "/usr/local/openmm" CACHE PATH "Where to install the plugin" FORCE)
+        SET(CMAKE_INSTALL_PREFIX "${OPENMM_DIR}" CACHE PATH "Where to install the plugin" FORCE)
     ENDIF(WIN32)
 ENDIF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
 
