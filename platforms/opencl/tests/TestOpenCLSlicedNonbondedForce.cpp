@@ -138,7 +138,7 @@ void runPlatformTests() {
     testParallelComputation(SlicedNonbondedForce::LJPME);
     testReordering();
     // if (canRunHugeTest()) {
-    //     double tol = (platform.getPropertyDefaultValue("Precision") == "single" ? 1e-4 : 1e-5);
+    //     double tol = (platform.getPropertyDefaultValue("Precision") == "double" ? 1e-4 : 1e-3);
     //     testHugeSystem(platform, tol);
     // }
 }

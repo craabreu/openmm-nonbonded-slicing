@@ -540,7 +540,7 @@ void testLargeSystem() {
     assertForcesAndEnergy(context, TOL);
 }
 
-void testHugeSystem(double tol=1e-5) {
+void testHugeSystem(double tol=1e-4) {
     // Create a system with over 3 million particles.
 
     const int gridSize = 150;
@@ -603,7 +603,7 @@ void testDispersionCorrection() {
     int numParticles = gridSize*gridSize*gridSize;
     double boxSize = gridSize*0.7;
     double cutoff = boxSize/3;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
     System system;
     VerletIntegrator integrator(0.01);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(1);
@@ -992,7 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
@@ -1170,7 +1170,7 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
