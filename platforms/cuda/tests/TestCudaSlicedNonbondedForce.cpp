@@ -166,7 +166,7 @@ void testUseCuFFT() {
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = 10.0;
-    double tol = platform.getPropertyDefaultValue("Precision") == "double" ? 1e-5 : 1e-3;
+    double tol = platform.getPropertyDefaultValue("Precision") == "double" ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {

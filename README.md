@@ -10,9 +10,9 @@ This [OpenMM] plugin contains the **SlicedNonbondedForce** class, a variant of O
 By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
 combination of contributions from pairs of subsets like
 
-$$
-E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} (\lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J})
-$$
+```math
+E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} \left( \lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J} \right)
+```
 
 where each slice is defined by subsets $I$ and $J$, superscripts _vdW_ and _elec_ denote van
 der Waals and electrostatic contributions, $E_{I,J}$ is the potential energy of all particle pairs
