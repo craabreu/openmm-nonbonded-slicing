@@ -25,7 +25,7 @@ using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
 
-const double tol = 1e-4;
+const double TOL = 1e-4;
 
 void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     NonbondedForce* force = new NonbondedForce();
