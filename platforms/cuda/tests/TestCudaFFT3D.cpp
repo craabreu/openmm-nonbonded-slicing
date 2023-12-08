@@ -38,9 +38,31 @@ template <class FFT3D, typename Real, class Real2>
 void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batch) {
     System system;
     system.addParticle(0.0);
-    CudaPlatform::PlatformData platformData(NULL, system, "", "true", platform.getPropertyDefaultValue("CudaPrecision"), "false",
-            platform.getPropertyDefaultValue(CudaPlatform::CudaCompiler()), platform.getPropertyDefaultValue(CudaPlatform::CudaTempDirectory()),
-            platform.getPropertyDefaultValue(CudaPlatform::CudaHostCompiler()), platform.getPropertyDefaultValue(CudaPlatform::CudaDisablePmeStream()), "false", true, 1, NULL);
+
+    // Print OpenMM version
+    cout << "OpenMM version: " << "OPENMM_VERSION" << endl;
+    CudaPlatform::PlatformData platformData(
+        NULL,
+        system,
+        "",
+        "true",
+        platform.getPropertyDefaultValue("CudaPrecision"),
+        "false",
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
+        platform.getPropertyDefaultValue(CudaPlatform::CudaCompiler()),  // openmm<8.1
+#endif
+        platform.getPropertyDefaultValue(CudaPlatform::CudaTempDirectory()),
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
+        platform.getPropertyDefaultValue(CudaPlatform::CudaHostCompiler()),  // openmm<8.1
+#endif
+        platform.getPropertyDefaultValue(CudaPlatform::CudaDisablePmeStream()),
+        "false",
+        1,
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
+        true, // openmm<8.1
+#endif
+        NULL
+    );
     CudaContext& context = *platformData.contexts[0];
     context.initialize();
     context.setAsCurrent();
