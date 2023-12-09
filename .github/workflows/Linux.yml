@@ -29,9 +29,9 @@ jobs:
             # Latest supported versions
           - python-version: "3.11"
             openmm-version: "8.1"
-            cuda-version: "12.3.1"
+            cuda-version: "12.1.0"
             gcc-version: "13.2"
-            nvcc-version: "12.3"
+            nvcc-version: "12.1"
 
     steps:
       - name: "Check out"
@@ -42,6 +42,7 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda-version }}
+          method: 'network'
 
       - name: "Install AMD OpenCL on Linux"
         run: source devtools/scripts/install_amd_opencl.sh
