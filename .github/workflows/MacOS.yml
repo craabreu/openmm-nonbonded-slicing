@@ -24,6 +24,7 @@ jobs:
             os: macos-11
             cuda-version: ""
             gcc-version: ""
+            nvcc-version: ""
             python-version: "3.9"
 
     steps:
@@ -42,6 +43,7 @@ jobs:
         env:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
+          NVCC_VERSION: ${{ matrix.nvcc-version }}
 
       - uses: conda-incubator/setup-miniconda@v2
         name: "Install dependencies with conda"
