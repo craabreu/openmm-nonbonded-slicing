@@ -11,10 +11,9 @@ on:
     # Weely tests run on Sundays at 4 AM UTC (12 AM EST):
     - cron: "0 4 * * 0"
 
-
 jobs:
   unix:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-20.04
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
@@ -22,7 +21,6 @@ jobs:
         include:
           # Oldest supported versions
           - name: Linux (CUDA 10.2, Python 3.7, OpenMM 7.7)
-            os: ubuntu-18.04
             cuda-version: "10.2.89"
             gcc-version: "8.5.*"
             nvcc-version: "10.2"
@@ -31,7 +29,6 @@ jobs:
 
           # Latest supported versions
           - name: Linux (CUDA 11.7, Python 3.10, OpenMM 8)
-            os: ubuntu-20.04
             cuda-version: "11.7.0"
             gcc-version: "11.3.*"
             nvcc-version: "11.7"
@@ -55,7 +52,7 @@ jobs:
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-${{ matrix.os }}.yml
+          files: devtools/conda-envs/build-ubuntu-20.04.yml
         env:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
@@ -66,7 +63,7 @@ jobs:
         name: "Install dependencies with conda"
         with:
           activate-environment: build
-          environment-file: devtools/conda-envs/build-${{ matrix.os }}.yml
+          environment-file: devtools/conda-envs/build-ubuntu-20.04.yml
           python-version: ${{ matrix.python-version }}
 
       - name: "List conda packages"
