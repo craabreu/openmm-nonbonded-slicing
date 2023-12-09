@@ -29,9 +29,9 @@ jobs:
             # Latest supported versions
           - python-version: "3.11"
             openmm-version: "8.1"
-            cuda-version: "12.1.0"
+            cuda-version: "12.3.1"
             gcc-version: "13.2"
-            nvcc-version: "12.1"
+            nvcc-version: "12.3"
 
     steps:
       - name: "Check out"
