@@ -14,32 +14,31 @@ on:
 jobs:
   unix:
     runs-on: ubuntu-20.04
-    name: ${{ matrix.name }}
+    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
           # Oldest supported versions
-          - name: Linux (CUDA 10.2, Python 3.7, OpenMM 7.7)
-            cuda-version: "10.2.89"
-            gcc-version: "8.5.*"
-            nvcc-version: "10.2"
-            python-version: "3.7"
+          - python-version: "3.9"
             openmm-version: "7.7"
-
-          # Latest supported versions
-          - name: Linux (CUDA 11.7, Python 3.10, OpenMM 8)
             cuda-version: "11.7.0"
-            gcc-version: "11.3.*"
+            gcc-version: "9.4"
             nvcc-version: "11.7"
-            python-version: "3.10"
-            openmm-version: "8.*"
+
+            # Latest supported versions
+          - python-version: "3.11"
+            openmm-version: "8.1"
+            cuda-version: "12.1.0"
+            gcc-version: "13.2"
+            nvcc-version: "12.1"
+
     steps:
       - name: "Check out"
         uses: actions/checkout@v3
 
       - name: "Install CUDA Toolkit on Linux"
-        uses: Jimver/cuda-toolkit@v0.2.8
+        uses: Jimver/cuda-toolkit@v0.2.11
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda-version }}
@@ -56,7 +55,6 @@ jobs:
         env:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
-          NVCC_VERSION: ${{ matrix.nvcc-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
       - uses: conda-incubator/setup-miniconda@v2
