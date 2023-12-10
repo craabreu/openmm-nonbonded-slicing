@@ -22,14 +22,14 @@ jobs:
           # Oldest supported versions
           - python-version: "3.9"
             openmm-version: "7.7"
-            cuda-version: "10.0"
+            cuda-version: "11.0.1"
             gcc-version: "9.4"
-            nvcc-version: "10.0"
+            nvcc-version: "11.0"
 
           # Latest supported versions
           - python-version: "3.11"
             openmm-version: "8.1"
-            cuda-version: "11.8"
+            cuda-version: "11.8.0"
             gcc-version: "13.2"
             nvcc-version: "11.8"
 
