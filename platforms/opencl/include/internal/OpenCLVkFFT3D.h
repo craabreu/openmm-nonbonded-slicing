@@ -64,9 +64,9 @@ public:
      * factors other than 2, 3, 5, ..., maxPrimeFactor).
      *
      * @param minimum   the minimum size the return value must be greater than or equal to
-     * @param maxPrimeFactor  the maximum supported prime number factor (default=7)
+     * @param maxPrimeFactor  the maximum supported prime number factor (default=13)
      */
-    static int findLegalDimension(int minimum, int maxPrimeFactor=7) {  // VkFFT allows maxPrimeFactor up to 13
+    static int findLegalDimension(int minimum, int maxPrimeFactor=13) {
         if (minimum < 1)
             return 1;
         while (true) {

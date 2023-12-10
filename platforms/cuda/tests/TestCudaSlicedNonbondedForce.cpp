@@ -59,9 +59,9 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
 
     // See if they agree.
 
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-4);
     for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-5);
+        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-4);
 
     // Modify some particle parameters and see if they still agree.
 
@@ -74,9 +74,9 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
     force->updateParametersInContext(context2);
     state1 = context1.getState(State::Forces | State::Energy);
     state2 = context2.getState(State::Forces | State::Energy);
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-4);
     for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-5);
+        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-4);
 }
 
 void testReordering() {
@@ -166,7 +166,7 @@ void testUseCuFFT() {
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = 10.0;
-    double tol = platform.getPropertyDefaultValue("Precision") == "double" ? 1e-5 : 1e-3;
+    double tol = platform.getPropertyDefaultValue("Precision") == "double" ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {

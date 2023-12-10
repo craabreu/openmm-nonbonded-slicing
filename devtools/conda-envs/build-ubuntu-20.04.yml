@@ -1,6 +1,5 @@
 name: build
 channels:
-  - conda-forge/label/openmm_rc
   - conda-forge
 dependencies:
   - cmake

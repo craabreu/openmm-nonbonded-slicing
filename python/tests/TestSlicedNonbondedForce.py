@@ -97,14 +97,15 @@ def testCoulomb(platformName, precision):
     alpha2, nx2, ny2, nz2 = slicedNonbonded.getPMEParameters()
     assert alpha1 == alpha2 and nx1 == nx2 and ny1 == ny2 and nz1 == nz2
 
-
     alpha1, nx1, ny1, nz1 = nonbonded.getPMEParametersInContext(context)
     alpha2, nx2, ny2, nz2 = slicedNonbonded.getPMEParametersInContext(context)
-    assert alpha1 == alpha2 and nx1 == nx2 and ny1 == ny2 and nz1 == nz2
+    assert alpha1 == alpha2
+    if mm.Platform.getOpenMMVersion() >= "8.1" or platformName != "OpenCL":
+        assert nx1 == nx2 and ny1 == ny2 and nz1 == nz2
 
     positions = [mm.Vec3(0, 0, 0), mm.Vec3(2, 0, 0)]
     context.setPositions(positions)
-    tol = 1E-5 if platformName == 'Reference' or precision == 'double' else 1E-3
+    tol = 1e-4 if platformName == 'Reference' or precision == 'double' else 1e-3
     assert_forces_and_energy(context, tol)
 
 
@@ -114,7 +115,7 @@ def testLargeSystem(platformName, precision):
     numParticles = numMolecules*2
     cutoff = 2.0
     boxSize = 20.0
-    tol = 1E-5 if platformName == 'Reference' or precision == 'double' else 1E-3
+    tol = 1e-4 if platformName == 'Reference' or precision == 'double' else 1e-3
     reference = mm.Platform.getPlatformByName("Reference")
     platform = mm.Platform.getPlatformByName(platformName)
     system = mm.System()

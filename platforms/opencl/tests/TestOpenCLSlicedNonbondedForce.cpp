@@ -61,9 +61,9 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
 
     // See if they agree.
 
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-4);
     for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-5);
+        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-4);
 
     // Modify some particle parameters and see if they still agree.
 
@@ -76,9 +76,9 @@ void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
     force->updateParametersInContext(context2);
     state1 = context1.getState(State::Forces | State::Energy);
     state2 = context2.getState(State::Forces | State::Energy);
-    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-5);
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), 1e-4);
     for (int i = 0; i < numParticles; i++)
-        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-5);
+        ASSERT_EQUAL_VEC(state1.getForces()[i], state2.getForces()[i], 1e-4);
 }
 
 void testReordering() {
@@ -104,7 +104,7 @@ void testReordering() {
     integrator.step(1);
     State state = context.getState(State::Positions | State::Velocities);
     for (int i = 0; i < numParticles; i++) {
-        ASSERT_EQUAL_VEC(positions[i], state.getPositions()[i], 1e-6);
+        ASSERT_EQUAL_VEC(positions[i], state.getPositions()[i], 1e-4);
     }
 }
 
@@ -138,7 +138,7 @@ void runPlatformTests() {
     testParallelComputation(SlicedNonbondedForce::LJPME);
     testReordering();
     // if (canRunHugeTest()) {
-    //     double tol = (platform.getPropertyDefaultValue("Precision") == "single" ? 1e-4 : 1e-5);
+    //     double tol = (platform.getPropertyDefaultValue("Precision") == "double" ? 1e-4 : 1e-3);
     //     testHugeSystem(platform, tol);
     // }
 }

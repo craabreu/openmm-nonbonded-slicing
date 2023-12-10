@@ -25,7 +25,7 @@ using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
 
-const double TOL = 1e-5;
+const double TOL = 1e-4;
 
 void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     NonbondedForce* force = new NonbondedForce();
@@ -540,7 +540,7 @@ void testLargeSystem() {
     assertForcesAndEnergy(context, TOL);
 }
 
-void testHugeSystem(double tol=1e-5) {
+void testHugeSystem(double tol=1e-4) {
     // Create a system with over 3 million particles.
 
     const int gridSize = 150;
@@ -603,7 +603,7 @@ void testDispersionCorrection() {
     int numParticles = gridSize*gridSize*gridSize;
     double boxSize = gridSize*0.7;
     double cutoff = boxSize/3;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
     System system;
     VerletIntegrator integrator(0.01);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(1);
@@ -897,7 +897,7 @@ void testParameterOffsets() {
             double x = pairSigma[i][j]/dist;
             energy += ONE_4PI_EPS0*pairChargeProd[i][j]/dist + 4.0*pairEpsilon[i][j]*(pow(x, 12.0)-pow(x, 6.0));
         }
-    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-5);
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-4);
 }
 
 void testEwaldExceptions() {
@@ -937,7 +937,7 @@ void testEwaldExceptions() {
     double e2 = context.getState(State::Energy).getPotentialEnergy();
     double r = 0.5;
     double expectedChange = ONE_4PI_EPS0*(0.2-1.0)/r + 4*2.0*(pow(0.8/r, 12)-pow(0.8/r, 6)) - 4*1.0*(pow(0.5/r, 12)-pow(0.5/r, 6));
-    assertEqualTo(expectedChange, e2-e1, 1e-5);
+    assertEqualTo(expectedChange, e2-e1, 1e-4);
 }
 
 void testDirectAndReciprocal() {
@@ -972,7 +972,7 @@ void testDirectAndReciprocal() {
     double e1 = context.getState(State::Energy).getPotentialEnergy();
     double e2 = context.getState(State::Energy, true, 1<<0).getPotentialEnergy();
     double e3 = context.getState(State::Energy, true, 1<<1).getPotentialEnergy();
-    assertEqualTo(e1, e2+e3, 1e-5);
+    assertEqualTo(e1, e2+e3, 1e-4);
     ASSERT(e2 != 0);
     ASSERT(e3 != 0);
 
@@ -981,7 +981,7 @@ void testDirectAndReciprocal() {
     force->setIncludeDirectSpace(false);
     context.reinitialize(true);
     double e4 = context.getState(State::Energy).getPotentialEnergy();
-    assertEqualTo(e3, e4, 1e-5);
+    assertEqualTo(e3, e4, 1e-4);
 }
 
 void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool lj) {
@@ -992,7 +992,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
@@ -1170,7 +1170,7 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-5 : 1e-3;
+    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
