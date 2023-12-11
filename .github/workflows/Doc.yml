@@ -68,22 +68,22 @@ jobs:
       - name: Deploy documentation
         shell: bash -l {0}
         run: |
+          cd openmm-nobonded-slicing/
+          git reset --hard HEAD
+          set -x
+          echo "::group::Push page to gh-pages branch"
+          git config user.name "$(git show --format=%an -s)"
+          git config user.email "$(git show --format=%ae -s)"
+          git fetch origin
+          git switch gh-pages
+          rsync -va --delete-excluded html/ docs/
+          touch docs/.nojekyll
+          git add -f docs/*
+          git add -f docs/.nojekyll
+          git commit -m "Docs from $GITHUB_REF $GITHUB_SHA" || echo "Branch is up to date"
           if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
             echo "Deployment is deactivated on pull requests"
           else
-            cd openmm-nobonded-slicing/
-            git reset --hard HEAD
-            set -x
-            echo "::group::Push page to gh-pages branch"
-            git config user.name "$(git show --format=%an -s)"
-            git config user.email "$(git show --format=%ae -s)"
-            git fetch origin
-            git switch gh-pages
-            rsync -va --delete-excluded html/ docs/
-            touch docs/.nojekyll
-            git add -f docs/*
-            git add -f docs/.nojekyll
-            git commit -m "Docs from $GITHUB_REF $GITHUB_SHA" || echo "Branch is up to date"
             git push -f origin gh-pages
-            echo "::endgroup::"
           fi
+          echo "::endgroup::"
