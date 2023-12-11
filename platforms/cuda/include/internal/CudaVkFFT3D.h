@@ -14,7 +14,7 @@
 #include "internal/CudaFFT3D.h"
 #include "openmm/cuda/CudaArray.h"
 #define VKFFT_BACKEND 1 // CUDA
-#include "internal/vkFFT.h"
+#include "vkFFT.h"
 
 using namespace OpenMM;
 

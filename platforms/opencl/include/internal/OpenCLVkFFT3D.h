@@ -13,7 +13,7 @@
 
 #include "openmm/opencl/OpenCLArray.h"
 #define VKFFT_BACKEND 3 // OpenCL
-#include "internal/vkFFT.h"
+#include "vkFFT.h"
 
 using namespace OpenMM;
 
