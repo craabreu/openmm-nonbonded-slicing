@@ -125,6 +125,19 @@ IF(PLUGIN_BUILD_CUDA_LIB)
     ADD_SUBDIRECTORY(platforms/cuda)
 ENDIF(PLUGIN_BUILD_CUDA_LIB)
 
+# Fetch VkFFT
+
+IF(OPENCL_FOUND OR CUDA_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        VkFFT
+        GIT_REPOSITORY https://github.com/DTolm/VkFFT
+        GIT_TAG        v1.3.2
+        CMAKE_ARGS     -DVKFFT_BACKEND=3
+    )
+    FetchContent_Populate(vkFFT)
+ENDIF(OPENCL_FOUND OR CUDA_FOUND)
+
 # Build the Python API
 
 FIND_PROGRAM(DOXYGEN_EXECUTABLE doxygen)
