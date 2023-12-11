@@ -36,7 +36,7 @@ jobs:
         name: "Install dependencies with conda"
         with:
           activate-environment: build
-          environment-file: devtools/conda-envs/build-macos-11.yml
+          environment-file: devtools/conda-envs/build-doc.yml
           python-version: ${{ matrix.python-version }}
 
       - name: "List conda packages"
