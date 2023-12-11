@@ -62,13 +62,11 @@ jobs:
       - name: Build Documentation
         shell: bash -l {0}
         run: |
-          cd openmm-nobonded-slicing/
           sphinx-build ./docs ./html
 
       - name: Deploy documentation
         shell: bash -l {0}
         run: |
-          cd openmm-nobonded-slicing/
           git reset --hard HEAD
           set -x
           echo "::group::Push page to gh-pages branch"
