@@ -1,9 +1,9 @@
 OpenMM Nonbonded Slicing Plugin
 ===============================
 
-[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/Linux/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3ALinux)
-[![GH Actions Status](https://github.com/craabreu/openmm-nonbonded-slicing/workflows/MacOS/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions?query=branch%3Amain+workflow%3AMacOS)
-[![Documentation Status](https://readthedocs.org/projects/openmm-nonbonded-slicing/badge/?version=latest)](https://openmm-nonbonded-slicing.readthedocs.io/en/latest/?badge=latest)
+[![Linux](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/Linux.yml/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/Linux.yml)
+[![MacOS](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/MacOS.yml/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/MacOS.yml)
+[![Doc](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/Doc.yml/badge.svg)](https://github.com/craabreu/openmm-nonbonded-slicing/actions/workflows/Doc.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 This [OpenMM] plugin contains the **SlicedNonbondedForce** class, a variant of OpenMM's [NonbondedForce].
@@ -26,8 +26,8 @@ slice contributions or sums thereof via [getState] with option `getParameterDeri
 Documentation
 =============
 
-A complete documentation for this plugin, including its Python API and the theory behind energy
-slicing is available [here](https://openmm-nonbonded-slicing.readthedocs.io/en/stable).
+Documentation for this plugin is available at [Github Pages](https://craabreu.github.io/openmm-nonbonded-slicing/).
+It includes the Python API and the theory for slicing lattice-sum energy contributions.
 
 Installing from Source
 ======================

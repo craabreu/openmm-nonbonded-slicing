@@ -1,0 +1,87 @@
+name: Doc
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  unix:
+    runs-on: macos-11
+    name: Doc (Python ${{ matrix.python-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+
+    steps:
+      - name: "Check out"
+        uses: actions/checkout@v3
+
+      - name: "Install SDK on MacOS"
+        run: source devtools/scripts/install_macos_sdk.sh
+
+      - name: "Update the conda enviroment file"
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '@'
+          tokenSuffix: '@'
+          files: devtools/conda-envs/build-macos-11.yml
+
+      - uses: conda-incubator/setup-miniconda@v2
+        name: "Install dependencies with conda"
+        with:
+          activate-environment: build
+          environment-file: devtools/conda-envs/build-doc.yml
+          python-version: ${{ matrix.python-version }}
+
+      - name: "List conda packages"
+        shell: bash -l {0}
+        run: conda list
+
+      - name: "Configure"
+        shell: bash -l {0}
+        run: |
+          mkdir build
+          cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLUGIN_BUILD_CUDA_LIB=OFF
+
+      - name: "Build"
+        shell: bash -l {0}
+        run: |
+          cd build
+          make -j2 install
+          make -j2 PythonInstall
+
+      - name: Build Documentation
+        shell: bash -l {0}
+        run: |
+          sphinx-build ./docs ./html
+
+      - name: Deploy documentation
+        shell: bash -l {0}
+        run: |
+          git reset --hard HEAD
+          set -x
+          echo "::group::Push page to gh-pages branch"
+          git config user.name "$(git show --format=%an -s)"
+          git config user.email "$(git show --format=%ae -s)"
+          git fetch origin
+          git switch gh-pages
+          rsync -va --delete-excluded html/ docs/
+          touch docs/.nojekyll
+          git add -f docs/*
+          git add -f docs/.nojekyll
+          git commit -m "Docs from $GITHUB_REF $GITHUB_SHA" || echo "Branch is up to date"
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            echo "Deployment is deactivated on pull requests"
+          else
+            git push -f origin gh-pages
+          fi
+          echo "::endgroup::"
