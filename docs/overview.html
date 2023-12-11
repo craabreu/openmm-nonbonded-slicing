@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Overview &#8212; Nonbonded Slicing  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=039e1c02" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=d72ef124" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=ccdb6887"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Energy Slicing Theory" href="theory.html" />
+    <link rel="prev" title="OpenMM Nonbonded Slicing" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="overview">
+<h1>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h1>
+<p>This <a class="reference external" href="https://openmm.org">OpenMM</a> plugin implements a sliced variant of <a class="reference external" href="https://openmm.org">OpenMM</a>’s NonbondedForce class.
+By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
+combination of contributions from pairs of subsets like</p>
+<div class="math notranslate nohighlight">
+\[E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} (\lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J}),\]</div>
+<p>where each slice is defined by subsets <em>I</em> and <em>J</em>, superscripts <em>vdW</em> and <em>elec</em> denote van
+der Waals and electrostatic contributions, <span class="math notranslate nohighlight">\(E_{I,J}\)</span> is the potential energy of all particle pairs
+formed by one particle in subset <em>I</em> and one in subset <em>J</em>, and <span class="math notranslate nohighlight">\(\lambda_{I,J}\)</span> is a scaling parameter.</p>
+<p>By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
+scaling parameters into variables and store their values in <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters. Derivatives
+with respect to these variables can be requested and used, for instance, to report individual energy
+slice contributions or sums thereof via <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>’s <code class="docutils literal notranslate"><span class="pre">getState</span></code> method with option
+<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>.</p>
+<section id="building-the-plugin">
+<h2>Building the Plugin<a class="headerlink" href="#building-the-plugin" title="Link to this heading">¶</a></h2>
+<p>This project uses <a class="reference external" href="http://www.cmake.org">CMake</a> for its build system.  To build it, follow these steps:</p>
+<ol class="arabic simple">
+<li><p>Create a directory in which to build the plugin.</p></li>
+<li><p>Run the CMake GUI or ccmake, specifying your new directory as the build directory and the top level directory of this project as the source directory.</p></li>
+<li><p>Press “Configure”.</p></li>
+<li><p>Set OPENMM_DIR to point to the directory where OpenMM is installed.  This is needed to locate the OpenMM header files and libraries.</p></li>
+<li><p>Set CMAKE_INSTALL_PREFIX to the directory where the plugin should be installed.  Usually, this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.</p></li>
+<li><p>If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and OPENCL_LIBRARY are set correctly, and that PLUGIN_BUILD_OPENCL_LIB is selected.</p></li>
+<li><p>If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly and that PLUGIN_BUILD_CUDA_LIB is selected.</p></li>
+<li><p>Press “Configure” again if necessary, then press “Generate”.</p></li>
+<li><p>Use the build system you selected to build and install the plugin.  For example, if you selected Unix Makefiles, type <cite>make install</cite>.</p></li>
+</ol>
+</section>
+<section id="python-wrapper">
+<h2>Python Wrapper<a class="headerlink" href="#python-wrapper" title="Link to this heading">¶</a></h2>
+<p>As <a class="reference external" href="https://openmm.org">OpenMM</a>, this project uses <a class="reference external" href="http://www.swig.org">SWIG</a> to generate its Python API.  SWIG takes an “interface
+file”, which is essentially a C++ header file with some extra annotations added, as its input.
+It then generates a Python extension module exposing the C++ API in Python.</p>
+<p>To build and install the Python API, build the <cite>PythonInstall</cite> target, for example by typing
+<cite>make PythonInstall</cite> (if you are installing into the system Python, you may need to use sudo).</p>
+</section>
+<section id="test-cases">
+<h2>Test Cases<a class="headerlink" href="#test-cases" title="Link to this heading">¶</a></h2>
+<p>To run the C++ test cases, build the “test” target, for example by typing <cite>make test</cite>.</p>
+<p>To run the Python test cases, build the “PythonTest” target by typing <cite>make PythonTest</cite>.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="index.html">
+    <img class="logo" src="_static/logo_small.png" alt="Logo"/>
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#building-the-plugin">Building the Plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#python-wrapper">Python Wrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#test-cases">Test Cases</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">Energy Slicing Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pythonapi/index.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="_sources/overview.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

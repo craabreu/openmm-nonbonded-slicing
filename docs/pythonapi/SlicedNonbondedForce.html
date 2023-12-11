@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>SlicedNonbondedForce &#8212; Nonbonded Slicing  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Contributing" href="../contributing.html" />
+    <link rel="prev" title="Python API" href="index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="slicednonbondedforce">
+<h1>SlicedNonbondedForce<a class="headerlink" href="#slicednonbondedforce" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SlicedNonbondedForce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NonbondedForce</span></code></p>
+<p>This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
+electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
+periodic boundary conditions and cutoffs for long range interactions.  Lennard-Jones interactions are
+calculated with the Lorentz-Berthelot combining rule: it uses the arithmetic mean of the sigmas and the
+geometric mean of the epsilons for the two interacting particles.</p>
+<p>The particles are classified into <span class="math notranslate nohighlight">\(n\)</span> disjoint subsets, thus creating <span class="math notranslate nohighlight">\(n(n+1)/2\)</span> distinct types
+of particle pairs.  Then, the total potential energy is sliced into this many parts by distinguishing the
+contributions of such pair types.  Optionally, variables stored as an <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters
+can multiply the Coulomb and/or Lennard-Jones parts of selected potential energy slices.  Changes in the
+values of these global parameters via <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.setParameter">setParameter</a> will automatically modify the total potential energy of
+a SlicedNonbondedForce.  Derivatives with respect to scaling parameters can also be calculated upon request.</p>
+<p>To use this class, create a SlicedNonbondedForce object, specifying the number <span class="math notranslate nohighlight">\(n\)</span> of particle subsets.
+Then, call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="nonbondedslicing.SlicedNonbondedForce.addParticle"><code class="xref py py-func docutils literal notranslate"><span class="pre">addParticle()</span></code></a> once for every single particle in the System to define its force field
+parameters.  Alternatively, you can pass an existing <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> object when creating a
+SlicedNonbondedForce object, so that the latter inherits all properties of the former.  After a particle has
+been added, you can modify its subset index from 0, the default value, to any positive integer lower than
+<span class="math notranslate nohighlight">\(n\)</span> by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.setParticleSubset"><code class="xref py py-func docutils literal notranslate"><span class="pre">setParticleSubset()</span></code></a>.  You can also modify the force field parameters of an added
+particle by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.setParticleParameters"><code class="xref py py-func docutils literal notranslate"><span class="pre">setParticleParameters()</span></code></a>.  These two methods will have no effect on Contexts that
+already exist unless you call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.updateParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.updateParametersInContext"><code class="xref py py-func docutils literal notranslate"><span class="pre">updateParametersInContext()</span></code></a>.</p>
+<p>SlicedNonbondedForce also lets you specify <em>exceptions</em> via <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addException" title="nonbondedslicing.SlicedNonbondedForce.addException"><code class="xref py py-func docutils literal notranslate"><span class="pre">addException()</span></code></a> and modify their parameters
+via <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameters" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameters"><code class="xref py py-func docutils literal notranslate"><span class="pre">setExceptionParameters()</span></code></a>.  Exceptions are particular pairs of particles whose interactions should
+be computed based on different parameters than those defined for the individual particles.  This can be used
+to exclude certain interactions from the force calculation.</p>
+<p>By default, all energy slices of a SlicedNonbondedForce are added together, yielding the same total
+potential energy as a NonbondedForce with equal particle and exception parameters.  In addition, you can
+select one or more slices and multiply their Coulomb and/or Lennard-Jones contributions by variables
+referred to as <em>scaling parameters</em>.  For this, start by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a> to define
+a new Context parameter, then pass its name to <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a>.  The same scaling parameter
+can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
+multiply the Coulomb and Lennard-Jones parts of that slice separately.</p>
+<p>With <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative" title="nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative"><code class="xref py py-func docutils literal notranslate"><span class="pre">setScalingParameterDerivative()</span></code></a>, you can request the derivative with respect to a scaling
+parameter.  All requested derivatives can then be evaluated for a particular <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html">openmm.State</a> by calling
+its <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html#openmm.openmm.State.getEnergyParameterDerivatives">getEnergyParameterDerivatives</a> method.  For this, such State must have been generated from an
+<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> by passing <code class="docutils literal notranslate"><span class="pre">True</span></code> to the keyword <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives</span></code> of the Context’s
+<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState">getState</a> method.</p>
+<p>Many molecular force fields omit Coulomb and Lennard-Jones interactions between particles separated by one
+or two bonds, while using modified parameters for those separated by three bonds (known as “1-4 interactions”).
+This class provides a convenience method for this case called <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds" title="nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds"><code class="xref py py-func docutils literal notranslate"><span class="pre">createExceptionsFromBonds()</span></code></a>.  You pass to it
+a list of bonds and the scale factors to use for 1-4 interactions.  It identifies all pairs of particles which
+are separated by 1, 2, or 3 bonds, then automatically creates exceptions for them.</p>
+<p>When using a cutoff, by default Lennard-Jones interactions are sharply truncated at the cutoff distance.
+Optionally you can instead use a switching function to make the interaction smoothly go to zero over a finite
+distance range.  To enable this, call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction"><code class="xref py py-func docutils literal notranslate"><span class="pre">setUseSwitchingFunction()</span></code></a>.  You must also call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance"><code class="xref py py-func docutils literal notranslate"><span class="pre">setSwitchingDistance()</span></code></a>
+to specify the distance at which the interaction should begin to decrease.  The switching distance must be
+less than the cutoff distance.</p>
+<p>Another optional feature of this class (enabled by default) is to add a contribution to the energy which approximates
+the effect of all Lennard-Jones interactions beyond the cutoff in a periodic system.  When running a simulation
+at constant pressure, this can improve the quality of the result.  Call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection"><code class="xref py py-func docutils literal notranslate"><span class="pre">setUseDispersionCorrection()</span></code></a> to set whether
+this should be used.</p>
+<p>In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
+Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
+two states it can exist in, each described by a different set of parameters for the atoms that make up the
+group.  You might then want to smoothly interpolate between the two states.  This is done by first calling
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a> to define a Context parameter, then <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset"><code class="xref py py-func docutils literal notranslate"><span class="pre">addParticleParameterOffset()</span></code></a> to create a “parameter offset”
+that depends on the Context parameter.  Each offset defines the following:</p>
+<ul class="simple">
+<li><p>A Context parameter used to interpolate between the states.</p></li>
+<li><p>A single particle whose parameters are influenced by the Context parameter.</p></li>
+<li><p>Three scale factors (chargeScale, sigmaScale, and epsilonScale) that specify how the Context parameter affects the particle.</p></li>
+</ul>
+<p>The “effective” parameters for a particle (those used to compute forces) are given by</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">charge</span> <span class="o">=</span> <span class="n">baseCharge</span> <span class="o">+</span> <span class="n">param</span><span class="o">*</span><span class="n">chargeScale</span>
+<span class="n">sigma</span> <span class="o">=</span> <span class="n">baseSigma</span> <span class="o">+</span> <span class="n">param</span><span class="o">*</span><span class="n">sigmaScale</span>
+<span class="n">epsilon</span> <span class="o">=</span> <span class="n">baseEpsilon</span> <span class="o">+</span> <span class="n">param</span><span class="o">*</span><span class="n">epsilonScale</span>
+</pre></div>
+</div>
+<p>where the <code class="docutils literal notranslate"><span class="pre">base</span></code> values are the ones specified by <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="nonbondedslicing.SlicedNonbondedForce.addParticle"><code class="xref py py-func docutils literal notranslate"><span class="pre">addParticle()</span></code></a> and <code class="docutils literal notranslate"><span class="pre">param</span></code> is the current value
+of the Context parameter.  A single Context parameter can apply offsets to multiple particles,
+and multiple parameters can be used to apply offsets to the same particle.  Parameters can also be used
+to modify exceptions in exactly the same way by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset"><code class="xref py py-func docutils literal notranslate"><span class="pre">addExceptionParameterOffset()</span></code></a>.  A context
+parameter cannot be used simultaneously to apply offsets and scale energy terms.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.__init__" title="Link to this definition">¶</a></dt>
+<dd><p><em>Overload 1:</em></p>
+<p>Create a SlicedNonbondedForce.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>numSubsets</strong> (<em>int</em>) – the number of particle subsets</p>
+</dd>
+</dl>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p><em>Overload 2:</em></p>
+<p>Create a SlicedNonbondedForce having the properties of an existing <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>force</strong> (<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>) – the NonbondedForce object from which to instantiate this SlicedNonbondedForce</p></li>
+<li><p><strong>numSubsets</strong> (<em>int</em>) – the number of particle subsets</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addException" title="nonbondedslicing.SlicedNonbondedForce.addException"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addException</span></code></a>(self, particle1, particle2, ...)</p></td>
+<td><p>Add an interaction to the list of exceptions that should be calculated differently from other interactions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addExceptionParameterOffset</span></code></a>(self, parameter, ...)</p></td>
+<td><p>Add an offset to the parameters of a particular exception, based on a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addException_usingRMin" title="nonbondedslicing.SlicedNonbondedForce.addException_usingRMin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addException_usingRMin</span></code></a>(particle1, particle2, ...)</p></td>
+<td><p>Add interaction exception using the product of the two atoms' elementary charges, rMin and epsilon, which is standard for AMBER force fields.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addGlobalParameter</span></code></a>(self, name, defaultValue)</p></td>
+<td><p>Add a new global parameter that parameter offsets may depend on.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="nonbondedslicing.SlicedNonbondedForce.addParticle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addParticle</span></code></a>(self, charge, sigma, epsilon)</p></td>
+<td><p>Add the nonbonded force parameters for a particle.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addParticleParameterOffset</span></code></a>(self, parameter, ...)</p></td>
+<td><p>Add an offset to the per-particle parameters of a particular particle, based on a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle_usingRVdw" title="nonbondedslicing.SlicedNonbondedForce.addParticle_usingRVdw"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addParticle_usingRVdw</span></code></a>(charge, rVDW, epsilon)</p></td>
+<td><p>Add particle using elemetrary charge.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addScalingParameter</span></code></a>(parameter, subset1, ...)</p></td>
+<td><p>Add a scaling parameter to multiply a particular Coulomb slice.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameterDerivative" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameterDerivative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addScalingParameterDerivative</span></code></a>(parameter)</p></td>
+<td><p>Request the derivative of this Force's energy with respect to a scaling parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds" title="nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createExceptionsFromBonds</span></code></a>(self, bonds, ...)</p></td>
+<td><p>Identify exceptions based on the molecular topology.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.getCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getCutoffDistance</span></code></a>(self)</p></td>
+<td><p>Get the cutoff distance (in nm) being used for nonbonded interactions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getEwaldErrorTolerance" title="nonbondedslicing.SlicedNonbondedForce.getEwaldErrorTolerance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getEwaldErrorTolerance</span></code></a>(self)</p></td>
+<td><p>Get the error tolerance for Ewald summation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.getExceptionParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getExceptionParameterOffset</span></code></a>(self, index)</p></td>
+<td><p>Get the offset added to the parameters of a particular exception, based on a global parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionParameters" title="nonbondedslicing.SlicedNonbondedForce.getExceptionParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getExceptionParameters</span></code></a>(self, index)</p></td>
+<td><p>Get the force field parameters for an interaction that should be calculated differently from others.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionsUsePeriodicBoundaryConditions" title="nonbondedslicing.SlicedNonbondedForce.getExceptionsUsePeriodicBoundaryConditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getExceptionsUsePeriodicBoundaryConditions</span></code></a>(self)</p></td>
+<td><p>Get whether periodic boundary conditions should be applied to exceptions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getForceGroup" title="nonbondedslicing.SlicedNonbondedForce.getForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getForceGroup</span></code></a>(self)</p></td>
+<td><p>Get the force group this Force belongs to.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getGlobalParameterDefaultValue" title="nonbondedslicing.SlicedNonbondedForce.getGlobalParameterDefaultValue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getGlobalParameterDefaultValue</span></code></a>(self, index)</p></td>
+<td><p>Get the default value of a global parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getGlobalParameterName" title="nonbondedslicing.SlicedNonbondedForce.getGlobalParameterName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getGlobalParameterName</span></code></a>(self, index)</p></td>
+<td><p>Get the name of a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace" title="nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getIncludeDirectSpace</span></code></a>(self)</p></td>
+<td><p>Get whether to include direct space interactions when calculating forces and energies.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParameters</span></code></a>(self)</p></td>
+<td><p>Get the parameters to use for dispersion term in LJ-PME calculations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParametersInContext</span></code></a>(context)</p></td>
+<td><p>Get the PME parameters being used for the dispersion term for LJPME in a particular Context.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getName" title="nonbondedslicing.SlicedNonbondedForce.getName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getName</span></code></a>(self)</p></td>
+<td><p>Get the name of this Force.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethod</span></code></a>(self)</p></td>
+<td><p>Get the method used for handling long range nonbonded interactions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethodName</span></code></a>()</p></td>
+<td><p>Get the name of the method used for handling long range nonbonded interactions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptionParameterOffsets</span></code></a>(self)</p></td>
+<td><p>Get the number of exception parameter offsets that have been added.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptions" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptions</span></code></a>(self)</p></td>
+<td><p>Get the number of special interactions that should be calculated differently from other interactions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumGlobalParameters</span></code></a>(self)</p></td>
+<td><p>Get the number of global parameters that have been added.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticleParameterOffsets</span></code></a>(self)</p></td>
+<td><p>Get the number of particles parameter offsets that have been added.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticles" title="nonbondedslicing.SlicedNonbondedForce.getNumParticles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticles</span></code></a>(self)</p></td>
+<td><p>Get the number of particles for which force field parameters have been defined.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives" title="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumScalingParameterDerivatives</span></code></a>()</p></td>
+<td><p>Get the number of requested scaling parameter derivatives.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumScalingParameters</span></code></a>()</p></td>
+<td><p>Get the number of scaling parameters.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSlices" title="nonbondedslicing.SlicedNonbondedForce.getNumSlices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSlices</span></code></a>()</p></td>
+<td><p>Get the number of slices determined by the specified number of particle subsets.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSubsets</span></code></a>()</p></td>
+<td><p>Get the specified number of particle subsets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParameters</span></code></a>(self)</p></td>
+<td><p>Get the parameters to use for PME calculations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParametersInContext</span></code></a>(context)</p></td>
+<td><p>Get the parameters being used for PME in a particular Context.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameterOffset</span></code></a>(self, index)</p></td>
+<td><p>Get the offset added to the per-particle parameters of a particular particle, based on a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameters</span></code></a>(self, index)</p></td>
+<td><p>Get the nonbonded force parameters for a particle.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.getParticleSubset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleSubset</span></code></a>(index)</p></td>
+<td><p>Get the subset to which a particle belongs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric" title="nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReactionFieldDielectric</span></code></a>(self)</p></td>
+<td><p>Get the dielectric constant to use for the solvent in the reaction field approximation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup" title="nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReciprocalSpaceForceGroup</span></code></a>(self)</p></td>
+<td><p>Get the force group that reciprocal space interactions for Ewald or PME are included in.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameter</span></code></a>(index, parameter, arg4)</p></td>
+<td><p>Get the scaling parameter applied to a particular nonbonded slice.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameterDerivativeName" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameterDerivativeName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameterDerivativeName</span></code></a>(index)</p></td>
+<td><p>Get the name of the global parameter associated with a requested scaling parameter derivative.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getSwitchingDistance</span></code></a>(self)</p></td>
+<td><p>Get the distance at which the switching function begins to reduce the Lennard-Jones interaction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT" title="nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseCudaFFT</span></code></a>()</p></td>
+<td><p>Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseDispersionCorrection</span></code></a>(self)</p></td>
+<td><p>Get whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseSwitchingFunction</span></code></a>(self)</p></td>
+<td><p>Get whether a switching function is applied to the Lennard-Jones interaction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.setCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setCutoffDistance</span></code></a>(self, distance)</p></td>
+<td><p>Set the cutoff distance (in nm) being used for nonbonded interactions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance" title="nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setEwaldErrorTolerance</span></code></a>(self, tol)</p></td>
+<td><p>Set the error tolerance for Ewald summation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameterOffset</span></code></a>(self, index, ...)</p></td>
+<td><p>Set the offset added to the parameters of a particular exception, based on a global parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameters" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameters</span></code></a>(self, index, ...)</p></td>
+<td><p>Set the force field parameters for an interaction that should be calculated differently from others.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions" title="nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionsUsePeriodicBoundaryConditions</span></code></a>(...)</p></td>
+<td><p>Set whether periodic boundary conditions should be applied to exceptions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setForceGroup</span></code></a>(self, group)</p></td>
+<td><p>Set the force group this Force belongs to.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterDefaultValue</span></code></a>(self, index, ...)</p></td>
+<td><p>Set the default value of a global parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterName</span></code></a>(self, index, name)</p></td>
+<td><p>Set the name of a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace" title="nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setIncludeDirectSpace</span></code></a>(self, include)</p></td>
+<td><p>Set whether to include direct space interactions when calculating forces and energies.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setLJPMEParameters</span></code></a>(self, alpha, nx, ny, nz)</p></td>
+<td><p>Set the parameters to use for the dispersion term in LJPME calculations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setName" title="nonbondedslicing.SlicedNonbondedForce.setName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setName</span></code></a>(self, name)</p></td>
+<td><p>Set the name of this Force.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setNonbondedMethod" title="nonbondedslicing.SlicedNonbondedForce.setNonbondedMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNonbondedMethod</span></code></a>(self, method)</p></td>
+<td><p>Set the method used for handling long range nonbonded interactions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.setPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setPMEParameters</span></code></a>(self, alpha, nx, ny, nz)</p></td>
+<td><p>Set the parameters to use for PME calculations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.setParticleParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParticleParameterOffset</span></code></a>(self, index, ...)</p></td>
+<td><p>Set the offset added to the per-particle parameters of a particular particle, based on a global parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.setParticleParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParticleParameters</span></code></a>(self, index, charge, ...)</p></td>
+<td><p>Set the nonbonded force parameters for a particle.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.setParticleSubset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParticleSubset</span></code></a>(index, subset)</p></td>
+<td><p>Set the subset of a particle.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setReactionFieldDielectric" title="nonbondedslicing.SlicedNonbondedForce.setReactionFieldDielectric"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setReactionFieldDielectric</span></code></a>(self, dielectric)</p></td>
+<td><p>Set the dielectric constant to use for the solvent in the reaction field approximation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setReciprocalSpaceForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setReciprocalSpaceForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code></a>(self, group)</p></td>
+<td><p>Set the force group that reciprocal space interactions for Ewald or PME are included in.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.setScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setScalingParameter</span></code></a>(index, parameter, ...)</p></td>
+<td><p>Modify an added scaling parameter.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative" title="nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setScalingParameterDerivative</span></code></a>(index, parameter)</p></td>
+<td><p>Set the name of the global parameter to associate with a requested scaling parameter derivative.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setSwitchingDistance</span></code></a>(self, distance)</p></td>
+<td><p>Set the distance at which the switching function begins to reduce the Lennard-Jones interaction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseCuFFT" title="nonbondedslicing.SlicedNonbondedForce.setUseCuFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setUseCuFFT</span></code></a>(use)</p></td>
+<td><p>Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setUseDispersionCorrection</span></code></a>(self, useCorrection)</p></td>
+<td><p>Set whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setUseSwitchingFunction</span></code></a>(self, use)</p></td>
+<td><p>Set whether a switching function is applied to the Lennard-Jones interaction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.updateParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.updateParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateParametersInContext</span></code></a>(context)</p></td>
+<td><p>Update the particle and exception parameters in a Context to match those stored in this Force object.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.usesPeriodicBoundaryConditions" title="nonbondedslicing.SlicedNonbondedForce.usesPeriodicBoundaryConditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">usesPeriodicBoundaryConditions</span></code></a>(self)</p></td>
+<td><p>Returns whether or not this force makes use of periodic boundary conditions.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">CutoffNonPeriodic</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">CutoffPeriodic</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ewald</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">LJPME</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoCutoff</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">PME</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">thisown</span></code></p></td>
+<td><p>The membership flag</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addException">
+<span class="sig-name descname"><span class="pre">addException</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particle1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particle2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeProd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addException" title="Link to this definition">¶</a></dt>
+<dd><p>Add an interaction to the list of exceptions that should be calculated differently from other interactions. If chargeProd and epsilon are both equal to 0, this will cause the interaction to be completely omitted from force and energy calculations.</p>
+<p>Regardless of the NonbondedMethod used by this Force, cutoffs are never applied to exceptions. That is because they are primarily used for 1-4 interactions, which are really a type of bonded interaction and are parametrized together with the other bonded interactions.</p>
+<p>In many cases, you can use createExceptionsFromBonds() rather than adding each exception explicitly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
+<li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
+<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>replace</strong> (<em>bool</em>) – determines the behavior if there is already an exception for the same two particles. If true, the existing one is replaced. If false, an exception is thrown.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – the index of the exception that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset">
+<span class="sig-name descname"><span class="pre">addExceptionParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exceptionIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeProdScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigmaScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilonScale</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addExceptionParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Add an offset to the parameters of a particular exception, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – the index of the offset that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addException_usingRMin">
+<span class="sig-name descname"><span class="pre">addException_usingRMin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particle1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particle2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeProd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rMin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addException_usingRMin" title="Link to this definition">¶</a></dt>
+<dd><p>Add interaction exception using the product of the two atoms’
+elementary charges, rMin and epsilon, which is standard for AMBER
+force fields.  Note that rMin is the minimum energy point in the
+Lennard Jones potential.  The conversion from sigma is:
+rMin = 2^1/6 * sigma.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter">
+<span class="sig-name descname"><span class="pre">addGlobalParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">defaultValue</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="Link to this definition">¶</a></dt>
+<dd><p>Add a new global parameter that parameter offsets may depend on. The default value provided to this method is the initial value of the parameter in newly created Contexts. You can change the value at any time by calling setParameter() on the Context.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>string</em>) – the name of the parameter</p></li>
+<li><p><strong>defaultValue</strong> (<em>double</em>) – the default value of the parameter</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – the index of the parameter that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addParticle">
+<span class="sig-name descname"><span class="pre">addParticle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="Link to this definition">¶</a></dt>
+<dd><p>Add the nonbonded force parameters for a particle. This should be called once for each particle in the System. When it is called for the i’th time, it specifies the parameters for the i’th particle. For calculating the Lennard-Jones interaction between two particles, the arithmetic mean of the sigmas and the geometric mean of the epsilons for the two interacting particles is used (the Lorentz-Berthelot combining rule).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – the index of the particle that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset">
+<span class="sig-name descname"><span class="pre">addParticleParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particleIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigmaScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilonScale</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addParticleParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Add an offset to the per-particle parameters of a particular particle, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
+<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – the index of the offset that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addParticle_usingRVdw">
+<span class="sig-name descname"><span class="pre">addParticle_usingRVdw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">charge</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rVDW</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addParticle_usingRVdw" title="Link to this definition">¶</a></dt>
+<dd><p>Add particle using elemetrary charge.  Rvdw and epsilon,
+which is consistent with AMBER parameter file usage.
+Note that the sum of the radii of the two interacting atoms is
+the minimum energy point in the Lennard Jones potential and
+is often called rMin.  The conversion from sigma follows:
+rVDW = 2^1/6 * sigma/2</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addScalingParameter">
+<span class="sig-name descname"><span class="pre">addScalingParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeCoulomb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeLJ</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="Link to this definition">¶</a></dt>
+<dd><p>Add a scaling parameter to multiply a particular Coulomb slice. Its value will scale the
+Coulomb interactions between particles of a subset 1 with those of another (or the same)
+subset 2. The order of subset definition is irrelevant.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter.  It must have already been added
+with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
+calling <cite>setParameter()</cite> on the <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
+<li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
+<li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>index</strong> (<em>int</em>) – the index of scaling parameter that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addScalingParameterDerivative">
+<span class="sig-name descname"><span class="pre">addScalingParameterDerivative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameterDerivative" title="Link to this definition">¶</a></dt>
+<dd><p>Request the derivative of this Force’s energy with respect to a scaling parameter. This
+can be used to obtain the sum of particular energy slices. The parameter must have already
+been added with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a> and <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>parameter</strong> (<em>str</em>) – the name of the parameter</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>index</strong> (<em>int</em>) – the index of scaling parameter derivative that was added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds">
+<span class="sig-name descname"><span class="pre">createExceptionsFromBonds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bonds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coulomb14Scale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lj14Scale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds" title="Link to this definition">¶</a></dt>
+<dd><p>Identify exceptions based on the molecular topology. Particles which are separated by one or two bonds are set to not interact at all, while pairs of particles separated by three bonds (known as “1-4 interactions”) have their Coulomb and Lennard-Jones interactions reduced by a fixed factor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>bonds</strong> (<em>vector&lt; std::pair&lt; int, int &gt; &gt;</em>) – the set of bonds based on which to construct exceptions. Each element specifies the indices of two particles that are bonded to each other.</p></li>
+<li><p><strong>coulomb14Scale</strong> (<em>double</em>) – pairs of particles separated by three bonds will have the strength of their Coulomb interaction multiplied by this factor</p></li>
+<li><p><strong>lj14Scale</strong> (<em>double</em>) – pairs of particles separated by three bonds will have the strength of their Lennard-Jones interaction multiplied by this factor</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getCutoffDistance">
+<span class="sig-name descname"><span class="pre">getCutoffDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">double</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getCutoffDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Get the cutoff distance (in nm) being used for nonbonded interactions. If the NonbondedMethod in use is NoCutoff, this value will have no effect.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>double</em> – the cutoff distance, measured in nm</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getEwaldErrorTolerance">
+<span class="sig-name descname"><span class="pre">getEwaldErrorTolerance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">double</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getEwaldErrorTolerance" title="Link to this definition">¶</a></dt>
+<dd><p>Get the error tolerance for Ewald summation. This corresponds to the fractional error in the forces which is acceptable. This value is used to select the reciprocal space cutoff and separation parameter so that the average error level will be less than the tolerance. There is not a rigorous guarantee that all forces on all atoms will be less than the tolerance, however.</p>
+<p>For PME calculations, if setPMEParameters() is used to set alpha to something other than 0, this value is ignored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getExceptionParameterOffset">
+<span class="sig-name descname"><span class="pre">getExceptionParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Get the offset added to the parameters of a particular exception, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the offset to query, as returned by addExceptionParameterOffset()</p></li>
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter</p></li>
+<li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getExceptionParameters">
+<span class="sig-name descname"><span class="pre">getExceptionParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the force field parameters for an interaction that should be calculated differently from others.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the interaction for which to get parameters</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
+<li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
+<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getExceptionsUsePeriodicBoundaryConditions">
+<span class="sig-name descname"><span class="pre">getExceptionsUsePeriodicBoundaryConditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getExceptionsUsePeriodicBoundaryConditions" title="Link to this definition">¶</a></dt>
+<dd><p>Get whether periodic boundary conditions should be applied to exceptions. Usually this is not appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and 1-4 pairs), but there are situations when it does make sense. For example, you may want to simulate an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic copy.</p>
+<p>Regardless of this value, periodic boundary conditions are only applied to exceptions if they also are applied to other interactions. If the nonbonded method is NoCutoff or CutoffNonPeriodic, this value is ignored. Also note that cutoffs are never applied to exceptions, again because they are normally used to represent bonded interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getForceGroup">
+<span class="sig-name descname"><span class="pre">getForceGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Get the force group this Force belongs to.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getGlobalParameterDefaultValue">
+<span class="sig-name descname"><span class="pre">getGlobalParameterDefaultValue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">double</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getGlobalParameterDefaultValue" title="Link to this definition">¶</a></dt>
+<dd><p>Get the default value of a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to get the default value</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>double</em> – the parameter default value</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getGlobalParameterName">
+<span class="sig-name descname"><span class="pre">getGlobalParameterName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">std::string</span> <span class="pre">const</span> <span class="pre">&amp;</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getGlobalParameterName" title="Link to this definition">¶</a></dt>
+<dd><p>Get the name of a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to get the name</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>string</em> – the parameter name</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace">
+<span class="sig-name descname"><span class="pre">getIncludeDirectSpace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace" title="Link to this definition">¶</a></dt>
+<dd><p>Get whether to include direct space interactions when calculating forces and energies. This is useful if you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that computes it in a nonstandard way, while still using this object for the reciprocal space calculation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters">
+<span class="sig-name descname"><span class="pre">getLJPMEParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the parameters to use for dispersion term in LJ-PME calculations. If alpha is 0 (the default), these parameters are ignored and instead their values are chosen based on the Ewald error tolerance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of dispersion grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of dispersion grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of dispersion grid points along the Z axis</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext">
+<span class="sig-name descname"><span class="pre">getLJPMEParametersInContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext" title="Link to this definition">¶</a></dt>
+<dd><p>Get the PME parameters being used for the dispersion term for LJPME in a particular Context.  Because some
+platforms have restrictions on the allowed grid sizes, the values that are actually used may be slightly different
+from those specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
+See the manual for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>context</strong> (<em>Context</em>) – the Context for which to get the parameters</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter, measured in <span class="math notranslate nohighlight">\(nm^{-1}\)</span></p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getName">
+<span class="sig-name descname"><span class="pre">getName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">std::string</span> <span class="pre">const</span> <span class="pre">&amp;</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getName" title="Link to this definition">¶</a></dt>
+<dd><p>Get the name of this Force. This is an arbitrary, user modifiable identifier. By default it equals the class name, but you can change it to anything useful.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod">
+<span class="sig-name descname"><span class="pre">getNonbondedMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">OpenMM::NonbondedForce::NonbondedMethod</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod" title="Link to this definition">¶</a></dt>
+<dd><p>Get the method used for handling long range nonbonded interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName">
+<span class="sig-name descname"><span class="pre">getNonbondedMethodName</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName" title="Link to this definition">¶</a></dt>
+<dd><p>Get the name of the method used for handling long range nonbonded interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets">
+<span class="sig-name descname"><span class="pre">getNumExceptionParameterOffsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of exception parameter offsets that have been added.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumExceptions">
+<span class="sig-name descname"><span class="pre">getNumExceptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptions" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of special interactions that should be calculated differently from other interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters">
+<span class="sig-name descname"><span class="pre">getNumGlobalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of global parameters that have been added.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets">
+<span class="sig-name descname"><span class="pre">getNumParticleParameterOffsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of particles parameter offsets that have been added.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumParticles">
+<span class="sig-name descname"><span class="pre">getNumParticles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticles" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of particles for which force field parameters have been defined.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives">
+<span class="sig-name descname"><span class="pre">getNumScalingParameterDerivatives</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of requested scaling parameter derivatives.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters">
+<span class="sig-name descname"><span class="pre">getNumScalingParameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of scaling parameters.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumSlices">
+<span class="sig-name descname"><span class="pre">getNumSlices</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumSlices" title="Link to this definition">¶</a></dt>
+<dd><p>Get the number of slices determined by the specified number of particle subsets.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getNumSubsets">
+<span class="sig-name descname"><span class="pre">getNumSubsets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="Link to this definition">¶</a></dt>
+<dd><p>Get the specified number of particle subsets.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getPMEParameters">
+<span class="sig-name descname"><span class="pre">getPMEParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the parameters to use for PME calculations. If alpha is 0 (the default), these parameters are ignored and instead their values are chosen based on the Ewald error tolerance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext">
+<span class="sig-name descname"><span class="pre">getPMEParametersInContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext" title="Link to this definition">¶</a></dt>
+<dd><p>Get the parameters being used for PME in a particular Context.  Because some platforms have restrictions
+on the allowed grid sizes, the values that are actually used may be slightly different from those
+specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
+See the manual for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>context</strong> (<em>Context</em>) – the Context for which to get the parameters</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter, measured in <span class="math notranslate nohighlight">\(nm^{-1}\)</span></p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset">
+<span class="sig-name descname"><span class="pre">getParticleParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Get the offset added to the per-particle parameters of a particular particle, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the offset to query, as returned by addParticleParameterOffset()</p></li>
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter</p></li>
+<li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
+<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getParticleParameters">
+<span class="sig-name descname"><span class="pre">getParticleParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Get the nonbonded force parameters for a particle.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the particle for which to get parameters</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getParticleSubset">
+<span class="sig-name descname"><span class="pre">getParticleSubset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getParticleSubset" title="Link to this definition">¶</a></dt>
+<dd><p>Get the subset to which a particle belongs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the particle for which to get the subset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric">
+<span class="sig-name descname"><span class="pre">getReactionFieldDielectric</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">double</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric" title="Link to this definition">¶</a></dt>
+<dd><p>Get the dielectric constant to use for the solvent in the reaction field approximation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup">
+<span class="sig-name descname"><span class="pre">getReciprocalSpaceForceGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Get the force group that reciprocal space interactions for Ewald or PME are included in. This allows multiple time step integrators to evaluate direct and reciprocal space interactions at different intervals: getForceGroup() specifies the group for direct space, and getReciprocalSpaceForceGroup() specifies the group for reciprocal space. If this is -1 (the default value), the same force group is used for reciprocal space as for direct space.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getScalingParameter">
+<span class="sig-name descname"><span class="pre">getScalingParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameter" title="Link to this definition">¶</a></dt>
+<dd><p>Get the scaling parameter applied to a particular nonbonded slice.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the scaling parameter to query, as returned by <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter</p></li>
+<li><p><strong>subset1</strong> (<em>int</em>) – the smallest index of the two particle subsets</p></li>
+<li><p><strong>subset2</strong> (<em>int</em>) – the largest index of the two particle subsets</p></li>
+<li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
+<li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getScalingParameterDerivativeName">
+<span class="sig-name descname"><span class="pre">getScalingParameterDerivativeName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameterDerivativeName" title="Link to this definition">¶</a></dt>
+<dd><p>Get the name of the global parameter associated with a requested scaling parameter
+derivative.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the parameter derivative, between 0 and the result of
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives" title="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameterDerivatives"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumScalingParameterDerivatives()</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance">
+<span class="sig-name descname"><span class="pre">getSwitchingDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">double</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Get the distance at which the switching function begins to reduce the Lennard-Jones interaction. This must be less than the cutoff distance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT">
+<span class="sig-name descname"><span class="pre">getUseCudaFFT</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT" title="Link to this definition">¶</a></dt>
+<dd><p>Get whether to use CUDA Toolkit’s cuFFT library when executing in the CUDA platform.
+The default value is <cite>False</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection">
+<span class="sig-name descname"><span class="pre">getUseDispersionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection" title="Link to this definition">¶</a></dt>
+<dd><p>Get whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance. The energy depends on the volume of the periodic box, and is only applicable when periodic boundary conditions are used. When running simulations at constant pressure, adding this contribution can improve the quality of results.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction">
+<span class="sig-name descname"><span class="pre">getUseSwitchingFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction" title="Link to this definition">¶</a></dt>
+<dd><p>Get whether a switching function is applied to the Lennard-Jones interaction. If the nonbonded method is set to NoCutoff, this option is ignored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setCutoffDistance">
+<span class="sig-name descname"><span class="pre">setCutoffDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setCutoffDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Set the cutoff distance (in nm) being used for nonbonded interactions. If the NonbondedMethod in use is NoCutoff, this value will have no effect.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>distance</strong> (<em>double</em>) – the cutoff distance, measured in nm</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance">
+<span class="sig-name descname"><span class="pre">setEwaldErrorTolerance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance" title="Link to this definition">¶</a></dt>
+<dd><p>Set the error tolerance for Ewald summation. This corresponds to the fractional error in the forces which is acceptable. This value is used to select the reciprocal space cutoff and separation parameter so that the average error level will be less than the tolerance. There is not a rigorous guarantee that all forces on all atoms will be less than the tolerance, however.</p>
+<p>For PME calculations, if setPMEParameters() is used to set alpha to something other than 0, this value is ignored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset">
+<span class="sig-name descname"><span class="pre">setExceptionParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exceptionIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeProdScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigmaScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilonScale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Set the offset added to the parameters of a particular exception, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the offset to modify, as returned by addExceptionParameterOffset()</p></li>
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setExceptionParameters">
+<span class="sig-name descname"><span class="pre">setExceptionParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particle1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particle2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeProd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Set the force field parameters for an interaction that should be calculated differently from others. If chargeProd and epsilon are both equal to 0, this will cause the interaction to be completely omitted from force and energy calculations.</p>
+<p>Regardless of the NonbondedMethod used by this Force, cutoffs are never applied to exceptions. That is because they are primarily used for 1-4 interactions, which are really a type of bonded interaction and are parametrized together with the other bonded interactions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the interaction for which to get parameters</p></li>
+<li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
+<li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
+<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions">
+<span class="sig-name descname"><span class="pre">setExceptionsUsePeriodicBoundaryConditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periodic</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions" title="Link to this definition">¶</a></dt>
+<dd><p>Set whether periodic boundary conditions should be applied to exceptions. Usually this is not appropriate, because exceptions are normally used to represent bonded interactions (1-2, 1-3, and 1-4 pairs), but there are situations when it does make sense. For example, you may want to simulate an infinite chain where one end of a molecule is bonded to the opposite end of the next periodic copy.</p>
+<p>Regardless of this value, periodic boundary conditions are only applied to exceptions if they also get applied to other interactions. If the nonbonded method is NoCutoff or CutoffNonPeriodic, this value is ignored. Also note that cutoffs are never applied to exceptions, again because they are normally used to represent bonded interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setForceGroup">
+<span class="sig-name descname"><span class="pre">setForceGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Set the force group this Force belongs to.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group</strong> (<em>int</em>) – the group index. Legal values are between 0 and 31 (inclusive).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue">
+<span class="sig-name descname"><span class="pre">setGlobalParameterDefaultValue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">defaultValue</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue" title="Link to this definition">¶</a></dt>
+<dd><p>Set the default value of a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to set the default value</p></li>
+<li><p><strong>defaultValue</strong> (<em>double</em>) – the default value of the parameter</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName">
+<span class="sig-name descname"><span class="pre">setGlobalParameterName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName" title="Link to this definition">¶</a></dt>
+<dd><p>Set the name of a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to set the name</p></li>
+<li><p><strong>name</strong> (<em>string</em>) – the name of the parameter</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace">
+<span class="sig-name descname"><span class="pre">setIncludeDirectSpace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace" title="Link to this definition">¶</a></dt>
+<dd><p>Set whether to include direct space interactions when calculating forces and energies. This is useful if you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that computes it in a nonstandard way, while still using this object for the reciprocal space calculation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters">
+<span class="sig-name descname"><span class="pre">setLJPMEParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ny</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nz</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Set the parameters to use for the dispersion term in LJPME calculations. If alpha is 0 (the default), these parameters are ignored and instead their values are chosen based on the Ewald error tolerance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setName">
+<span class="sig-name descname"><span class="pre">setName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setName" title="Link to this definition">¶</a></dt>
+<dd><p>Set the name of this Force. This is an arbitrary, user modifiable identifier. By default it equals the class name, but you can change it to anything useful.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setNonbondedMethod">
+<span class="sig-name descname"><span class="pre">setNonbondedMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setNonbondedMethod" title="Link to this definition">¶</a></dt>
+<dd><p>Set the method used for handling long range nonbonded interactions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setPMEParameters">
+<span class="sig-name descname"><span class="pre">setPMEParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ny</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nz</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setPMEParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Set the parameters to use for PME calculations. If alpha is 0 (the default), these parameters are ignored and instead their values are chosen based on the Ewald error tolerance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
+<li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
+<li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setParticleParameterOffset">
+<span class="sig-name descname"><span class="pre">setParticleParameterOffset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">particleIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chargeScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigmaScale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilonScale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameterOffset" title="Link to this definition">¶</a></dt>
+<dd><p>Set the offset added to the per-particle parameters of a particular particle, based on a global parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the offset to modify, as returned by addParticleParameterOffset()</p></li>
+<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
+<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setParticleParameters">
+<span class="sig-name descname"><span class="pre">setParticleParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameters" title="Link to this definition">¶</a></dt>
+<dd><p>Set the nonbonded force parameters for a particle. When calculating the Lennard-Jones interaction between two particles, it uses the arithmetic mean of the sigmas and the geometric mean of the epsilons for the two interacting particles (the Lorentz-Berthelot combining rule).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the particle for which to set parameters</p></li>
+<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setParticleSubset">
+<span class="sig-name descname"><span class="pre">setParticleSubset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setParticleSubset" title="Link to this definition">¶</a></dt>
+<dd><p>Set the subset of a particle.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the particle for which to set the subset</p></li>
+<li><p><strong>subset</strong> (<em>int</em>) – the subset to which this particle belongs</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setReactionFieldDielectric">
+<span class="sig-name descname"><span class="pre">setReactionFieldDielectric</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dielectric</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setReactionFieldDielectric" title="Link to this definition">¶</a></dt>
+<dd><p>Set the dielectric constant to use for the solvent in the reaction field approximation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setReciprocalSpaceForceGroup">
+<span class="sig-name descname"><span class="pre">setReciprocalSpaceForceGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setReciprocalSpaceForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Set the force group that reciprocal space interactions for Ewald or PME are included in. This allows multiple time step integrators to evaluate direct and reciprocal space interactions at different intervals: setForceGroup() specifies the group for direct space, and setReciprocalSpaceForceGroup() specifies the group for reciprocal space. If this is -1 (the default value), the same force group is used for reciprocal space as for direct space.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group</strong> (<em>int</em>) – the group index. Legal values are between 0 and 31 (inclusive), or -1 to use the same force group that is specified for direct space.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setScalingParameter">
+<span class="sig-name descname"><span class="pre">setScalingParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeCoulomb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeLJ</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameter" title="Link to this definition">¶</a></dt>
+<dd><p>Modify an added scaling parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the scaling parameter to modify, as returned by
+<code class="xref py py-func docutils literal notranslate"><span class="pre">addExceptionChargeOffset()</span></code></p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter.  It must have already been added
+with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
+calling <cite>setParameter()</cite> on the <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
+<li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
+<li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative">
+<span class="sig-name descname"><span class="pre">setScalingParameterDerivative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative" title="Link to this definition">¶</a></dt>
+<dd><p>Set the name of the global parameter to associate with a requested scaling parameter
+derivative.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – the index of the parameter derivative, between 0 and getNumScalingParameterDerivatives`</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the parameter</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance">
+<span class="sig-name descname"><span class="pre">setSwitchingDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setSwitchingDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Set the distance at which the switching function begins to reduce the Lennard-Jones interaction. This must be less than the cutoff distance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setUseCuFFT">
+<span class="sig-name descname"><span class="pre">setUseCuFFT</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setUseCuFFT" title="Link to this definition">¶</a></dt>
+<dd><p>Set whether whether to use CUDA Toolkit’s cuFFT library when executing in the CUDA platform.
+This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0
+or older.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>use</strong> (<em>bool</em>) – whether to use the cuFFT library</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection">
+<span class="sig-name descname"><span class="pre">setUseDispersionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">useCorrection</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection" title="Link to this definition">¶</a></dt>
+<dd><p>Set whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance. The energy depends on the volume of the periodic box, and is only applicable when periodic boundary conditions are used. When running simulations at constant pressure, adding this contribution can improve the quality of results.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction">
+<span class="sig-name descname"><span class="pre">setUseSwitchingFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction" title="Link to this definition">¶</a></dt>
+<dd><p>Set whether a switching function is applied to the Lennard-Jones interaction. If the nonbonded method is set to NoCutoff, this option is ignored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.updateParametersInContext">
+<span class="sig-name descname"><span class="pre">updateParametersInContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.updateParametersInContext" title="Link to this definition">¶</a></dt>
+<dd><p>Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
+provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
+Simply call setParticleParameters() and setExceptionParameters() to modify this object’s parameters, then call
+updateParametersInContext() to copy them over to the Context.</p>
+<p>This method has several limitations.  The only information it updates is the parameters of particles and exceptions.
+All other aspects of the Force (the nonbonded method, the cutoff distance, etc.) are unaffected and can only be
+changed by reinitializing the Context.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
+can be changed; the pair of particles involved in the exception cannot change.  Finally, this method cannot be used
+to add new particles or exceptions, only to change the parameters of existing ones.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>context</strong> (<em>Context</em>) – the Context in which to update the parameters</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.usesPeriodicBoundaryConditions">
+<span class="sig-name descname"><span class="pre">usesPeriodicBoundaryConditions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.usesPeriodicBoundaryConditions" title="Link to this definition">¶</a></dt>
+<dd><p>Returns whether or not this force makes use of periodic boundary conditions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>bool</em> – true if force uses PBC and false otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo_small.png" alt="Logo"/>
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Energy Slicing Theory</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Python API</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">SlicedNonbondedForce</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="../_sources/pythonapi/SlicedNonbondedForce.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

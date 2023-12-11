@@ -1,0 +1,99 @@
+SlicedNonbondedForce
+====================
+
+.. currentmodule:: nonbondedslicing
+.. autoclass:: SlicedNonbondedForce
+    :members:
+    :inherited-members:
+    :member-order: alphabetical
+    :show-inheritance:
+    :exclude-members: thisown, isinstance
+
+    .. automethod:: __init__
+
+    .. rubric:: Methods
+
+    .. autosummary::
+        addException
+        addExceptionParameterOffset
+        addException_usingRMin
+        addGlobalParameter
+        addParticle
+        addParticleParameterOffset
+        addParticle_usingRVdw
+        addScalingParameter
+        addScalingParameterDerivative
+        createExceptionsFromBonds
+        getCutoffDistance
+        getEwaldErrorTolerance
+        getExceptionParameterOffset
+        getExceptionParameters
+        getExceptionsUsePeriodicBoundaryConditions
+        getForceGroup
+        getGlobalParameterDefaultValue
+        getGlobalParameterName
+        getIncludeDirectSpace
+        getLJPMEParameters
+        getLJPMEParametersInContext
+        getName
+        getNonbondedMethod
+        getNonbondedMethodName
+        getNumExceptionParameterOffsets
+        getNumExceptions
+        getNumGlobalParameters
+        getNumParticleParameterOffsets
+        getNumParticles
+        getNumScalingParameterDerivatives
+        getNumScalingParameters
+        getNumSlices
+        getNumSubsets
+        getPMEParameters
+        getPMEParametersInContext
+        getParticleParameterOffset
+        getParticleParameters
+        getParticleSubset
+        getReactionFieldDielectric
+        getReciprocalSpaceForceGroup
+        getScalingParameter
+        getScalingParameterDerivativeName
+        getSwitchingDistance
+        getUseCudaFFT
+        getUseDispersionCorrection
+        getUseSwitchingFunction
+        setCutoffDistance
+        setEwaldErrorTolerance
+        setExceptionParameterOffset
+        setExceptionParameters
+        setExceptionsUsePeriodicBoundaryConditions
+        setForceGroup
+        setGlobalParameterDefaultValue
+        setGlobalParameterName
+        setIncludeDirectSpace
+        setLJPMEParameters
+        setName
+        setNonbondedMethod
+        setPMEParameters
+        setParticleParameterOffset
+        setParticleParameters
+        setParticleSubset
+        setReactionFieldDielectric
+        setReciprocalSpaceForceGroup
+        setScalingParameter
+        setScalingParameterDerivative
+        setSwitchingDistance
+        setUseCuFFT
+        setUseDispersionCorrection
+        setUseSwitchingFunction
+        updateParametersInContext
+        usesPeriodicBoundaryConditions
+
+    .. rubric:: Attributes
+
+    .. autosummary::
+        CutoffNonPeriodic
+        CutoffPeriodic
+        Ewald
+        LJPME
+        NoCutoff
+        PME
+        thisown
