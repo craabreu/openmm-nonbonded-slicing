@@ -48,6 +48,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.mathjax',
     'sphinxcontrib.bibtex',
+    'sphinx_copybutton',
 ]
 if os.getenv('SPELLCHECK'):
     extensions += 'sphinxcontrib.spelling',
@@ -117,3 +118,7 @@ add_module_names = False
 # External links
 extlinks = {'OpenMM': ('http://docs.openmm.org/latest/api-python/generated/openmm.openmm.%s.html',
                        'openmm.%s')}
+
+# Copy button configuration
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
