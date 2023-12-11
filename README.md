@@ -26,8 +26,8 @@ slice contributions or sums thereof via [getState] with option `getParameterDeri
 Documentation
 =============
 
-A complete documentation for this plugin, including its Python API and the theory behind energy
-slicing is available [here](https://openmm-nonbonded-slicing.readthedocs.io/en/stable).
+Documentation for this plugin is available at [Github Pages](https://craabreu.github.io/openmm-nonbonded-slicing/).
+It includes the Python API and the theory for slicing lattice-sum energy contributions.
 
 Installing from Source
 ======================
