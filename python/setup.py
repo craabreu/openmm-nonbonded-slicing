@@ -31,7 +31,7 @@ extension = Extension(
 
 setup(
     name='nonbondedslicing',
-    version='1.0',
+    version='@CMAKE_PROJECT_VERSION@',
     py_modules=['nonbondedslicing'],
     ext_modules=[extension],
 )

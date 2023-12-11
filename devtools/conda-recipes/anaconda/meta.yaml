@@ -1,0 +1,70 @@
+{% set version = environ['PLUGIN_VERSION'][1:] %}
+
+package:
+  name: openmm-nonbonded-slicing
+  version: {{ version }}
+
+source:
+  git_url: ../../../
+
+build:
+  number: 0
+  script: build.sh
+
+requirements:
+  build:
+    - {{ compiler('cxx') }}
+    - {{ compiler('cuda') }}  # [linux and cuda_compiler_version != 'None']
+    - {{ cdt('mesa-libgl-devel') }}  # [linux]
+    - cmake
+    - make
+    - conda-build
+
+  host:
+    - python
+    - pip
+    - openmm
+    - swig <4.1
+    - ocl-icd  # [linux]
+    - khronos-opencl-icd-loader  # [osx]
+  run:
+    - python
+    - {{ pin_compatible('openmm', lower_bound='7.7') }}
+    - ocl-icd  # [linux]
+    - ocl-icd-system  # [linux]
+    - khronos-opencl-icd-loader  # [osx]
+    - ocl_icd_wrapper_apple      # [osx]
+
+test:
+  imports:
+    - nonbondedslicing
+  commands: |
+    cd ${PREFIX}/share/openmm-nonbonded-slicing/tests
+    set +e
+    for f in Test*; do
+      if [[ $f == *Cuda* || $f == *OpenCL* ]]; then
+        continue
+      fi
+      ./${f}
+      ((exitcode+=$?))
+    done
+    exit $exitcode
+
+about:
+  home: https://github.com/craabreu/openmm-nonbonded-slicing
+  summary: 'An OpenMM plugin for slicing nonbonded interactions'
+  description: |
+    This plugin contains the SlicedNonbondedForce class, a variant of
+    OpenMM's NonbondedForce. By partitioning all particles among disjoint
+    subsets, the total potential energy becomes a linear combination of
+    contributions from pairs of subsets.
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE.md
+  doc_url: https://craabreu.github.io/openmm-nonbonded-slicing
+  dev_url: https://github.com/craabreu/openmm-nonbonded-slicing
+
+extra:
+  recipe-maintainers:
+    - craabreu
+    - jananzhu
