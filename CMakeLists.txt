@@ -37,7 +37,13 @@ SET (CMAKE_CXX_STANDARD 11)
 # Set flags for linking on mac
 IF(APPLE)
     SET(CMAKE_INSTALL_NAME_DIR "@rpath")
-    SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    # Check if we're on Apple Silicon (ARM64) or Intel
+    EXECUTE_PROCESS(COMMAND uname -m OUTPUT_VARIABLE ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+    IF(ARCH STREQUAL "arm64")
+        SET(EXTRA_COMPILE_FLAGS "-stdlib=libc++")
+    ELSE()
+        SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    ENDIF()
 ENDIF(APPLE)
 
 # Select where to install
@@ -113,6 +119,8 @@ FIND_PACKAGE(OPENCL QUIET)
 IF(OPENCL_FOUND)
     MESSAGE("Found OpenCL: TRUE")
     SET(PLUGIN_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
+    # Add option to build OpenCL with suppressed warnings for vkFFT compatibility
+    SET(PLUGIN_BUILD_OPENCL_SUPPRESS_WARNINGS ON CACHE BOOL "Suppress vkFFT deprecated function warnings in OpenCL build")
 ELSE(OPENCL_FOUND)
     MESSAGE("Found OpenCL: FALSE")
     SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
@@ -142,7 +150,7 @@ IF(OPENCL_FOUND OR CUDA_FOUND)
     FetchContent_Declare(
         VkFFT
         GIT_REPOSITORY https://github.com/DTolm/VkFFT
-        GIT_TAG        v1.3.2
+        GIT_TAG        v1.3.4
         CMAKE_ARGS     -DVKFFT_BACKEND=3
     )
     FetchContent_Populate(vkFFT)

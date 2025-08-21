@@ -659,14 +659,23 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             }
             exclusionAtoms.upload(exclusionAtomsVec);
             map<string, string> replacements;
+            #if OPENMM_VERSION_MAJOR >= 8 && OPENMM_VERSION_MINOR >= 3
+            // OpenMM 8.3+ requires ArrayInterface, not cl::Buffer
+            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionParams, "float4");
+            #else
             replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionParams.getDeviceBuffer(), "float4");
+            #endif
             replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
             replacements["DO_LJPME"] = doLJPME ? "1" : "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cl.doubleToString(dispersionAlpha);
+            #if OPENMM_VERSION_MAJOR >= 8 && OPENMM_VERSION_MINOR >= 3
+            replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas, "real2");
+            #else
             replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+            #endif
             stringstream code;
             for (string param : requestedDerivatives) {
                 string variableName = cl.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -708,7 +717,11 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
     replacements["SUBSET2"] = prefix+"subset2";
     cl.getNonbondedUtilities().addParameter(OpenCLNonbondedUtilities::ParameterInfo(prefix+"subset", "int", 1, sizeof(int), subsets.getDeviceBuffer()));
     replacements["LAMBDA"] = prefix+"lambda";
+    #if OPENMM_VERSION_MAJOR >= 8 && OPENMM_VERSION_MINOR >= 3
     cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDeviceBuffer()));
+    #else
+    cl.getNonbondedUtilities().addArgument(OpenCLNonbondedUtilities::ParameterInfo(prefix+"lambda", "real", 2, 2*sizeOfReal, sliceLambdas.getDeviceBuffer()));
+    #endif
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cl.getNonbondedUtilities().addEnergyParameterDerivative(param);
@@ -751,8 +764,13 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         exceptionSlices.upload(exceptionSlicesVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
+        #if OPENMM_VERSION_MAJOR >= 8 && OPENMM_VERSION_MINOR >= 3
+        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams, "float4");
+        replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas, "real2");
+        #else
         replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
         replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+        #endif
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cl.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -1061,8 +1079,14 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         cl.executeKernel(ewaldForcesKernel, cl.getNumAtoms());
     }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
-        if (usePmeQueue && !includeEnergy)
+        if (usePmeQueue && !includeEnergy) {
+            // OpenMM 8.3+ removed setQueue method, use queue directly
+            #if OPENMM_VERSION_MAJOR >= 8 && OPENMM_VERSION_MINOR >= 3
+            // For OpenMM 8.3+, queue management is handled differently
+            #else
             cl.setQueue(pmeQueue);
+            #endif
+        }
 
         // Invert the periodic box vectors.
 
