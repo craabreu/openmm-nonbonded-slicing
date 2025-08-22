@@ -13,19 +13,12 @@ on:
 
 jobs:
   unix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Oldest supported versions
-          - python-version: "3.9"
-            openmm-version: "7.7"
-            cuda-version: "11.0.3"
-            gcc-version: "9.4"
-            nvcc-version: "11.0"
-
           # Latest supported versions
           - python-version: "3.11"
             openmm-version: "8.1"
@@ -52,7 +45,7 @@ jobs:
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-ubuntu-20.04.yml
+          files: devtools/conda-envs/build-ubuntu-22.04.yml
         env:
           CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}

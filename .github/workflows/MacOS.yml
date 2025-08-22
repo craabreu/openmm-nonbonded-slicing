@@ -20,12 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: MacOS (Python 3.9)
-            os: macos-11
+          - name: MacOS (Python 3.11)
+            os: macos-13
             cuda-version: ""
             gcc-version: ""
             nvcc-version: ""
-            python-version: "3.9"
+            python-version: "3.11"
 
     steps:
       - name: "Check out"
