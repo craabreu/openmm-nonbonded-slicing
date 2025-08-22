@@ -48,6 +48,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         name: "Install dependencies with conda"
         with:
+          miniconda-version: "latest"
           activate-environment: build
           environment-file: devtools/conda-envs/build-${{ matrix.os }}.yml
           python-version: ${{ matrix.python-version }}
