@@ -37,7 +37,12 @@ SET (CMAKE_CXX_STANDARD 11)
 # Set flags for linking on mac
 IF(APPLE)
     SET(CMAKE_INSTALL_NAME_DIR "@rpath")
-    SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    # Only add SSE2 flag on x86_64 architectures, not on ARM64
+    IF(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+        SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    ELSE()
+        SET(EXTRA_COMPILE_FLAGS "-stdlib=libc++")
+    ENDIF()
 ENDIF(APPLE)
 
 # Select where to install
