@@ -6,12 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>SlicedNonbondedForce &#8212; Nonbonded Slicing  documentation</title>
-    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
-    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
     <script src="../_static/documentation_options.js?v=5929fcd5"></script>
-    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=ccdb6887"></script>
@@ -23,8 +24,9 @@
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
   
+
   
-  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+  
 
   </head><body>
   
@@ -40,7 +42,7 @@
 <h1>SlicedNonbondedForce<a class="headerlink" href="#slicednonbondedforce" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SlicedNonbondedForce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SlicedNonbondedForce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NonbondedForce</span></code></p>
 <p>This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
 electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
@@ -49,13 +51,13 @@ calculated with the Lorentz-Berthelot combining rule: it uses the arithmetic mea
 geometric mean of the epsilons for the two interacting particles.</p>
 <p>The particles are classified into <span class="math notranslate nohighlight">\(n\)</span> disjoint subsets, thus creating <span class="math notranslate nohighlight">\(n(n+1)/2\)</span> distinct types
 of particle pairs.  Then, the total potential energy is sliced into this many parts by distinguishing the
-contributions of such pair types.  Optionally, variables stored as an <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters
+contributions of such pair types.  Optionally, variables stored as an <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters
 can multiply the Coulomb and/or Lennard-Jones parts of selected potential energy slices.  Changes in the
 values of these global parameters via <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.setParameter">setParameter</a> will automatically modify the total potential energy of
 a SlicedNonbondedForce.  Derivatives with respect to scaling parameters can also be calculated upon request.</p>
 <p>To use this class, create a SlicedNonbondedForce object, specifying the number <span class="math notranslate nohighlight">\(n\)</span> of particle subsets.
 Then, call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="nonbondedslicing.SlicedNonbondedForce.addParticle"><code class="xref py py-func docutils literal notranslate"><span class="pre">addParticle()</span></code></a> once for every single particle in the System to define its force field
-parameters.  Alternatively, you can pass an existing <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> object when creating a
+parameters.  Alternatively, you can pass an existing <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> object when creating a
 SlicedNonbondedForce object, so that the latter inherits all properties of the former.  After a particle has
 been added, you can modify its subset index from 0, the default value, to any positive integer lower than
 <span class="math notranslate nohighlight">\(n\)</span> by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.setParticleSubset"><code class="xref py py-func docutils literal notranslate"><span class="pre">setParticleSubset()</span></code></a>.  You can also modify the force field parameters of an added
@@ -73,9 +75,9 @@ a new Context parameter, then pass its name to <a class="reference internal" hre
 can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
 multiply the Coulomb and Lennard-Jones parts of that slice separately.</p>
 <p>With <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative" title="nonbondedslicing.SlicedNonbondedForce.setScalingParameterDerivative"><code class="xref py py-func docutils literal notranslate"><span class="pre">setScalingParameterDerivative()</span></code></a>, you can request the derivative with respect to a scaling
-parameter.  All requested derivatives can then be evaluated for a particular <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html">openmm.State</a> by calling
+parameter.  All requested derivatives can then be evaluated for a particular <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html">openmm.State</a> by calling
 its <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html#openmm.openmm.State.getEnergyParameterDerivatives">getEnergyParameterDerivatives</a> method.  For this, such State must have been generated from an
-<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> by passing <code class="docutils literal notranslate"><span class="pre">True</span></code> to the keyword <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives</span></code> of the Context’s
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> by passing <code class="docutils literal notranslate"><span class="pre">True</span></code> to the keyword <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives</span></code> of the Context’s
 <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState">getState</a> method.</p>
 <p>Many molecular force fields omit Coulomb and Lennard-Jones interactions between particles separated by one
 or two bonds, while using modified parameters for those separated by three bonds (known as “1-4 interactions”).
@@ -127,11 +129,11 @@ parameter cannot be used simultaneously to apply offsets and scale energy terms.
 <div class="line"><br /></div>
 </div>
 <p><em>Overload 2:</em></p>
-<p>Create a SlicedNonbondedForce having the properties of an existing <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>.</p>
+<p>Create a SlicedNonbondedForce having the properties of an existing <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>force</strong> (<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>) – the NonbondedForce object from which to instantiate this SlicedNonbondedForce</p></li>
+<li><p><strong>force</strong> (<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>) – the NonbondedForce object from which to instantiate this SlicedNonbondedForce</p></li>
 <li><p><strong>numSubsets</strong> (<em>int</em>) – the number of particle subsets</p></li>
 </ul>
 </dd>
@@ -515,7 +517,7 @@ subset 2. The order of subset definition is irrelevant.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter.  It must have already been added
 with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
-calling <cite>setParameter()</cite> on the <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
+calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
 <li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
 <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
 <li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
@@ -1163,7 +1165,7 @@ The default value is <cite>False</cite>.</p>
 <code class="xref py py-func docutils literal notranslate"><span class="pre">addExceptionChargeOffset()</span></code></p></li>
 <li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter.  It must have already been added
 with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
-calling <cite>setParameter()</cite> on the <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
+calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
 <li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
 <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
 <li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
@@ -1260,11 +1262,11 @@ to add new particles or exceptions, only to change the parameters of existing on
           
         </div>
       </div>
-      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
         <div class="sphinxsidebarwrapper">
 <p class="logo">
   <a href="../index.html">
-    <img class="logo" src="../_static/logo_small.png" alt="Logo"/>
+    <img class="logo" src="../_static/logo_small.png" alt="Logo" />
     
     <h1 class="logo logo-name">Nonbonded Slicing</h1>
     
@@ -1295,7 +1297,7 @@ to add new particles or exceptions, only to change the parameters of existing on
 <li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
 </ul>
 
-<div id="searchbox" style="display: none" role="search">
+<search id="searchbox" style="display: none" role="search">
   <h3 id="searchlabel">Quick search</h3>
     <div class="searchformwrapper">
     <form class="search" action="../search.html" method="get">
@@ -1303,18 +1305,18 @@ to add new particles or exceptions, only to change the parameters of existing on
       <input type="submit" value="Go" />
     </form>
     </div>
-</div>
+</search>
 <script>document.getElementById('searchbox').style.display = "block"</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
     <div class="footer">
-      &copy;2022, Charlles Abreu. Project based on OpenMM.
+      &#169;2022, Charlles Abreu. Project based on OpenMM.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.3.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |
       <a href="../_sources/pythonapi/SlicedNonbondedForce.rst.txt"
