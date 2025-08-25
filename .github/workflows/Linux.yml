@@ -14,7 +14,7 @@ on:
 jobs:
   unix:
     runs-on: ubuntu-22.04
-    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, CUDA ${{ matrix.cuda-version }})
+    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, GCC ${{ matrix.compiler-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +22,7 @@ jobs:
           - python-version: "3.12"
             openmm-version: "8.3"
             cuda-version: "12.9"
-            gcc-version: "14.3"
+            compiler-version: "14.3"
 
     steps:
       - name: "Check out"
@@ -46,7 +46,7 @@ jobs:
           files: devtools/conda-envs/build-ubuntu-22.04.yml
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
-          GCC_VERSION: ${{ matrix.gcc-version }}
+          COMPILER_VERSION: ${{ matrix.compiler-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
       - uses: conda-incubator/setup-miniconda@v3

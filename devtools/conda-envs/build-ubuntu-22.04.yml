@@ -8,7 +8,7 @@ dependencies:
   - cuda-cudart-dev
   - cuda-nvrtc-dev
   - libcufft-dev
-  - gxx_linux-64 @GCC_VERSION@
+  - gxx_linux-64 @COMPILER_VERSION@
   - make
   - ocl-icd-system
   - openmm @OPENMM_VERSION@
