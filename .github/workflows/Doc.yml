@@ -10,7 +10,7 @@ on:
 
 jobs:
   unix:
-    runs-on: macos-11
+    runs-on: ubuntu-22.04
     name: Doc (Python ${{ matrix.python-version }})
     strategy:
       fail-fast: false
@@ -22,15 +22,12 @@ jobs:
       - name: "Check out"
         uses: actions/checkout@v3
 
-      - name: "Install SDK on MacOS"
-        run: source devtools/scripts/install_macos_sdk.sh
-
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-macos-11.yml
+          files: devtools/conda-envs/build-ubuntu-22.04.yml
 
       - uses: conda-incubator/setup-miniconda@v2
         name: "Install dependencies with conda"
