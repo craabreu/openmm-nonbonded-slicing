@@ -131,9 +131,19 @@ IF(CMAKE_CUDA_COMPILER)
     MESSAGE("Found CUDA: TRUE")
     SET(PLUGIN_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
     
-    # Use modern CMake CUDA variables
-    GET_FILENAME_COMPONENT(CUDA_LIB_DIR "${CMAKE_CUDA_TOOLKIT_DIRECTORY}/lib64" ABSOLUTE)
-    MESSAGE("CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
+    # Find CUDA toolkit directory from compiler path
+    GET_FILENAME_COMPONENT(CUDA_COMPILER_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+    GET_FILENAME_COMPONENT(CUDA_TOOLKIT_ROOT "${CUDA_COMPILER_DIR}/.." ABSOLUTE)
+    
+    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib64")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib64")
+    ELSEIF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
+    ENDIF()
+    
+    MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
     SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
     
     # Set CUDA architectures if not already set
