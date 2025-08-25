@@ -17,8 +17,6 @@ jobs:
       matrix:
         include:
           - python-version: "3.12"
-            openmm-version: "8.3"
-            compiler-version: "14.3"
 
     steps:
       - name: "Check out"
@@ -30,6 +28,9 @@ jobs:
           tokenPrefix: '@'
           tokenSuffix: '@'
           files: devtools/conda-envs/build-doc.yml
+        env:
+          COMPILER_VERSION: "14.3"
+          OPENMM_VERSION: "8.3"
 
       - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"
