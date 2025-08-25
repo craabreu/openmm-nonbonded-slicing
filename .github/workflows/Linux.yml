@@ -21,8 +21,8 @@ jobs:
         include:
           - python-version: "3.12"
             openmm-version: "8.3"
-            cuda-version: ""
-            gcc-version: ""
+            cuda-version: "12.9"
+            gcc-version: "14.3"
 
     steps:
       - name: "Check out"
