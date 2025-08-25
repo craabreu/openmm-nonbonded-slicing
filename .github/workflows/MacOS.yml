@@ -17,10 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: MacOS (Python 3.12, OpenMM 8.3)
+          - name: MacOS (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, Clang ${{ matrix.compiler-version }})
             os: macos-13
             cuda-version: ""
-            gcc-version: ""
+            compiler-version: "19.1"
             python-version: "3.12"
             openmm-version: "8.3"
 
@@ -39,7 +39,7 @@ jobs:
           files: devtools/conda-envs/build-${{ matrix.os }}.yml
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
-          GCC_VERSION: ${{ matrix.gcc-version }}
+          COMPILER_VERSION: ${{ matrix.compiler-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
       - uses: conda-incubator/setup-miniconda@v3
@@ -55,6 +55,9 @@ jobs:
 
       - name: "Configure"
         shell: bash -l {0}
+        env:
+          CC: clang
+          CXX: clang++
         run: |
           mkdir build
           cd build
@@ -64,6 +67,9 @@ jobs:
 
       - name: "Build"
         shell: bash -l {0}
+        env:
+          CC: clang
+          CXX: clang++
         run: |
           cd build
           make -j2 install

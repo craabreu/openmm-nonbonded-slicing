@@ -3,7 +3,10 @@ channels:
   - conda-forge
 dependencies:
   - cmake
-  - compilers
+  - clang @COMPILER_VERSION@
+  - clang-tools @COMPILER_VERSION@
+  - compiler-rt @COMPILER_VERSION@
+  - llvm-openmp @COMPILER_VERSION@
   - khronos-opencl-icd-loader
   - make
   - openmm @OPENMM_VERSION@
