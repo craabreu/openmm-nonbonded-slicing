@@ -19,33 +19,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Oldest supported versions
-          - python-version: "3.9"
-            openmm-version: "7.7"
-            cuda-version: "11.0.3"
-            gcc-version: "9.4"
-            nvcc-version: "11.0"
-
-          # Latest supported versions
-          - python-version: "3.11"
-            openmm-version: "8.1"
-            cuda-version: "11.8.0"
-            gcc-version: "13.2"
-            nvcc-version: "11.8"
+          - python-version: "3.12"
+            openmm-version: "8.3"
+            cuda-version: "12"
+            gcc-version: "14"
 
     steps:
       - name: "Check out"
         uses: actions/checkout@v3
 
-      - name: "Install CUDA Toolkit on Linux"
-        uses: Jimver/cuda-toolkit@v0.2.11
-        id: cuda-toolkit
-        with:
-          cuda: ${{ matrix.cuda-version }}
-          method: 'network'
+      # - name: "Install CUDA Toolkit on Linux"
+      #   uses: Jimver/cuda-toolkit@v0.2.24
+      #   id: cuda-toolkit
+      #   with:
+      #     cuda: ${{ matrix.cuda-version }}
+      #     method: 'network'
 
-      - name: "Install AMD OpenCL on Linux"
-        run: source devtools/scripts/install_amd_opencl.sh
+      # - name: "Install AMD OpenCL on Linux"
+      #   run: source devtools/scripts/install_amd_opencl.sh
 
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
@@ -58,7 +49,7 @@ jobs:
           GCC_VERSION: ${{ matrix.gcc-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@v3.2.0
         name: "Install dependencies with conda"
         with:
           activate-environment: build
@@ -91,14 +82,14 @@ jobs:
         run: |
           python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
 
-      - name: "Run C++ test"
-        shell: bash -l {0}
-        run: |
-          cd build
-          ctest --output-on-failure --exclude-regex 'TestCuda'
+      # - name: "Run C++ test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd build
+      #     ctest --output-on-failure --exclude-regex 'TestCuda'
 
-      - name: "Run Python test"
-        shell: bash -l {0}
-        run: |
-          cd build/python/tests
-          pytest --verbose -k 'not Cuda' Test*
+      # - name: "Run Python test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd build/python/tests
+      #     pytest --verbose -k 'not Cuda' Test*

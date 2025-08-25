@@ -4,9 +4,9 @@ channels:
 dependencies:
   - cmake
   - compilers
-  - khronos-opencl-icd-loader
+  - ocl-icd-system
   - make
-  - openmm >=7.7
+  - openmm @OPENMM_VERSION@
   - pip >=22.2
   - pocl
   - pytest
