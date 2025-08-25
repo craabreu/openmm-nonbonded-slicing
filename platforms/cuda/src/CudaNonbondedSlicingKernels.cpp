@@ -695,14 +695,14 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             }
             exclusionAtoms.upload(exclusionAtomsVec);
             map<string, string> replacements;
-            replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionParams.getDevicePointer(), "float4");
+            replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exclusionParams, "float4");
             replacements["EWALD_ALPHA"] = cu.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cu.doubleToString(2.0/sqrt(M_PI));
             replacements["DO_LJPME"] = doLJPME ? "1" : "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cu.doubleToString(dispersionAlpha);
-            replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
+            replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas, "real2");
             stringstream code;
             for (string param : requestedDerivatives) {
                 string variableName = cu.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -787,8 +787,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         exceptionSlices.upload(exceptionSlicesVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
-        replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams.getDevicePointer(), "float4");
-        replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas.getDevicePointer(), "real2");
+        replacements["PARAMS"] = cu.getBondedUtilities().addArgument(exceptionParams, "float4");
+        replacements["LAMBDAS"] = cu.getBondedUtilities().addArgument(sliceLambdas, "real2");
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cu.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -985,7 +985,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, sliceScalingParams);
 
         if (usePmeStream)
-            cu.setCurrentStream(pmeStream);
+            cu.getCurrentStream();
 
         // Invert the periodic box vectors.
 
@@ -1095,7 +1095,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         }
         if (usePmeStream) {
             cuEventRecord(pmeSyncEvent, pmeStream);
-            cu.restoreDefaultStream();
+            cu.restoreDefaultQueue();
         }
     }
     if (!hasOffsets && includeReciprocal) {
