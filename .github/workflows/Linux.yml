@@ -54,7 +54,7 @@ jobs:
           tokenSuffix: '@'
           files: devtools/conda-envs/build-ubuntu-20.04.yml
         env:
-          CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
+          CUDA_VERSION: ${{ matrix.cuda-version }}
           GCC_VERSION: ${{ matrix.gcc-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
