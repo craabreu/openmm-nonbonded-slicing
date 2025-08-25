@@ -14,7 +14,7 @@ on:
 jobs:
   unix:
     runs-on: ubuntu-22.04
-    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, CUDA ${{ matrix.cuda-version }})
+    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, GCC ${{ matrix.compiler-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
@@ -22,18 +22,11 @@ jobs:
           - python-version: "3.12"
             openmm-version: "8.3"
             cuda-version: "12.9"
-            gcc-version: "14.3"
+            compiler-version: "14.3"
 
     steps:
       - name: "Check out"
         uses: actions/checkout@v5
-
-      # - name: "Install CUDA Toolkit on Linux"
-      #   uses: Jimver/cuda-toolkit@v0.2.27
-      #   id: cuda-toolkit
-      #   with:
-      #     cuda: ${{ matrix.cuda-version }}
-      #     method: 'network'
 
       - name: "Install AMD OpenCL on Linux"
         run: source devtools/scripts/install_amd_opencl.sh
@@ -46,7 +39,7 @@ jobs:
           files: devtools/conda-envs/build-ubuntu-22.04.yml
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
-          GCC_VERSION: ${{ matrix.gcc-version }}
+          COMPILER_VERSION: ${{ matrix.compiler-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
 
       - uses: conda-incubator/setup-miniconda@v3
