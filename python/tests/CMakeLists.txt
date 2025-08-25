@@ -4,7 +4,7 @@ foreach(file ${test_files})
 endforeach(file ${test_files})
 add_custom_target(PythonTest DEPENDS "${test_files}")
 add_custom_command(
-    TARGET PythonTest
+    TARGET PythonTest POST_BUILD
     COMMAND "${PYTHON_EXECUTABLE}" -m pytest --verbose Test*.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )

@@ -6,7 +6,9 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
 PROJECT(OpenMMNonbondedSlicing VERSION 0.2.2)
 
-CMAKE_POLICY(SET CMP0146 NEW) 
+# Set CMake policies
+CMAKE_POLICY(SET CMP0146 NEW)  # Modern CUDA handling
+CMAKE_POLICY(SET CMP0175 NEW)  # Enforce valid add_custom_command() arguments
 
 IF(DEFINED ENV{CONDA_PREFIX})
     SET(OPENMM_DIR $ENV{CONDA_PREFIX} CACHE PATH "Where OpenMM is installed")
