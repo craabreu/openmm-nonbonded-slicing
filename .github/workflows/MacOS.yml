@@ -1,9 +1,13 @@
 name: MacOS
 
-# Temporarily disabled
 on:
-  workflow_dispatch:  # Only manual triggers for now
-
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # Manual trigger option retained
 
 jobs:
   unix:
@@ -14,7 +18,7 @@ jobs:
       matrix:
         include:
           - name: MacOS (Python 3.9)
-            os: macos-11
+            os: macos-13
             cuda-version: ""
             gcc-version: ""
             python-version: "3.9"
