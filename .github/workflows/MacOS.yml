@@ -78,14 +78,14 @@ jobs:
         run: |
           python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
 
-      # - name: "Run C++ test"
-      #   shell: bash -l {0}
-      #   run: |
-      #     cd build
-      #     ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
+      - name: "Run C++ test"
+        shell: bash -l {0}
+        run: |
+          cd build
+          ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
 
-      # - name: "Run Python test"
-      #   shell: bash -l {0}
-      #   run: |
-      #     cd build/python/tests
-      #     pytest --verbose -k 'not (Cuda or OpenCL)' Test*
+      - name: "Run Python test"
+        shell: bash -l {0}
+        run: |
+          cd build/python/tests
+          pytest --verbose -k 'not (Cuda or OpenCL)' Test*
