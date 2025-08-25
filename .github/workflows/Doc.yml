@@ -1,42 +1,39 @@
 name: Doc
 
-# Temporarily disabled
 on:
-  workflow_dispatch:  # Only manual triggers for now
-  # push:
-  #   branches:
-  #     - "main"
-  # pull_request:
-  #   branches:
-  #     - "main"
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
 
 jobs:
   unix:
     runs-on: ubuntu-22.04
-    name: Doc (Python ${{ matrix.python-version }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - python-version: "3.12"
+    name: Doc
 
     steps:
       - name: "Check out"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
 
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-ubuntu-22.04.yml
+          files: devtools/conda-envs/build-doc.yml
+        env:
+          PYTHON_VERSION: "3.12"
+          COMPILER_VERSION: "14.3"
+          OPENMM_VERSION: "8.3"
 
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"
         with:
           activate-environment: build
           environment-file: devtools/conda-envs/build-doc.yml
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
       - name: "List conda packages"
         shell: bash -l {0}
@@ -47,9 +44,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPLUGIN_BUILD_CUDA_LIB=OFF
+          cmake .. -DOPENMM_BUILD_PLUGIN_CUDA=OFF -DOPENMM_BUILD_PLUGIN_OPENCL=OFF
 
       - name: "Build"
         shell: bash -l {0}
@@ -58,12 +53,12 @@ jobs:
           make -j2 install
           make -j2 PythonInstall
 
-      - name: Build Documentation
+      - name: "Build Documentation"
         shell: bash -l {0}
         run: |
           sphinx-build ./docs ./html
 
-      - name: Deploy documentation
+      - name: "Deploy documentation"
         shell: bash -l {0}
         run: |
           git reset --hard HEAD
