@@ -41,7 +41,13 @@ SET (CMAKE_CXX_STANDARD 11)
 # Set flags for linking on mac
 IF(APPLE)
     SET(CMAKE_INSTALL_NAME_DIR "@rpath")
-    SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    # Check if we're on Apple Silicon (ARM64) or Intel
+    EXECUTE_PROCESS(COMMAND uname -m OUTPUT_VARIABLE ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+    IF(ARCH STREQUAL "arm64")
+        SET(EXTRA_COMPILE_FLAGS "-stdlib=libc++")
+    ELSE()
+        SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
+    ENDIF()
 ENDIF(APPLE)
 
 # Select where to install
@@ -106,21 +112,48 @@ ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
 INCLUDE(CTest)
 
-# Build the implementations for different platforms
-
-ADD_SUBDIRECTORY(platforms/reference)
-ADD_SUBDIRECTORY(platforms/common)
-
+# Download and configure VkFFT first
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
 
 FIND_PACKAGE(OPENCL QUIET)
 IF(OPENCL_FOUND)
     MESSAGE("Found OpenCL: TRUE")
     SET(PLUGIN_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
+    SET(PLUGIN_BUILD_OPENCL_SUPPRESS_WARNINGS ON CACHE BOOL "Suppress vkFFT deprecated function warnings in OpenCL build")
 ELSE(OPENCL_FOUND)
     MESSAGE("Found OpenCL: FALSE")
     SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
 ENDIF(OPENCL_FOUND)
+
+# Setup VkFFT if needed
+IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+    include(ExternalProject)
+    SET(VKFFT_VERSION "v1.3.4")
+    SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
+    SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
+    MESSAGE(STATUS "VKFFT_SOURCE_DIR: ${VKFFT_SOURCE_DIR}")
+    MESSAGE(STATUS "VKFFT_INCLUDE_DIR: ${VKFFT_INCLUDE_DIR}")
+
+    # Download VkFFT
+    IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
+        MESSAGE(STATUS "Downloading VkFFT ${VKFFT_VERSION}")
+        EXECUTE_PROCESS(
+            COMMAND git -c advice.detachedHead=false clone --branch ${VKFFT_VERSION} --depth 1 https://github.com/DTolm/VkFFT.git ${VKFFT_SOURCE_DIR}
+            RESULT_VARIABLE GIT_RESULT
+        )
+        IF(NOT GIT_RESULT EQUAL 0)
+            MESSAGE(FATAL_ERROR "Failed to clone VkFFT repository")
+        ENDIF()
+    ENDIF()
+
+    # Add VkFFT include directory globally
+    INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
+ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+
+# Build the implementations for different platforms
+ADD_SUBDIRECTORY(platforms/reference)
+ADD_SUBDIRECTORY(platforms/common)
+
 IF(PLUGIN_BUILD_OPENCL_LIB)
     ADD_SUBDIRECTORY(platforms/opencl)
 ENDIF(PLUGIN_BUILD_OPENCL_LIB)
@@ -166,6 +199,8 @@ IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
     SET(VKFFT_VERSION "v1.3.4")
     SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
     SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
+    MESSAGE(STATUS "VKFFT_SOURCE_DIR: ${VKFFT_SOURCE_DIR}")
+    MESSAGE(STATUS "VKFFT_INCLUDE_DIR: ${VKFFT_INCLUDE_DIR}")
 
     # Download VkFFT
     IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
