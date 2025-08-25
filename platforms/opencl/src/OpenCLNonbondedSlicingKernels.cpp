@@ -659,14 +659,14 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
             }
             exclusionAtoms.upload(exclusionAtomsVec);
             map<string, string> replacements;
-            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionParams.getDeviceBuffer(), "float4");
+            replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exclusionParams, "float4");
             replacements["EWALD_ALPHA"] = cl.doubleToString(alpha);
             replacements["TWO_OVER_SQRT_PI"] = cl.doubleToString(2.0/sqrt(M_PI));
             replacements["DO_LJPME"] = doLJPME ? "1" : "0";
             replacements["USE_PERIODIC"] = force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0";
             if (doLJPME)
                 replacements["EWALD_DISPERSION_ALPHA"] = cl.doubleToString(dispersionAlpha);
-            replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+            replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas, "real2");
             stringstream code;
             for (string param : requestedDerivatives) {
                 string variableName = cl.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -751,8 +751,8 @@ void OpenCLCalcSlicedNonbondedForceKernel::initialize(const System& system, cons
         exceptionSlices.upload(exceptionSlicesVec);
         map<string, string> replacements;
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
-        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams.getDeviceBuffer(), "float4");
-        replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas.getDeviceBuffer(), "real2");
+        replacements["PARAMS"] = cl.getBondedUtilities().addArgument(exceptionParams, "float4");
+        replacements["LAMBDAS"] = cl.getBondedUtilities().addArgument(sliceLambdas, "real2");
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cl.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -1062,7 +1062,7 @@ double OpenCLCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     }
     if (pmeGrid1.isInitialized() && includeReciprocal) {
         if (usePmeQueue && !includeEnergy)
-            cl.setQueue(pmeQueue);
+            cl.getQueue() = pmeQueue;
 
         // Invert the periodic box vectors.
 

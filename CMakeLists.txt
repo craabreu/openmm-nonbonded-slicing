@@ -6,6 +6,10 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
 PROJECT(OpenMMNonbondedSlicing VERSION 0.2.2)
 
+# Set CMake policies
+CMAKE_POLICY(SET CMP0146 NEW)  # Modern CUDA handling
+CMAKE_POLICY(SET CMP0175 NEW)  # Enforce valid add_custom_command() arguments
+
 IF(DEFINED ENV{CONDA_PREFIX})
     SET(OPENMM_DIR $ENV{CONDA_PREFIX} CACHE PATH "Where OpenMM is installed")
     EXECUTE_PROCESS(
@@ -121,32 +125,63 @@ IF(PLUGIN_BUILD_OPENCL_LIB)
     ADD_SUBDIRECTORY(platforms/opencl)
 ENDIF(PLUGIN_BUILD_OPENCL_LIB)
 
-FIND_PACKAGE(CUDA QUIET)
-IF(CUDA_FOUND)
+INCLUDE(CheckLanguage)
+CHECK_LANGUAGE(CUDA)
+
+IF(CMAKE_CUDA_COMPILER)
+    ENABLE_LANGUAGE(CUDA)
     MESSAGE("Found CUDA: TRUE")
     SET(PLUGIN_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
-ELSE(CUDA_FOUND)
+    
+    # Find CUDA toolkit directory from compiler path
+    GET_FILENAME_COMPONENT(CUDA_COMPILER_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+    GET_FILENAME_COMPONENT(CUDA_TOOLKIT_ROOT "${CUDA_COMPILER_DIR}/.." ABSOLUTE)
+    
+    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib64")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib64")
+    ELSEIF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
+    ENDIF()
+    
+    MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
+    SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
+    
+    # Set CUDA architectures if not already set
+    IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        SET(CMAKE_CUDA_ARCHITECTURES "35;50;60;70;75;80" CACHE STRING "CUDA architectures to compile for")
+    ENDIF()
+    
+    ADD_SUBDIRECTORY(platforms/cuda)
+ELSE(CMAKE_CUDA_COMPILER)
     MESSAGE("Found CUDA: FALSE")
     SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
-ENDIF(CUDA_FOUND)
-IF(PLUGIN_BUILD_CUDA_LIB)
-    GET_FILENAME_COMPONENT(CUDA_LIB_DIR "${CUDA_cufft_LIBRARY}" PATH)
-    SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
-    ADD_SUBDIRECTORY(platforms/cuda)
-ENDIF(PLUGIN_BUILD_CUDA_LIB)
+ENDIF(CMAKE_CUDA_COMPILER)
 
-# Fetch VkFFT
+# Download and configure VkFFT
 
-IF(OPENCL_FOUND OR CUDA_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(
-        VkFFT
-        GIT_REPOSITORY https://github.com/DTolm/VkFFT
-        GIT_TAG        v1.3.2
-        CMAKE_ARGS     -DVKFFT_BACKEND=3
-    )
-    FetchContent_Populate(vkFFT)
-ENDIF(OPENCL_FOUND OR CUDA_FOUND)
+IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+    include(ExternalProject)
+    SET(VKFFT_VERSION "v1.3.4")
+    SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
+    SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
+
+    # Download VkFFT
+    IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
+        MESSAGE(STATUS "Downloading VkFFT ${VKFFT_VERSION}")
+        EXECUTE_PROCESS(
+            COMMAND git -c advice.detachedHead=false clone --branch ${VKFFT_VERSION} --depth 1 https://github.com/DTolm/VkFFT.git ${VKFFT_SOURCE_DIR}
+            RESULT_VARIABLE GIT_RESULT
+        )
+        IF(NOT GIT_RESULT EQUAL 0)
+            MESSAGE(FATAL_ERROR "Failed to clone VkFFT repository")
+        ENDIF()
+    ENDIF()
+
+    # Add VkFFT include directory
+    INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
+ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
 
 # Build the Python API
 
