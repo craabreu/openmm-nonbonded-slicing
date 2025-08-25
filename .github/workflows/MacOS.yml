@@ -11,13 +11,12 @@ on:
 jobs:
   unix:
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.name }}
+    name: MacOS (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, Clang ${{ matrix.compiler-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: MacOS (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, Clang ${{ matrix.compiler-version }})
-            os: macos-13
+          - os: macos-13
             cuda-version: ""
             compiler-version: "19.1"
             python-version: "3.12"
