@@ -28,12 +28,12 @@ jobs:
       - name: "Check out"
         uses: actions/checkout@v5
 
-      - name: "Install CUDA Toolkit on Linux"
-        uses: Jimver/cuda-toolkit@v0.2.27
-        id: cuda-toolkit
-        with:
-          cuda: ${{ matrix.cuda-version }}
-          method: 'network'
+      # - name: "Install CUDA Toolkit on Linux"
+      #   uses: Jimver/cuda-toolkit@v0.2.27
+      #   id: cuda-toolkit
+      #   with:
+      #     cuda: ${{ matrix.cuda-version }}
+      #     method: 'network'
 
       - name: "Install AMD OpenCL on Linux"
         run: source devtools/scripts/install_amd_opencl.sh
