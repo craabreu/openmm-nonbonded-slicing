@@ -157,17 +157,28 @@ ELSE(CMAKE_CUDA_COMPILER)
     SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
 ENDIF(CMAKE_CUDA_COMPILER)
 
-# Fetch VkFFT
+# Download and configure VkFFT
 
 IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
-    include(FetchContent)
-    FetchContent_Declare(
-        VkFFT
-        GIT_REPOSITORY https://github.com/DTolm/VkFFT
-        GIT_TAG        v1.3.2
-        CMAKE_ARGS     -DVKFFT_BACKEND=3
-    )
-    FetchContent_Populate(vkFFT)
+    include(ExternalProject)
+    SET(VKFFT_VERSION "v1.3.4")
+    SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
+    SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
+
+    # Download VkFFT
+    IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
+        MESSAGE(STATUS "Downloading VkFFT ${VKFFT_VERSION}")
+        EXECUTE_PROCESS(
+            COMMAND git -c advice.detachedHead=false clone --branch ${VKFFT_VERSION} --depth 1 https://github.com/DTolm/VkFFT.git ${VKFFT_SOURCE_DIR}
+            RESULT_VARIABLE GIT_RESULT
+        )
+        IF(NOT GIT_RESULT EQUAL 0)
+            MESSAGE(FATAL_ERROR "Failed to clone VkFFT repository")
+        ENDIF()
+    ENDIF()
+
+    # Add VkFFT include directory
+    INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
 ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
 
 # Build the Python API
