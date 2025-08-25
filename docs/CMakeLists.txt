@@ -34,7 +34,7 @@ add_custom_target(doc
     DEPENDS PythonInstall ${STAGING_OUTPUT_FILES}
 )
 add_custom_command(
-    TARGET doc
+    TARGET doc POST_BUILD
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     COMMAND ${SPHINX_EXECUTABLE} . ${SPHINX_HTML_DIR}
 )

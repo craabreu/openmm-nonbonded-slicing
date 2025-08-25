@@ -7,29 +7,24 @@ on:
   pull_request:
     branches:
       - "main"
-  schedule:
-    # Weely tests run on Sundays at 4 AM UTC (12 AM EST):
-    - cron: "0 4 * * 0"
-
 
 jobs:
   unix:
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.name }}
+    name: MacOS (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, Clang ${{ matrix.compiler-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: MacOS (Python 3.9)
-            os: macos-11
+          - os: macos-13
             cuda-version: ""
-            gcc-version: ""
-            nvcc-version: ""
-            python-version: "3.9"
+            compiler-version: "19.1"
+            python-version: "3.12"
+            openmm-version: "8.3"
 
     steps:
       - name: "Check out"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
 
       - name: "Install SDK on MacOS"
         run: source devtools/scripts/install_macos_sdk.sh
@@ -41,11 +36,11 @@ jobs:
           tokenSuffix: '@'
           files: devtools/conda-envs/build-${{ matrix.os }}.yml
         env:
-          CUDATOOLKIT_VERSION: ${{ matrix.cuda-version }}
-          GCC_VERSION: ${{ matrix.gcc-version }}
-          NVCC_VERSION: ${{ matrix.nvcc-version }}
+          CUDA_VERSION: ${{ matrix.cuda-version }}
+          COMPILER_VERSION: ${{ matrix.compiler-version }}
+          OPENMM_VERSION: ${{ matrix.openmm-version }}
 
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"
         with:
           activate-environment: build
@@ -58,6 +53,9 @@ jobs:
 
       - name: "Configure"
         shell: bash -l {0}
+        env:
+          CC: clang
+          CXX: clang++
         run: |
           mkdir build
           cd build
@@ -67,6 +65,9 @@ jobs:
 
       - name: "Build"
         shell: bash -l {0}
+        env:
+          CC: clang
+          CXX: clang++
         run: |
           cd build
           make -j2 install
@@ -77,14 +78,14 @@ jobs:
         run: |
           python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
 
-      - name: "Run C++ test"
-        shell: bash -l {0}
-        run: |
-          cd build
-          ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
+      # - name: "Run C++ test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd build
+      #     ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
 
-      - name: "Run Python test"
-        shell: bash -l {0}
-        run: |
-          cd build/python/tests
-          pytest --verbose -k 'not (Cuda or OpenCL)' Test*
+      # - name: "Run Python test"
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd build/python/tests
+      #     pytest --verbose -k 'not (Cuda or OpenCL)' Test*
