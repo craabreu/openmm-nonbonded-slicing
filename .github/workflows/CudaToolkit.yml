@@ -18,7 +18,7 @@ jobs:
         include:
           - python-version: "3.11"
             openmm-version: "8.1"
-            cuda-version: "11.8"
+            cuda-version: "11.8.0"
             compiler-version: "13.3"
 
     steps:
