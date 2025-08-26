@@ -22,11 +22,11 @@ jobs:
           - python-version: "3.12"
             openmm-version: "8.3"
             cuda-version: "12.9"
-            compiler-version: "15.1"
+            compiler-version: "14.3"
           - python-version: "3.11"
             openmm-version: "8.1"
             cuda-version: "11.8"
-            compiler-version: "14.3"
+            compiler-version: "13.3"
 
     steps:
       - name: "Check out"
@@ -57,10 +57,8 @@ jobs:
         shell: bash -l {0}
         run: |
           cuda_major=$(echo "${{ matrix.cuda-version }}" | cut -d. -f1)
-          if [[ "$cuda_major" -lt 12 ]]; then
-            conda install -c conda-forge cudatoolkit
-          else
-            conda install -c conda-forge cuda-nvcc cuda-cudart-dev cuda-nvrtc-dev libcufft-dev
+          if [[ "$cuda_major" -ge 12 ]]; then
+            conda install -c conda-forge cuda-nvcc_linux-64 cuda-cudart-dev cuda-nvrtc-dev libcufft-dev
           fi
 
       - name: "List conda packages"
