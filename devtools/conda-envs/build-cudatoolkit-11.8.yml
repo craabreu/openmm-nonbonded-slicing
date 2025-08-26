@@ -3,13 +3,10 @@ channels:
   - conda-forge
 dependencies:
   - cmake
-  - cuda-version @CUDA_VERSION@
-  - cuda-nvcc_linux-64
-  - cuda-cudart-dev
-  - cuda-nvrtc-dev
-  - libcufft-dev
+  - cudatoolkit @CUDA_VERSION@
   - gxx_linux-64 @COMPILER_VERSION@
   - make
+  - nvcc_linux-64 @CUDA_VERSION@
   - ocl-icd-system
   - openmm @OPENMM_VERSION@
   - pip >=22.2
