@@ -4,10 +4,6 @@ channels:
 dependencies:
   - cmake
   - cuda-version @CUDA_VERSION@
-  - cuda-nvcc_linux-64
-  - cuda-cudart-dev
-  - cuda-nvrtc-dev
-  - libcufft-dev
   - gxx_linux-64 @COMPILER_VERSION@
   - make
   - ocl-icd-system
