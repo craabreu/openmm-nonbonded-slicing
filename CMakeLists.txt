@@ -152,6 +152,13 @@ IF(CMAKE_CUDA_COMPILER)
         MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
     ENDIF()
     
+    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
+        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
+    ELSE()
+        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/include")
+    ENDIF()
+    MESSAGE(STATUS "CUDA_TOOLKIT_INCLUDE: ${CUDA_TOOLKIT_INCLUDE}")
+
     MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
     SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
     

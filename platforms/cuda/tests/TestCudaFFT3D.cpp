@@ -39,8 +39,6 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     System system;
     system.addParticle(0.0);
 
-    // Print OpenMM version
-    cout << "OpenMM version: " << "OPENMM_VERSION" << endl;
     CudaPlatform::PlatformData platformData(
         NULL,
         system,
