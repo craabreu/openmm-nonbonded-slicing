@@ -117,15 +117,20 @@ ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
 INCLUDE(CTest)
 
-FIND_PACKAGE(OPENCL QUIET)
-IF(OPENCL_FOUND)
+# Modern OpenCL detection using OpenCLHeaders
+find_package(OpenCLHeaders QUIET)
+if(OpenCLHeaders_FOUND)
     MESSAGE("Found OpenCL: TRUE")
+    # Set OpenCL variables for compatibility
+    SET(OPENCL_FOUND TRUE)
+    SET(OPENCL_INCLUDE_DIR ${OpenCLHeaders_INCLUDE_DIRS})
+    SET(OPENCL_LIBRARY "OpenCL")
     SET(PLUGIN_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
     SET(PLUGIN_BUILD_OPENCL_SUPPRESS_WARNINGS ON CACHE BOOL "Suppress vkFFT deprecated function warnings in OpenCL build")
-ELSE(OPENCL_FOUND)
+ELSE()
     MESSAGE("Found OpenCL: FALSE")
     SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
-ENDIF(OPENCL_FOUND)
+ENDIF()
 
 INCLUDE(CheckLanguage)
 CHECK_LANGUAGE(CUDA)
@@ -163,17 +168,7 @@ ELSE(CMAKE_CUDA_COMPILER)
     SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
 ENDIF(CMAKE_CUDA_COMPILER)
 
-# Build the implementations for different platforms
-ADD_SUBDIRECTORY(platforms/reference)
-ADD_SUBDIRECTORY(platforms/common)
-IF(PLUGIN_BUILD_OPENCL_LIB)
-    ADD_SUBDIRECTORY(platforms/opencl)
-ENDIF(PLUGIN_BUILD_OPENCL_LIB)
-IF(PLUGIN_BUILD_CUDA_LIB)
-    ADD_SUBDIRECTORY(platforms/cuda)
-ENDIF(PLUGIN_BUILD_CUDA_LIB)
-
-# Download and configure VkFFT
+# Download and configure VkFFT first
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
 
 IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
@@ -196,9 +191,19 @@ IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
         ENDIF()
     ENDIF()
 
-    # Add VkFFT include directory
+    # Add VkFFT include directory globally
     INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
 ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+
+# Build the implementations for different platforms
+ADD_SUBDIRECTORY(platforms/reference)
+ADD_SUBDIRECTORY(platforms/common)
+IF(PLUGIN_BUILD_OPENCL_LIB)
+    ADD_SUBDIRECTORY(platforms/opencl)
+ENDIF(PLUGIN_BUILD_OPENCL_LIB)
+IF(PLUGIN_BUILD_CUDA_LIB)
+    ADD_SUBDIRECTORY(platforms/cuda)
+ENDIF(PLUGIN_BUILD_CUDA_LIB)
 
 # Build the Python API
 
