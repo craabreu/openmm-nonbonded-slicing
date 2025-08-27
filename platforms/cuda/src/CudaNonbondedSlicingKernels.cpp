@@ -1095,7 +1095,11 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         }
         if (usePmeStream) {
             cuEventRecord(pmeSyncEvent, pmeStream);
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR < 3))
+            cu.restoreDefaultStream();
+#else
             cu.restoreDefaultQueue();
+#endif
         }
     }
     if (!hasOffsets && includeReciprocal) {
