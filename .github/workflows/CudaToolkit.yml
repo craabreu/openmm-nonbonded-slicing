@@ -19,7 +19,7 @@ jobs:
           - python-version: "3.11"
             openmm-version: "8.1"
             cuda-version: "11.8.0"
-            compiler-version: "13.3"
+            compiler-version: "11.4"
 
     steps:
       - name: "Check out"
