@@ -132,6 +132,35 @@ ELSE()
     SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
 ENDIF()
 
+# Set CUDA architectures early to avoid CMake test failures
+IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    # Default to conservative architectures that work with most CUDA versions
+    SET(CMAKE_CUDA_ARCHITECTURES "50;52;60;61;70;75;80;86" CACHE STRING "CUDA architectures to compile for" FORCE)
+ENDIF()
+
+# Help CMake find CUDA compiler automatically in conda environment
+IF(DEFINED ENV{CONDA_PREFIX})
+    SET(CMAKE_CUDA_COMPILER_HINTS
+        $ENV{CONDA_PREFIX}/bin
+        $ENV{CONDA_PREFIX}/bin/nvcc
+    )
+    # Set CUDA compiler search hints
+    SET(CMAKE_CUDA_COMPILER_LAUNCHER $ENV{CONDA_PREFIX}/bin/nvcc)
+ENDIF()
+
+# Try to find CUDA compiler automatically
+IF(DEFINED ENV{CONDA_PREFIX})
+    FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc
+        PATHS $ENV{CONDA_PREFIX}/bin
+        NO_DEFAULT_PATH
+        DOC "CUDA compiler"
+    )
+    IF(NOT CMAKE_CUDA_COMPILER)
+        # Fallback to system search
+        FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc)
+    ENDIF()
+ENDIF()
+
 INCLUDE(CheckLanguage)
 CHECK_LANGUAGE(CUDA)
 
@@ -165,10 +194,8 @@ IF(CMAKE_CUDA_COMPILER)
     # Set CUDA runtime libraries
     SET(CUDA_LIBRARIES "${CUDA_LIB_DIR}/libcudart.so")
     
-    # Set CUDA architectures if not already set
-    IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        SET(CMAKE_CUDA_ARCHITECTURES "50;52;60;61;70;75;80" CACHE STRING "CUDA architectures to compile for")
-    ENDIF()
+     # Log CUDA configuration
+     MESSAGE(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
     
 ELSE(CMAKE_CUDA_COMPILER)
     MESSAGE("Found CUDA: FALSE")
