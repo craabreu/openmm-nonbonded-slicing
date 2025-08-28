@@ -216,7 +216,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         for (int i = 0; i < numberOfSubsets; i++)
             for (int j = i; j < numberOfSubsets; j++) {
                 int slice = j*(j+1)/2+i;
-                sliceEnergies[slice][Coul] += (1 + (i != j))*subsetCharges[i]*subsetCharges[j]*factor;
+                sliceEnergies[slice][Coul] += (i == j ? 1 : 2)*subsetCharges[i]*subsetCharges[j]*factor;
             }
 #endif
     }
