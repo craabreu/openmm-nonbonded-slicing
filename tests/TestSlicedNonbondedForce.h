@@ -1100,31 +1100,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     Context context1(system1, integrator1, platform);
     context1.setPositions(positions);
 
-    CustomExternalForce* backgroundEnergy = new CustomExternalForce("0");
-    backgroundEnergy->setForceGroup(1);
-    if (hasReciprocal) {
-        double alphaEwald;
-
-        if (method == NonbondedForce::Ewald) {
-            double delta = nonbonded->getEwaldErrorTolerance();
-            alphaEwald = sqrt(-log(2 * delta)) / cutoff;
-        }
-        else {
-            int nx, ny, nz;
-            nonbonded->getPMEParametersInContext(context1, alphaEwald, nx, ny, nz);
-        }
-
-        backgroundEnergy->setEnergyFunction(
-            "(scaledCharge^2-totalCharge^2)/" + to_string(8*EPSILON0*pow(L,3)*pow(alphaEwald,2))
-        );
-        backgroundEnergy->addGlobalParameter("totalCharge", totalCharge);
-        backgroundEnergy->addGlobalParameter("scaledCharge", 0.0);
-        backgroundEnergy->addParticle(0);
-
-        system1.addForce(backgroundEnergy);
-        context1.reinitialize(true);
-    }
-
     VerletIntegrator integrator2(0.01);
     Context context2(system2, integrator2, platform);
     context2.setPositions(positions);
@@ -1157,19 +1132,15 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     map<string, double> value;
     value["one"] = 1;
     value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
-    double scaledCharge = 0;
-    for (int k = 0; k < numParticles; k++) {
-        double charge = q(k)*value[particleScale[k].first];
-        nonbonded->setParticleParameters(k, charge, 1, eps*value[particleScale[k].second]);
-        scaledCharge += charge;
-    }
+    for (int k = 0; k < numParticles; k++)
+        nonbonded->setParticleParameters(
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
+        );
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(
             k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
-    if (hasReciprocal && isOpenMM83plus)
-        context1.setParameter("scaledCharge", scaledCharge);
     context2.setParameter(param1, value[param1]);
     context2.setParameter(param2, value[param2]);
 
@@ -1183,19 +1154,15 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["lambda"] = 0.5;
     value["sqrtLambda"] = sqrt(value["lambda"]);
     value["lambdaSq"] = value["lambda"]*value["lambda"];
-    scaledCharge = 0;
-    for (int k = 0; k < numParticles; k++) {
-        double charge = q(k)*value[particleScale[k].first];
-        nonbonded->setParticleParameters(k, charge, 1, eps*value[particleScale[k].second]);
-        scaledCharge += charge;
-    }
+    for (int k = 0; k < numParticles; k++)
+        nonbonded->setParticleParameters(
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
+        );
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(
             k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
-    if (hasReciprocal && isOpenMM83plus)
-        context1.setParameter("scaledCharge", scaledCharge);
     context2.setParameter(param1, value[param1]);
     context2.setParameter(param2, value[param2]);
 
@@ -1215,16 +1182,11 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     // Sum of derivatives
 
-    scaledCharge = 0;
-    for (int k = 0; k < nonbonded->getNumParticles(); k++) {
+    for (int k = 0; k < nonbonded->getNumParticles(); k++)
         nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
-        scaledCharge += includeCoulomb ? q(k) : 0;
-    }
     for (int k = 0; k < nonbonded->getNumExceptions(); k++)
         nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? qiqj : 0, 1, includeLJ ? epsij : 0);
     nonbonded->updateParametersInContext(context1);
-    if (hasReciprocal && isOpenMM83plus)
-        context1.setParameter("scaledCharge", scaledCharge);
     state1 = context1.getState(State::Energy | State::Forces);
     double energy = state1.getPotentialEnergy();
 

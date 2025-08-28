@@ -179,7 +179,7 @@ void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
 void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, double& backgroundEnergy, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
 ) const {
     typedef complex<double> d_complex;
 
@@ -201,17 +201,24 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     // **************************************************************************************
 
     if (includeReciprocal) {
-        double totalCharge = 0.0;
+        vector<double> subsetCharges(numberOfSubsets, 0.0);
         for (int atomID = 0; atomID < numberOfAtoms; atomID++) {
             int subset = atomSubsets[atomID];
-            int slice = subset*(subset + 3)/2;
             double charge = atomParameters[atomID][QIndex];
-            totalCharge += charge;
+            subsetCharges[subset] += charge;
+            int slice = subset*(subset + 3)/2;
             sliceEnergies[slice][Coul] -= ONE_4PI_EPS0*charge*charge*alphaEwald/SQRT_PI;
             if (ljpme)
                 sliceEnergies[slice][vdW] += pow(alphaDispersionEwald, 6.0)*64.0*pow(atomParameters[atomID][SigIndex], 6.0)*pow(atomParameters[atomID][EpsIndex], 2.0)/12.0;
         }
-        backgroundEnergy += totalCharge*totalCharge*factorEwald/(2*EPSILON0*volume);
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+        double factor = factorEwald/(2*EPSILON0*volume);
+        for (int i = 0; i < numberOfSubsets; i++)
+            for (int j = i; j < numberOfSubsets; j++) {
+                int slice = j*(j+1)/2+i;
+                sliceEnergies[slice][Coul] += (1 + (i != j))*subsetCharges[i]*subsetCharges[j]*factor;
+            }
+#endif
     }
 
     // **************************************************************************************
@@ -521,12 +528,12 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, double& backgroundEnergy, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
 ) const {
 
     if (ewald || pme || ljpme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, numberOfSubsets, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
-                          sliceEnergies, backgroundEnergy, includeDirect, includeReciprocal);
+                          sliceEnergies, includeDirect, includeReciprocal);
         return;
     }
     if (!includeDirect)

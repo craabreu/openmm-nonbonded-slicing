@@ -174,7 +174,6 @@ class ReferenceSlicedLJCoulombIxn {
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
-         @param backgroundEnergy   the neutralizing background energy
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -182,7 +181,7 @@ class ReferenceSlicedLJCoulombIxn {
 
       void calculatePairIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
-                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, double& backgroundEnergy, bool includeDirect, bool includeReciprocal) const;
+                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 
 private:
       /**---------------------------------------------------------------------------------------
@@ -198,7 +197,6 @@ private:
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
-         @param backgroundEnergy   the neutralizing background energy
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -206,7 +204,7 @@ private:
 
       void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
-                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, double& backgroundEnergy, bool includeDirect, bool includeReciprocal) const;
+                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
 };
 
 } // namespace OpenMM
