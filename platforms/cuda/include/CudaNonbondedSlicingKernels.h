@@ -167,15 +167,6 @@ private:
     CudaArray sliceLambdas;
 
     string getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ);
-
-    vector<float2> double2Tofloat2(vector<double2> input) {
-        vector<float2> output(input.size());
-        transform(
-            input.begin(), input.end(), output.begin(),
-            [](double2 v) -> float2 { return make_float2(v.x, v.y); }
-        );
-        return output;
-    }
 };
 
 class CudaCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

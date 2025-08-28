@@ -46,9 +46,11 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     force->addParticleParameterOffset("p1", 0, -2.0, 0.5, 0.5);
     force->addParticleParameterOffset("p2", 1, 1.0, 1.0, 2.0);
     force->addExceptionParameterOffset("p1", 1, 0.5, 0.5, 1.5);
+    force->setReciprocalSpaceForceGroup(2);
 
-    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 3);
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 1);
     sliced->setForceGroup(1);
+    sliced->setReciprocalSpaceForceGroup(3);
 
     int N = force->getNumParticles();
 

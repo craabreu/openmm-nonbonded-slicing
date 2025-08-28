@@ -292,9 +292,14 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     sliceLambdas.initialize(cu, numSlices, 2*sizeOfReal, "sliceLambdas");
     if (cu.getUseDoublePrecision())
         sliceLambdas.upload(sliceLambdasVec);
-    else
-        sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
-
+    else {
+        vector<float2> sliceLambdasVecFloat(numSlices);
+        for (size_t i = 0; i < numSlices; i++)
+            sliceLambdasVecFloat[i] = make_float2(
+                static_cast<float>(sliceLambdasVec[i].x), static_cast<float>(sliceLambdasVec[i].y)
+            );
+        sliceLambdas.upload(sliceLambdasVecFloat);
+    }
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
@@ -563,10 +568,10 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             if (usePmeStream) {
                 pmeDefines["USE_PME_STREAM"] = "1";
                 cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
-                // CHECK_RESULT(cuEventCreate(&pmeSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
-                // CHECK_RESULT(cuEventCreate(&paramsSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");  // OpenMM 8.0
-                CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
-                CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
+                CHECK_RESULT(cuEventCreate(&pmeSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");
+                CHECK_RESULT(cuEventCreate(&paramsSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");
+                // CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
+                // CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
                 cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                 cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
             }
@@ -916,8 +921,14 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         }
         if (cu.getUseDoublePrecision())
             sliceLambdas.upload(sliceLambdasVec);
-        else
-            sliceLambdas.upload(double2Tofloat2(sliceLambdasVec));
+        else {
+            vector<float2> sliceLambdasVecFloat(numSlices);
+            for (size_t i = 0; i < numSlices; i++)
+                sliceLambdasVecFloat[i] = make_float2(
+                    static_cast<float>(sliceLambdasVec[i].x), static_cast<float>(sliceLambdasVec[i].y)
+                );
+            sliceLambdas.upload(sliceLambdasVecFloat);
+        }
     }
 
     // Update particle and exception parameters.
@@ -985,7 +996,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, sliceScalingParams);
 
         if (usePmeStream)
-            cu.getCurrentStream();
+            cu.setCurrentStream(pmeStream);
 
         // Invert the periodic box vectors.
 
