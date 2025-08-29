@@ -24,16 +24,52 @@ particle in another (or the same) subset *J*.
 
 It is straightforward to slice pairwise Lennard-Jones interactions, as well as the direct-space,
 self-energy, and exclusion/exception parts of the Ewald summation. Therefore, the present section
-focuses on the reciprocal-space part. The goal is to express the reciprocal-space energy as
+focuses on the reciprocal-space and background energy parts.
+
+Sliced Background Energy
+========================
+
+In the case of systems with non-zero net charge, it is necessary to add the energy of
+interaction with a neutralizing background charge. The background energy is given by
+:cite:`Figueirido_1995`
 
 .. math::
 
-    E_{rec} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{rec}_{I,J},
+    E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.
 
-where :math:`E^{rec}_{I,J}` is the reciprocal-space contribution of Slice *I, J*.
+where :math:`Q = \sum_{i=1}^N q_i` is the total charge of the system.
+We can split the total charge into the sum of the charges in each subset,
 
-Reciprocal-Space Energy
-=======================
+.. math::
+
+    Q = \sum_{I=1}^n Q_I,
+
+where :math:`Q_I = \sum_{i \in I} q_i` is the charge of subset *I*.
+
+The goal is to express the background energy as
+
+.. math::
+
+    E_{bg} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{bg}_{I,J},
+
+where :math:`E^{bg}_{I,J}` is the background contribution of Slice *I, J*.
+For this, we rewrite the square of the total charge as
+
+.. math::
+
+    Q^2 = \sum_{I=1}^n \sum_{J=1}^n Q_I Q_J.
+
+Therefore, the background energy of a slice *I, J* is given by
+
+.. math::
+
+    E^{bg}_{I,J} = (2 - \delta_{I,J}) \frac{Q_I Q_J}{8\epsilon_0 V \alpha^2},
+
+where :math:`\delta_{I,J}` is the Kronecker delta. The prefactor :math:`2 - \delta_{I,J}` allows
+us to run the summation over *J* only for :math:`J \geq I`.
+
+Sliced Reciprocal-Space Energy
+==============================
 
 For a simulation box with edge matrix :math:`\mathbf L` containing *N* particles under periodic
 boundary conditions, the standard reciprocal part of the electrostatic potential energy can be
@@ -48,6 +84,7 @@ expressed as
 
 where :math:`\epsilon_0` is the vacuum permittivity,
 :math:`V` is the box volume,
+:math:`\alpha` is the Ewald splitting parameter,
 :math:`\mathbf n \in \mathbb Z^3` is an integer lattice vector,
 :math:`\mathbf k = 2\pi \mathbf L^{-1}{\mathbf n}` is a reciprocal space wave vector,
 :math:`k = \|\mathbf k\|` is the norm of :math:`\mathbf k`, and
@@ -75,8 +112,13 @@ so that we can write
     E_{rec} = \frac{2\pi}{\epsilon_0 V}
     \sum_{\mathbf n \neq \mathbf 0}\frac{e^{-\frac{k^2}{4\alpha^2}}}{k^2} |S(\mathbf k)|^2.
 
-Sliced Reciprocal-Space Energy
-==============================
+The goal is to express the reciprocal-space energy as
+
+.. math::
+
+    E_{rec} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{rec}_{I,J},
+
+where :math:`E^{rec}_{I,J}` is the reciprocal-space contribution of Slice *I, J*.
 
 The structure factor of a subset *I* can be computed as
 
@@ -98,13 +140,9 @@ numbers *x* and *y*. It is now clear that the energy of a slice *I, J* should be
 
 .. math::
 
-    E^{rec}_{I,J} = \frac{2\pi\alpha_{I,J}}{\epsilon_0 V}
+    E^{rec}_{I,J} = (2-\delta_{I,J}) \frac{2\pi}{\epsilon_0 V}
     \sum_{\mathbf n \neq \mathbf 0} \frac{e^{-\frac{k^2}{4\alpha^2}}}{k^2}
-    S_I(\mathbf k) \cdot S_J(\mathbf k),
-
-where a prefactor :math:`\alpha_{I,J} = 2-\delta_{I,J}` accounts for the fact that
-:math:`S_I(\mathbf k) \cdot S_J(\mathbf k)` shows up twice in the :math:`E^{rec}_{I,J}` definition
-whenever :math:`I \neq J`.
+    S_I(\mathbf k) \cdot S_J(\mathbf k).
 
 Sliced PME Implementation
 =========================
@@ -119,3 +157,4 @@ package vkFFT_ or cuFFT_ to speed-up parallel FFT calculations via batched trans
 
 .. _vkFFT:                https://github.com/DTolm/VkFFT
 .. _cuFFT:                https://docs.nvidia.com/cuda/cufft
+

@@ -14,6 +14,7 @@
 #include "openmm/Context.h"
 #include "openmm/reference/ReferencePlatform.h"
 #include "openmm/HarmonicBondForce.h"
+#include "openmm/CustomExternalForce.h"
 #include "openmm/System.h"
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
@@ -28,6 +29,8 @@ using namespace std;
 const double TOL = 1e-4;
 
 void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
+    bool hasReciprocal = (method == NonbondedForce::Ewald) || (method == NonbondedForce::PME) || (method == NonbondedForce::LJPME);
+
     NonbondedForce* force = new NonbondedForce();
     force->setNonbondedMethod(method);
     force->addParticle(0.0, 1.0, 0.5);
@@ -40,12 +43,14 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
     force->addException(0, 1, 1.0, 1.5, 1.0);
     force->addGlobalParameter("p1", 0.5);
     force->addGlobalParameter("p2", 1.0);
-    force->addParticleParameterOffset("p1", 0, 3.0, 0.5, 0.5);
+    force->addParticleParameterOffset("p1", 0, -2.0, 0.5, 0.5);
     force->addParticleParameterOffset("p2", 1, 1.0, 1.0, 2.0);
     force->addExceptionParameterOffset("p1", 1, 0.5, 0.5, 1.5);
+    force->setReciprocalSpaceForceGroup(2);
 
-    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 3);
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*force, 1);
     sliced->setForceGroup(1);
+    sliced->setReciprocalSpaceForceGroup(3);
 
     int N = force->getNumParticles();
 
@@ -603,7 +608,9 @@ void testDispersionCorrection() {
     int numParticles = gridSize*gridSize*gridSize;
     double boxSize = gridSize*0.7;
     double cutoff = boxSize/3;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
+    double tol = (
+        platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double"
+    ) ? 1e-4 : 1e-3;
     System system;
     VerletIntegrator integrator(0.01);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(1);
@@ -808,11 +815,21 @@ void testTwoForces() {
     positions[1] = Vec3(1.5, 0, 0);
     context.setPositions(positions);
     State state1 = context.getState(State::Energy, false, 1<<0);
-    assertEqualTo(ONE_4PI_EPS0*(-1.5*0.5)/1.5 + 4.0*sqrt(1.2*1.0)*(pow(1.0/1.5, 12.0)-pow(1.0/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
+    assertEqualTo(
+        ONE_4PI_EPS0*(-1.5*0.5)/1.5 + 4.0*sqrt(1.2*1.0)*(pow(1.0/1.5, 12.0)-pow(1.0/1.5, 6.0)),
+        state1.getPotentialEnergy(),
+        TOL
+    );
     State state2 = context.getState(State::Energy, false, 1<<1);
-    assertEqualTo(ONE_4PI_EPS0*(0.4*0.3)/1.5 + 4.0*sqrt(0.5*1.0)*(pow(1.6/1.5, 12.0)-pow(1.6/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
+    assertEqualTo(
+        ONE_4PI_EPS0*(0.4*0.3)/1.5 + 4.0*sqrt(0.5*1.0)*(pow(1.6/1.5, 12.0)-pow(1.6/1.5, 6.0)),
+        state2.getPotentialEnergy(),
+        TOL
+    );
     State state = context.getState(State::Energy);
-    assertEqualTo(state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL);
+    assertEqualTo(
+        state1.getPotentialEnergy()+state2.getPotentialEnergy(), state.getPotentialEnergy(), TOL
+    );
 
     // Try modifying them and see if they're still correct.
 
@@ -821,9 +838,17 @@ void testTwoForces() {
     nb2->setParticleParameters(0, 0.5, 1.6, 0.6);
     nb2->updateParametersInContext(context);
     state1 = context.getState(State::Energy, false, 1<<0);
-    assertEqualTo(ONE_4PI_EPS0*(-1.2*0.5)/1.5 + 4.0*sqrt(1.4*1.0)*(pow(1.05/1.5, 12.0)-pow(1.05/1.5, 6.0)), state1.getPotentialEnergy(), TOL);
+    assertEqualTo(
+        ONE_4PI_EPS0*(-1.2*0.5)/1.5 + 4.0*sqrt(1.4*1.0)*(pow(1.05/1.5, 12.0)-pow(1.05/1.5, 6.0)),
+        state1.getPotentialEnergy(),
+        TOL
+    );
     state2 = context.getState(State::Energy, false, 1<<1);
-    assertEqualTo(ONE_4PI_EPS0*(0.5*0.3)/1.5 + 4.0*sqrt(0.6*1.0)*(pow(1.7/1.5, 12.0)-pow(1.7/1.5, 6.0)), state2.getPotentialEnergy(), TOL);
+    assertEqualTo(
+        ONE_4PI_EPS0*(0.5*0.3)/1.5 + 4.0*sqrt(0.6*1.0)*(pow(1.7/1.5, 12.0)-pow(1.7/1.5, 6.0)),
+        state2.getPotentialEnergy(),
+        TOL
+    );
 
     // Make sure it also works with PME.
 
@@ -987,6 +1012,8 @@ void testDirectAndReciprocal() {
 void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool lj) {
     bool includeLJ = lj;
     bool includeCoulomb = !lj;
+    bool hasReciprocal = method == NonbondedForce::Ewald || method == NonbondedForce::PME || method == NonbondedForce::LJPME;
+    bool isOpenMM83plus = platform.getOpenMMVersion() >= "8.3";
 
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
@@ -1018,6 +1045,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     int M = (int) pow(numMolecules, 1.0/3.0);
     if (M*M*M < numMolecules)
         M++;
+    double totalCharge = 0;
     for (int k = 0; k < numMolecules; k++) {
         int iz = k/(M*M);
         int iy = (k - iz*M*M)/M;
@@ -1029,6 +1057,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         positions[j] = center - delta;
         nonbonded->addParticle(q(i), 1, eps);
         nonbonded->addParticle(q(j), 1, eps);
+        totalCharge += q(i) + q(j);
         if (exceptions)
             nonbonded->addException(i, j, qiqj, 1, epsij);
     }
@@ -1106,9 +1135,13 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["one"] = 1;
     value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
     for (int k = 0; k < numParticles; k++)
-        nonbonded->setParticleParameters(k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
+        nonbonded->setParticleParameters(
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
+        );
     for (int k = 0; k < numExceptions; k++)
-        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]);
+        nonbonded->setExceptionParameters(
+            k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
+        );
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param1, value[param1]);
     context2.setParameter(param2, value[param2]);
@@ -1124,9 +1157,13 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["sqrtLambda"] = sqrt(value["lambda"]);
     value["lambdaSq"] = value["lambda"]*value["lambda"];
     for (int k = 0; k < numParticles; k++)
-        nonbonded->setParticleParameters(k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]);
+        nonbonded->setParticleParameters(
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
+        );
     for (int k = 0; k < numExceptions; k++)
-        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]);
+        nonbonded->setExceptionParameters(
+            k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
+        );
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param1, value[param1]);
     context2.setParameter(param2, value[param2]);
@@ -1170,7 +1207,9 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")) ? 1e-4 : 1e-3;
+    double tol = (
+        platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == string("double")
+    ) ? 1e-4 : 1e-3;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
@@ -1265,7 +1304,11 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
     assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
-    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(
+        state1.getPotentialEnergy(),
+        lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]),
+        tol
+    );
     assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
 
     // Direct space
@@ -1277,7 +1320,11 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
     assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
-    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(
+        state1.getPotentialEnergy(),
+        lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]),
+        tol
+    );
     assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
 
     // // Reciprocal space
@@ -1289,7 +1336,11 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
     assertEqualTo(derivatives1["lambda"], derivatives2["lambdaCoulomb"]+derivatives2["lambdaLJ"], tol);
-    assertEqualTo(state1.getPotentialEnergy(), lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]), tol);
+    assertEqualTo(
+        state1.getPotentialEnergy(),
+        lambda*derivatives1["lambda"]+value*(derivatives1["alpha"]+derivatives1["beta"]),
+        tol
+    );
     assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
 }
 

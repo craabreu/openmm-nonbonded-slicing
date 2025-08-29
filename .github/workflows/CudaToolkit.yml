@@ -1,4 +1,4 @@
-name: MacOS
+name: Linux
 
 on:
   push:
@@ -10,31 +10,37 @@ on:
 
 jobs:
   unix:
-    runs-on: ${{ matrix.os }}
-    name: MacOS (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, Clang ${{ matrix.compiler-version }})
+    runs-on: ubuntu-22.04
+    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, GCC ${{ matrix.compiler-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
-            cuda-version: ""
-            compiler-version: "19.1"
-            python-version: "3.12"
-            openmm-version: "8.3"
+          - python-version: "3.11"
+            openmm-version: "8.1"
+            cuda-version: "11.8.0"
+            compiler-version: "11.4"
 
     steps:
       - name: "Check out"
         uses: actions/checkout@v5
 
-      - name: "Install SDK on MacOS"
-        run: source devtools/scripts/install_macos_sdk.sh
+      - name: "Install CUDA Toolkit"
+        uses: Jimver/cuda-toolkit@v0.2.24
+        id: cuda-toolkit
+        with:
+          cuda: ${{ matrix.cuda-version }}
+          method: 'network'
+
+      - name: "Install AMD OpenCL"
+        run: source devtools/scripts/install_amd_opencl.sh
 
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-${{ matrix.os }}.yml
+          files: devtools/conda-envs/build-cudatoolkit-11.8.yml
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           COMPILER_VERSION: ${{ matrix.compiler-version }}
@@ -44,7 +50,7 @@ jobs:
         name: "Install dependencies with conda"
         with:
           activate-environment: build
-          environment-file: devtools/conda-envs/build-${{ matrix.os }}.yml
+          environment-file: devtools/conda-envs/build-cudatoolkit-11.8.yml
           python-version: ${{ matrix.python-version }}
 
       - name: "List conda packages"
@@ -53,21 +59,13 @@ jobs:
 
       - name: "Configure"
         shell: bash -l {0}
-        env:
-          CC: clang
-          CXX: clang++
         run: |
           mkdir build
           cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPLUGIN_BUILD_CUDA_LIB=OFF
+          cmake ..
 
       - name: "Build"
         shell: bash -l {0}
-        env:
-          CC: clang
-          CXX: clang++
         run: |
           cd build
           make -j2 install
