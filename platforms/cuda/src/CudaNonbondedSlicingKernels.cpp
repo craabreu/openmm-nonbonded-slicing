@@ -483,9 +483,13 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 int slice = sliceIndex(i, i);
                 ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
             }
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR < 3))
             char deviceName[100];
             cuDeviceGetName(deviceName, 100, cu.getDevice());
             usePmeStream = (!cu.getPlatformData().disablePmeStream && string(deviceName) != "GeForce GTX 980"); // Using a separate stream is slower on GTX 980
+#else
+            usePmeStream = false;
+#endif
             map<string, string> pmeDefines;
             pmeDefines["PME_ORDER"] = cu.intToString(PmeOrder);
             pmeDefines["NUM_ATOMS"] = cu.intToString(numParticles);
@@ -570,8 +574,6 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 cuStreamCreate(&pmeStream, CU_STREAM_NON_BLOCKING);
                 CHECK_RESULT(cuEventCreate(&pmeSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");
                 CHECK_RESULT(cuEventCreate(&paramsSyncEvent, cu.getEventFlags()), "Error creating event for SlicedNonbondedForce");
-                // CHECK_RESULT(cuEventCreate(&pmeSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
-                // CHECK_RESULT(cuEventCreate(&paramsSyncEvent, CU_EVENT_DISABLE_TIMING), "Error creating event for SlicedNonbondedForce");
                 cu.addPreComputation(new SyncStreamPreComputation(cu, pmeStream, pmeSyncEvent, recipForceGroup));
                 cu.addPostComputation(new SyncStreamPostComputation(cu, pmeSyncEvent, recipForceGroup));
             }
@@ -995,8 +997,10 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         if (!addEnergy->isInitialized())
             addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, sliceScalingParams);
 
+#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR < 3))
         if (usePmeStream)
             cu.setCurrentStream(pmeStream);
+#endif
 
         // Invert the periodic box vectors.
 
