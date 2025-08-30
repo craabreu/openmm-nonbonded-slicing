@@ -264,7 +264,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     numSubsets = force.getNumSubsets();
     numSlices = force.getNumSlices();
     sliceLambdasVec.resize(numSlices, make_double2(1, 1));
-    subsetSelfEnergy.resize(numSlices, make_double2(0, 0));
+    subsetSelfEnergy.resize(numSubsets, make_double2(0, 0));
+    sliceBackgroundEnergyVolume.resize(numSlices, 0.0);
     sliceScalingParams.resize(numSlices, ScalingParameterInfo());
 
     subsetsVec.resize(cu.getPaddedNumAtoms(), 0);
@@ -295,9 +296,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     else {
         vector<float2> sliceLambdasVecFloat(numSlices);
         for (size_t i = 0; i < numSlices; i++)
-            sliceLambdasVecFloat[i] = make_float2(
-                static_cast<float>(sliceLambdasVec[i].x), static_cast<float>(sliceLambdasVec[i].y)
-            );
+            sliceLambdasVecFloat[i] = make_float2(sliceLambdasVec[i].x, sliceLambdasVec[i].y);
         sliceLambdas.upload(sliceLambdasVecFloat);
     }
     // Identify which exceptions are 1-4 interactions.
@@ -385,9 +384,12 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     alpha = 0;
     ewaldSelfEnergy = 0.0;
+    backgroundEnergyVolume = 0.0;
     map<string, string> paramsDefines;
     paramsDefines["NUM_SUBSETS"] = cu.intToString(numSubsets);
     paramsDefines["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
+    paramsDefines["EPSILON0"] = cu.doubleToString(EPSILON0);
+    paramsDefines["WORK_GROUP_SIZE"] = cu.intToString(CudaContext::ThreadBlockSize);
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
     if (hasOffsets)
         paramsDefines["HAS_OFFSETS"] = "1";
@@ -415,6 +417,17 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             for (int i = 0; i < numSubsets; i++)
                 ewaldSelfEnergy += sliceLambdasVec[sliceIndex(i, i)].x*subsetSelfEnergy[i].x;
 
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+            vector<double> subsetCharges(numSubsets, 0.0);
+            for (int i = 0; i < numParticles; i++)
+                subsetCharges[subsetsVec[i]] += baseParticleParamVec[i].x;
+            for (int i = 0; i < numSubsets; i++)
+                for (int j = i; j < numSubsets; j++)
+                    sliceBackgroundEnergyVolume[sliceIndex(i, j)] -= (i == j ? 1.0 : 2.0) * subsetCharges[i]*subsetCharges[j]/(8*EPSILON0*alpha*alpha);
+            for (int slice = 0; slice < numSlices; slice++)
+                backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
+#endif
+    
             // Create the reciprocal space kernels.
 
             map<string, string> replacements;
@@ -483,6 +496,18 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 int slice = sliceIndex(i, i);
                 ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
             }
+
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+            vector<double> subsetCharges(numSubsets, 0.0);
+            for (int i = 0; i < numParticles; i++)
+                subsetCharges[subsetsVec[i]] += baseParticleParamVec[i].x;
+            for (int i = 0; i < numSubsets; i++)
+                for (int j = i; j < numSubsets; j++)
+                    sliceBackgroundEnergyVolume[sliceIndex(i, j)] -= (i == j ? 1.0 : 2.0) * subsetCharges[i]*subsetCharges[j]/(8*EPSILON0*alpha*alpha);
+            for (int slice = 0; slice < numSlices; slice++)
+                backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
+#endif
+
 #if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR < 3))
             char deviceName[100];
             cuDeviceGetName(deviceName, 100, cu.getDevice());
@@ -762,7 +787,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     replacements["COMPUTE_DERIVATIVES"] = code.str();
     source = cu.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
-        cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), true);
+        cu.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), numParticles > 3000, true);
 
     // Initialize the exceptions.
 
@@ -876,6 +901,8 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     globalParams.initialize(cu, max((int) paramValues.size(), 1), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "globalParams");
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
+    chargeBuffer.initialize(cu, numSubsets*cu.getNumThreadBlocks(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "chargeBuffer");
+    cu.clearBuffer(chargeBuffer);
     recomputeParams = true;
 
     // Add post-computation for dispersion correction.
@@ -888,6 +915,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
     CUmodule module = cu.createModule(CommonNonbondedSlicingKernelSources::nonbondedParameters, paramsDefines);
     computeParamsKernel = cu.getKernel(module, "computeParameters");
     computeExclusionParamsKernel = cu.getKernel(module, "computeExclusionParameters");
+    computePlasmaCorrectionKernel = cu.getKernel(module, "computePlasmaCorrection");
     info = new ForceInfo(force);
     cu.addForce(info);
 }
@@ -921,14 +949,17 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             int slice = sliceIndex(i, i);
             ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
         }
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+        backgroundEnergyVolume = 0.0;
+        for (int slice = 0; slice < numSlices; slice++)
+            backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
+#endif
         if (cu.getUseDoublePrecision())
             sliceLambdas.upload(sliceLambdasVec);
         else {
             vector<float2> sliceLambdasVecFloat(numSlices);
             for (size_t i = 0; i < numSlices; i++)
-                sliceLambdasVecFloat[i] = make_float2(
-                    static_cast<float>(sliceLambdasVec[i].x), static_cast<float>(sliceLambdasVec[i].y)
-                );
+                sliceLambdasVecFloat[i] = make_float2(sliceLambdasVec[i].x, sliceLambdasVec[i].y);
             sliceLambdas.upload(sliceLambdasVecFloat);
         }
     }
@@ -947,13 +978,17 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
         recomputeParams = true;
         globalParams.upload(paramValues, true);
     }
-    double energy = (includeReciprocal ? ewaldSelfEnergy : 0.0);
+
+    double4 boxSize = cu.getPeriodicBoxSize();
+    double volume = boxSize.x*boxSize.y*boxSize.z;
+    double energy = (includeReciprocal ? ewaldSelfEnergy + backgroundEnergyVolume/volume : 0.0);
     if (recomputeParams || hasOffsets) {
         int computeSelfEnergy = (includeEnergy && includeReciprocal);
         int numAtoms = cu.getPaddedNumAtoms();
         vector<void*> paramsArgs = {&cu.getEnergyBuffer().getDevicePointer(), &computeSelfEnergy, &globalParams.getDevicePointer(), &numAtoms,
                 &baseParticleParams.getDevicePointer(), &cu.getPosq().getDevicePointer(), &charges.getDevicePointer(), &sigmaEpsilon.getDevicePointer(),
-                &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer(), &subsets.getDevicePointer(), &sliceLambdas.getDevicePointer()};
+                &particleParamOffsets.getDevicePointer(), &particleOffsetIndices.getDevicePointer(), &subsets.getDevicePointer(), &sliceLambdas.getDevicePointer(),
+                &chargeBuffer.getDevicePointer()};
         int numExceptions;
         if (exceptionParams.isInitialized()) {
             numExceptions = exceptionParams.getSize();
@@ -976,8 +1011,30 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             cuEventRecord(paramsSyncEvent, cu.getCurrentStream());
             cuStreamWaitEvent(pmeStream, paramsSyncEvent, 0);
         }
-        if (hasOffsets)
-            energy = 0.0; // The Ewald self energy was computed in the kernel.
+        if (hasOffsets) {
+            // The Ewald self energy was computed in the kernel.
+
+            energy = 0.0;
+
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+            if (includeEnergy && includeReciprocal && (pmeGrid1.isInitialized() || cosSinSums.isInitialized())) {
+                // Invoke a kernel to compute the correction for the neutralizing plasma.
+
+                double4 boxSize = cu.getPeriodicBoxSize();
+                if (cu.getUseDoublePrecision()) {
+                    double volume = boxSize.x*boxSize.y*boxSize.z;
+                    vector<void*> correctionArgs = {&chargeBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &alpha, &volume};
+                    cu.executeKernel(computePlasmaCorrectionKernel, &correctionArgs[0], CudaContext::ThreadBlockSize, CudaContext::ThreadBlockSize);
+                }
+                else {
+                    float alphaFloat = (float) alpha;
+                    float volume = boxSize.x*boxSize.y*boxSize.z;
+                    vector<void*> correctionArgs = {&chargeBuffer.getDevicePointer(), &cu.getEnergyBuffer().getDevicePointer(), &alphaFloat, &volume};
+                    cu.executeKernel(computePlasmaCorrectionKernel, &correctionArgs[0], CudaContext::ThreadBlockSize, CudaContext::ThreadBlockSize);
+                }
+             }
+#endif
+        }
         recomputeParams = false;
     }
 
@@ -1126,6 +1183,15 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
             if (doLJPME && info.hasDerivativeLJ)
                 energyParamDerivs[info.nameLJ] += subsetSelfEnergy[i].y;
         }
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+        double4 boxSize = cu.getPeriodicBoxSizeDouble();
+        double volume = boxSize.x*boxSize.y*boxSize.z;
+        for (int slice = 0; slice < numSlices; slice++) {
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            if (info.hasDerivativeCoulomb)
+                energyParamDerivs[info.nameCoulomb] += sliceBackgroundEnergyVolume[slice]/volume;
+        }
+#endif
     }
     return energy;
 }
@@ -1149,6 +1215,7 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
     for (int i = 0; i < force.getNumParticles(); i++)
         subsetsVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetsVec);
+    sliceBackgroundEnergyVolume.assign(numSlices, 0.0);
     set<int> exceptionsWithOffsets;
     for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
         string param;
@@ -1201,6 +1268,7 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
     // Compute other values.
 
     ewaldSelfEnergy = 0.0;
+    backgroundEnergyVolume = 0.0;
     subsetSelfEnergy.assign(numSubsets, make_double2(0, 0));
     if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
         if (cu.getContextIndex() == 0) {
@@ -1213,6 +1281,19 @@ void CudaCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& co
                 int slice = sliceIndex(i, i);
                 ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
             }
+#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
+            vector<double> subsetCharges(numSubsets, 0.0);
+            for (int i = 0; i < force.getNumParticles(); i++)
+                subsetCharges[subsetsVec[i]] += baseParticleParamVec[i].x;
+            for (int i = 0; i < force.getNumSubsets(); i++) {
+                for (int j = i; j < force.getNumSubsets(); j++) {
+                    int slice = sliceIndex(i, j);
+                    sliceBackgroundEnergyVolume[slice] -= (i==j ? 1.0 : 2.0)*subsetCharges[i]*subsetCharges[j]/(8*EPSILON0*alpha*alpha);
+                }
+            }
+            for (int slice = 0; slice < numSlices; slice++)
+                backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
+#endif
         }
     }
     if (force.getUseDispersionCorrection() && cu.getContextIndex() == 0 && (nonbondedMethod == CutoffPeriodic || nonbondedMethod == Ewald || nonbondedMethod == PME))

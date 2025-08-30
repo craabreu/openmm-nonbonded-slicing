@@ -1012,8 +1012,6 @@ void testDirectAndReciprocal() {
 void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool lj) {
     bool includeLJ = lj;
     bool includeCoulomb = !lj;
-    bool hasReciprocal = method == NonbondedForce::Ewald || method == NonbondedForce::PME || method == NonbondedForce::LJPME;
-    bool isOpenMM83plus = platform.getOpenMMVersion() >= "8.3";
 
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
@@ -1045,7 +1043,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     int M = (int) pow(numMolecules, 1.0/3.0);
     if (M*M*M < numMolecules)
         M++;
-    double totalCharge = 0;
     for (int k = 0; k < numMolecules; k++) {
         int iz = k/(M*M);
         int iy = (k - iz*M*M)/M;
@@ -1057,7 +1054,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         positions[j] = center - delta;
         nonbonded->addParticle(q(i), 1, eps);
         nonbonded->addParticle(q(j), 1, eps);
-        totalCharge += q(i) + q(j);
         if (exceptions)
             nonbonded->addException(i, j, qiqj, 1, epsij);
     }
@@ -1068,13 +1064,13 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         if (genrand_real2(sfmt) < 0.5)
             sliced->setParticleSubset(k, 1);
 
-    string param1 = includeCoulomb ? "lambda" : "sqrtLambda";
-    sliced->addGlobalParameter(param1, 1);
-    sliced->addScalingParameter(param1, 0, 1, includeCoulomb, includeLJ);
+    string param01 = includeCoulomb ? "lambda" : "sqrtLambda";
+    sliced->addGlobalParameter(param01, 1);
+    sliced->addScalingParameter(param01, 0, 1, includeCoulomb, includeLJ);
 
-    string param2 = includeCoulomb ? "lambdaSq" : "lambda";
-    sliced->addGlobalParameter(param2, 1);
-    sliced->addScalingParameter(param2, 1, 1, includeCoulomb, includeLJ);
+    string param11 = includeCoulomb ? "lambdaSq" : "lambda";
+    sliced->addGlobalParameter(param11, 1);
+    sliced->addScalingParameter(param11, 1, 1, includeCoulomb, includeLJ);
 
     system1.addForce(nonbonded);
     system2.addForce(sliced);
@@ -1093,7 +1089,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         int si = sliced->getParticleSubset(i);
         int sj = sliced->getParticleSubset(j);
         if (si != sj || si == 1) {
-            string parameter = si != sj ? param1 : param2;
+            string parameter = si != sj ? param01 : param11;
             exceptionScale[k] = make_pair(includeCoulomb ? parameter : "one", includeLJ ? parameter : "one");
         }
     }
@@ -1143,8 +1139,25 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
             k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
-    context2.setParameter(param1, value[param1]);
-    context2.setParameter(param2, value[param2]);
+    context2.setParameter(param01, value[param01]);
+    context2.setParameter(param11, value[param11]);
+
+    // Direct space
+
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+
+    // Reciprocal space
+
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+
+    // Overall
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
@@ -1165,8 +1178,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
             k, 2*k, 2*k+1, qiqj*value[exceptionScale[k].first], 1, epsij*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
-    context2.setParameter(param1, value[param1]);
-    context2.setParameter(param2, value[param2]);
+    context2.setParameter(param01, value[param01]);
+    context2.setParameter(param11, value[param11]);
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
@@ -1175,12 +1188,12 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     // Derivatives
 
-    sliced->addScalingParameterDerivative(param1);
-    sliced->addScalingParameterDerivative(param2);
+    sliced->addScalingParameterDerivative(param01);
+    sliced->addScalingParameterDerivative(param11);
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     map<string, double> derivatives = state2.getEnergyParameterDerivatives();
-    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param1]+derivatives[param2], tol);
+    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param01]+derivatives[param11], tol);
 
     // Sum of derivatives
 
@@ -1198,7 +1211,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     context2.reinitialize(true);
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     derivatives = state2.getEnergyParameterDerivatives();
-    double sum = derivatives[param1]+derivatives[param2]+derivatives["remainder"];
+    double sum = derivatives[param01]+derivatives[param11]+derivatives["remainder"];
     assertEqualTo(energy, sum, tol);
 }
 
@@ -1355,7 +1368,6 @@ int main(int argc, char* argv[]) {
         NonbondedForce::PME,
         NonbondedForce::LJPME
     };
-    vector <bool> booleanValues = {false, true};
     OpenMM_SFMT::SFMT sfmt;
     init_gen_rand(0, sfmt);
     try {
@@ -1380,8 +1392,8 @@ int main(int argc, char* argv[]) {
         testEwaldExceptions();
         testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
-            for (auto exceptions : booleanValues) {
-                for (auto lj : booleanValues)
+            for (auto exceptions : {false, true}) {
+                for (auto lj : {false, true})
                     testNonbondedSlicing(sfmt, method, exceptions, lj);
                 testScalingParameterSeparation(sfmt, method, exceptions);
             }

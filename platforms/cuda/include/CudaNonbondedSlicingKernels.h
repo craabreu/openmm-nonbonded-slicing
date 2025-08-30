@@ -123,12 +123,13 @@ private:
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
     CudaArray ljpmeEnergyBuffer;
+    CudaArray chargeBuffer;
     CudaSort* sort;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
     CudaFFT3D* dispersionFft;
-    CUfunction computeParamsKernel, computeExclusionParamsKernel;
+    CUfunction computeParamsKernel, computeExclusionParamsKernel, computePlasmaCorrectionKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;
     CUfunction pmeGridIndexKernel;
@@ -149,7 +150,7 @@ private:
     CudaArray exceptionSlices;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha, backgroundEnergyVolume;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
@@ -160,7 +161,7 @@ private:
     int numSubsets, numSlices;
     bool hasDerivatives;
     vector<int> subsetsVec;
-    vector<double> dispersionCoefficients;
+    vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;
     vector<ScalingParameterInfo> sliceScalingParams;
     CudaArray subsets;

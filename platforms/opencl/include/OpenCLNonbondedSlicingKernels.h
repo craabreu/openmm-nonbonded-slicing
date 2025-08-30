@@ -18,7 +18,6 @@
 #include "openmm/opencl/OpenCLArray.h"
 #include "openmm/opencl/OpenCLSort.h"
 #include <vector>
-#include <algorithm>
 
 namespace NonbondedSlicing {
 
@@ -170,15 +169,6 @@ private:
     OpenCLArray sliceLambdas;
 
     string getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ);
-
-    vector<mm_float2> double2Tofloat2(vector<mm_double2> input) {
-        vector<mm_float2> output(input.size());
-        transform(
-            input.begin(), input.end(), output.begin(),
-            [](mm_double2 v) -> mm_float2 { return mm_float2(v.x, v.y); }
-        );
-        return output;
-    }
 };
 
 class OpenCLCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

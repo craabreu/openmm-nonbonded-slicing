@@ -1,6 +1,7 @@
 float4 exceptionParams = PARAMS[index];
-float sliceAsFloat = exceptionParams.w;
-int slice = *((int*) &sliceAsFloat);
+union {int i; float f;} u;
+u.f = exceptionParams.w;
+int slice = u.i;
 real clLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);

@@ -65,9 +65,9 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 #endif
         int j = subsets[exceptionPairs[i].x];
         int k = subsets[exceptionPairs[i].y];
-        int slice = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
-        float sliceAsFloat = *((float*) &slice);
-        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), sliceAsFloat);
+        union {int i; float f;} slice;
+        slice.i = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
+        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), slice.f);
     }
 #endif
     if (includeSelfEnergy) {
@@ -121,9 +121,9 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
 #endif
         int j = subsets[atoms.x];
         int k = subsets[atoms.y];
-        int slice = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
-        float sliceAsFloat = *((float*) &slice);
-        exclusionParams[i] = make_float4((float) (ONE_4PI_EPS0*chargeProd), sigma, epsilon, sliceAsFloat);
+        union {int i; float f;} slice;
+        slice.i = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
+        exclusionParams[i] = make_float4((float) (ONE_4PI_EPS0*chargeProd), sigma, epsilon, slice.f);
     }
 }
 
