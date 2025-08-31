@@ -10,7 +10,6 @@
 
 #include "CudaNonbondedSlicingKernels.h"
 #include "CudaNonbondedSlicingKernelSources.h"
-#include "CommonNonbondedSlicingKernelSources.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
 #include "openmm/NonbondedForce.h"
@@ -140,7 +139,7 @@ public:
         replacements["USE_LJPME"] = doLJPME ? "1" : "0";
         replacements["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
         replacements["ADD_DERIVATIVES"] = code.str();
-        string source = cu.replaceStrings(CommonNonbondedSlicingKernelSources::pmeAddEnergy, replacements);
+        string source = cu.replaceStrings(CudaNonbondedSlicingKernelSources::pmeAddEnergy, replacements);
         CUmodule module = cu.createModule(source, defines);
         addEnergyKernel = cu.getKernel(module, "addEnergy");
         arguments.clear();
@@ -441,7 +440,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             replacements["EXP_COEFFICIENT"] = cu.doubleToString(-1.0/(4.0*alpha*alpha));
             replacements["ONE_4PI_EPS0"] = cu.doubleToString(ONE_4PI_EPS0);
             replacements["M_PI"] = cu.doubleToString(M_PI);
-            CUmodule module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+CommonNonbondedSlicingKernelSources::ewald, replacements);
+            CUmodule module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+CudaNonbondedSlicingKernelSources::ewald, replacements);
             ewaldSumsKernel = cu.getKernel(module, "calculateEwaldCosSinSums");
             ewaldForcesKernel = cu.getKernel(module, "calculateEwaldForces");
             int elementSize = (cu.getUseDoublePrecision() ? sizeof(double2) : sizeof(float2));
@@ -533,7 +532,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 pmeDefines["USE_PME_STREAM"] = "1";
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            CUmodule module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+cu.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
+            CUmodule module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+cu.replaceStrings(CudaNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
             pmeGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");
             pmeSpreadChargeKernel = cu.getKernel(module, "gridSpreadCharge");
             pmeConvolutionKernel = cu.getKernel(module, "reciprocalConvolution");
@@ -552,7 +551,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
                 pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
                 if (cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces)
                     pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
-                module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+CommonNonbondedSlicingKernelSources::pme, pmeDefines);
+                module = cu.createModule(realToFixedPoint+CudaNonbondedSlicingKernelSources::vectorOps+CudaNonbondedSlicingKernelSources::pme, pmeDefines);
                 pmeDispersionFinishSpreadChargeKernel = cu.getKernel(module, "finishSpreadCharge");
                 pmeDispersionGridIndexKernel = cu.getKernel(module, "findAtomGridIndex");
                 pmeDispersionSpreadChargeKernel = cu.getKernel(module, "gridSpreadCharge");
@@ -744,13 +743,13 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
             }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
-                cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
+                cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CudaNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
         }
     }
 
     // Add the interaction to the default nonbonded kernel.
 
-    string source = cu.replaceStrings(CommonNonbondedSlicingKernelSources::coulombLennardJones, defines);
+    string source = cu.replaceStrings(CudaNonbondedSlicingKernelSources::coulombLennardJones, defines);
     charges.initialize(cu, cu.getPaddedNumAtoms(), cu.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "charges");
     baseParticleParams.initialize<float4>(cu, cu.getPaddedNumAtoms(), "baseParticleParams");
     baseParticleParams.upload(baseParticleParamVec);
@@ -830,7 +829,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
         }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())
-            cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
+            cu.getBondedUtilities().addInteraction(atoms, cu.replaceStrings(CudaNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
     }
 
     // Initialize parameter offsets.
@@ -912,7 +911,7 @@ void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const 
 
     // Initialize the kernel for updating parameters.
 
-    CUmodule module = cu.createModule(CommonNonbondedSlicingKernelSources::nonbondedParameters, paramsDefines);
+    CUmodule module = cu.createModule(CudaNonbondedSlicingKernelSources::nonbondedParameters, paramsDefines);
     computeParamsKernel = cu.getKernel(module, "computeParameters");
     computeExclusionParamsKernel = cu.getKernel(module, "computeExclusionParameters");
     computePlasmaCorrectionKernel = cu.getKernel(module, "computePlasmaCorrection");
