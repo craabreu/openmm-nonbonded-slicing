@@ -18,7 +18,6 @@
 #include "openmm/opencl/OpenCLArray.h"
 #include "openmm/opencl/OpenCLSort.h"
 #include <vector>
-#include <algorithm>
 
 namespace NonbondedSlicing {
 
@@ -120,13 +119,14 @@ private:
     OpenCLArray pmeAtomGridIndex;
     OpenCLArray pmeEnergyBuffer;
     OpenCLArray ljpmeEnergyBuffer;
+    OpenCLArray chargeBuffer;
     OpenCLSort* sort;
     cl::CommandQueue pmeQueue;
     cl::Event pmeSyncEvent;
     OpenCLVkFFT3D* fft;
     OpenCLVkFFT3D* dispersionFft;
     AddEnergyPostComputation* addEnergy;
-    cl::Kernel computeParamsKernel, computeExclusionParamsKernel;
+    cl::Kernel computeParamsKernel, computeExclusionParamsKernel, computePlasmaCorrectionKernel;
     cl::Kernel ewaldSumsKernel;
     cl::Kernel ewaldForcesKernel;
     cl::Kernel pmeAtomRangeKernel;
@@ -152,7 +152,7 @@ private:
     OpenCLArray exceptionSlices;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha, backgroundEnergyVolume;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
     bool hasCoulomb, hasLJ, usePmeQueue, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
@@ -162,22 +162,13 @@ private:
     int numSubsets, numSlices;
     bool hasDerivatives;
     vector<int> subsetsVec;
-    vector<double> dispersionCoefficients;
+    vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
     vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
     vector<ScalingParameterInfo> sliceScalingParams;
     OpenCLArray subsets;
     OpenCLArray sliceLambdas;
 
     string getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ);
-
-    vector<mm_float2> double2Tofloat2(vector<mm_double2> input) {
-        vector<mm_float2> output(input.size());
-        transform(
-            input.begin(), input.end(), output.begin(),
-            [](mm_double2 v) -> mm_float2 { return mm_float2(v.x, v.y); }
-        );
-        return output;
-    }
 };
 
 class OpenCLCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

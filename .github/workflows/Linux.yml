@@ -23,6 +23,14 @@ jobs:
             openmm-version: "8.3"
             cuda-version: "12.9"
             compiler-version: "14.3"
+          - python-version: "3.12"
+            openmm-version: "8.2"
+            cuda-version: "12.4"
+            compiler-version: "12.2"
+          - python-version: "3.11"
+            openmm-version: "8.1"
+            cuda-version: "12.9"
+            compiler-version: "13.3"
 
     steps:
       - name: "Check out"
@@ -72,14 +80,14 @@ jobs:
         run: |
           python -c "import openmm as mm; print('---Loaded---', *mm.pluginLoadedLibNames, '---Failed---', *mm.Platform.getPluginLoadFailures(), sep='\n')"
 
-      # - name: "Run C++ test"
-      #   shell: bash -l {0}
-      #   run: |
-      #     cd build
-      #     ctest --output-on-failure --exclude-regex 'TestCuda'
+      - name: "Run C++ test"
+        shell: bash -l {0}
+        run: |
+          cd build
+          ctest --output-on-failure --exclude-regex 'TestCuda'
 
-      # - name: "Run Python test"
-      #   shell: bash -l {0}
-      #   run: |
-      #     cd build/python/tests
-      #     pytest --verbose -k 'not Cuda' Test*
+      - name: "Run Python test"
+        shell: bash -l {0}
+        run: |
+          cd build/python/tests
+          pytest --verbose -k 'not Cuda' Test*

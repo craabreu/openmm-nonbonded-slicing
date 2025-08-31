@@ -123,12 +123,13 @@ private:
     CudaArray pmeAtomGridIndex;
     CudaArray pmeEnergyBuffer;
     CudaArray ljpmeEnergyBuffer;
+    CudaArray chargeBuffer;
     CudaSort* sort;
     CUstream pmeStream;
     CUevent pmeSyncEvent, paramsSyncEvent;
     CudaFFT3D* fft;
     CudaFFT3D* dispersionFft;
-    CUfunction computeParamsKernel, computeExclusionParamsKernel;
+    CUfunction computeParamsKernel, computeExclusionParamsKernel, computePlasmaCorrectionKernel;
     CUfunction ewaldSumsKernel;
     CUfunction ewaldForcesKernel;
     CUfunction pmeGridIndexKernel;
@@ -149,7 +150,7 @@ private:
     CudaArray exceptionSlices;
     std::vector<std::string> paramNames;
     std::vector<double> paramValues;
-    double ewaldSelfEnergy, alpha, dispersionAlpha;
+    double ewaldSelfEnergy, alpha, dispersionAlpha, backgroundEnergyVolume;
     int interpolateForceThreads;
     int gridSizeX, gridSizeY, gridSizeZ;
     int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
@@ -160,22 +161,13 @@ private:
     int numSubsets, numSlices;
     bool hasDerivatives;
     vector<int> subsetsVec;
-    vector<double> dispersionCoefficients;
+    vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
     vector<double2> sliceLambdasVec, subsetSelfEnergy;
     vector<ScalingParameterInfo> sliceScalingParams;
     CudaArray subsets;
     CudaArray sliceLambdas;
 
     string getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ);
-
-    vector<float2> double2Tofloat2(vector<double2> input) {
-        vector<float2> output(input.size());
-        transform(
-            input.begin(), input.end(), output.begin(),
-            [](double2 v) -> float2 { return make_float2(v.x, v.y); }
-        );
-        return output;
-    }
 };
 
 class CudaCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

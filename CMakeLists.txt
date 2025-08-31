@@ -22,6 +22,7 @@ IF(DEFINED ENV{CONDA_PREFIX})
     STRING(REGEX REPLACE "[^\\.]+([0-9]+\\.[0-9]+).*" "\\1" CONDA_OPENMM_VERSION "${CONDA_OPENMM_VERSION}")
     SET(OPENMM_VERSION ${CONDA_OPENMM_VERSION} CACHE STRING "OpenMM version")
 ELSE(DEFINED ENV{CONDA_PREFIX})
+    MESSAGE(FATAL_ERROR "CONDA_PREFIX is not set. Please set it to the conda environment where OpenMM is installed.")
 ENDIF(DEFINED ENV{CONDA_PREFIX})
 
 MESSAGE(STATUS "OpenMM version: ${OPENMM_VERSION}")
@@ -29,6 +30,10 @@ STRING(REGEX REPLACE "^([0-9]+)\\.[0-9]+.*" "\\1" OPENMM_VERSION_MAJOR "${OPENMM
 STRING(REGEX REPLACE "^[0-9]+\\.([0-9]+).*" "\\1" OPENMM_VERSION_MINOR "${OPENMM_VERSION}")
 MESSAGE(STATUS "OpenMM major version: ${OPENMM_VERSION_MAJOR}")
 MESSAGE(STATUS "OpenMM minor version: ${OPENMM_VERSION_MINOR}")
+IF(OPENMM_VERSION_MAJOR LESS 8)
+    MESSAGE(FATAL_ERROR "OpenMM version must be at least 8.0")
+ENDIF()
+
 ADD_COMPILE_DEFINITIONS(OPENMM_VERSION_MAJOR=${OPENMM_VERSION_MAJOR})
 ADD_COMPILE_DEFINITIONS(OPENMM_VERSION_MINOR=${OPENMM_VERSION_MINOR})
 
@@ -112,20 +117,94 @@ ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
 INCLUDE(CTest)
 
+# Modern OpenCL detection using OpenCLHeaders
+find_package(OpenCLHeaders QUIET)
+if(OpenCLHeaders_FOUND)
+    MESSAGE("Found OpenCL: TRUE")
+    # Set OpenCL variables for compatibility
+    SET(OPENCL_FOUND TRUE)
+    SET(OPENCL_INCLUDE_DIR ${OpenCLHeaders_INCLUDE_DIRS})
+    SET(OPENCL_LIBRARY "OpenCL")
+    SET(PLUGIN_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
+    SET(PLUGIN_BUILD_OPENCL_SUPPRESS_WARNINGS ON CACHE BOOL "Suppress vkFFT deprecated function warnings in OpenCL build")
+ELSE()
+    MESSAGE("Found OpenCL: FALSE")
+    SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
+ENDIF()
+
+# Set CUDA architectures early to avoid CMake test failures
+IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    # Default to conservative architectures that work with most CUDA versions
+    SET(CMAKE_CUDA_ARCHITECTURES "50;52;60;61;70;75;80;86" CACHE STRING "CUDA architectures to compile for" FORCE)
+ENDIF()
+
+# Help CMake find CUDA compiler automatically in conda environment
+IF(DEFINED ENV{CONDA_PREFIX})
+    SET(CMAKE_CUDA_COMPILER_HINTS
+        $ENV{CONDA_PREFIX}/bin
+        $ENV{CONDA_PREFIX}/bin/nvcc
+    )
+    # Set CUDA compiler search hints
+    SET(CMAKE_CUDA_COMPILER_LAUNCHER $ENV{CONDA_PREFIX}/bin/nvcc)
+ENDIF()
+
+# Try to find CUDA compiler automatically
+IF(DEFINED ENV{CONDA_PREFIX})
+    FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc
+        PATHS $ENV{CONDA_PREFIX}/bin
+        NO_DEFAULT_PATH
+        DOC "CUDA compiler"
+    )
+    IF(NOT CMAKE_CUDA_COMPILER)
+        # Fallback to system search
+        FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc)
+    ENDIF()
+ENDIF()
+
+INCLUDE(CheckLanguage)
+CHECK_LANGUAGE(CUDA)
+
+IF(CMAKE_CUDA_COMPILER)
+    ENABLE_LANGUAGE(CUDA)
+    MESSAGE("Found CUDA: TRUE")
+    SET(PLUGIN_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
+    
+    # Find CUDA toolkit directory from compiler path
+    GET_FILENAME_COMPONENT(CUDA_COMPILER_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+    GET_FILENAME_COMPONENT(CUDA_TOOLKIT_ROOT "${CUDA_COMPILER_DIR}/.." ABSOLUTE)
+    
+    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib64")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib64")
+    ELSEIF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib")
+        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
+    ENDIF()
+    
+    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
+        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
+    ELSE()
+        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/include")
+    ENDIF()
+    MESSAGE(STATUS "CUDA_TOOLKIT_INCLUDE: ${CUDA_TOOLKIT_INCLUDE}")
+
+    MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
+    SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
+    
+    # Set CUDA runtime libraries
+    SET(CUDA_LIBRARIES "${CUDA_LIB_DIR}/libcudart.so")
+    
+     # Log CUDA configuration
+     MESSAGE(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    
+ELSE(CMAKE_CUDA_COMPILER)
+    MESSAGE("Found CUDA: FALSE")
+    SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
+ENDIF(CMAKE_CUDA_COMPILER)
+
 # Download and configure VkFFT first
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
 
-FIND_PACKAGE(OPENCL QUIET)
-IF(OPENCL_FOUND)
-    MESSAGE("Found OpenCL: TRUE")
-    SET(PLUGIN_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
-    SET(PLUGIN_BUILD_OPENCL_SUPPRESS_WARNINGS ON CACHE BOOL "Suppress vkFFT deprecated function warnings in OpenCL build")
-ELSE(OPENCL_FOUND)
-    MESSAGE("Found OpenCL: FALSE")
-    SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
-ENDIF(OPENCL_FOUND)
-
-# Setup VkFFT if needed
 IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
     include(ExternalProject)
     SET(VKFFT_VERSION "v1.3.4")
@@ -153,70 +232,12 @@ ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
 # Build the implementations for different platforms
 ADD_SUBDIRECTORY(platforms/reference)
 ADD_SUBDIRECTORY(platforms/common)
-
 IF(PLUGIN_BUILD_OPENCL_LIB)
     ADD_SUBDIRECTORY(platforms/opencl)
 ENDIF(PLUGIN_BUILD_OPENCL_LIB)
-
-INCLUDE(CheckLanguage)
-CHECK_LANGUAGE(CUDA)
-
-IF(CMAKE_CUDA_COMPILER)
-    ENABLE_LANGUAGE(CUDA)
-    MESSAGE("Found CUDA: TRUE")
-    SET(PLUGIN_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
-    
-    # Find CUDA toolkit directory from compiler path
-    GET_FILENAME_COMPONENT(CUDA_COMPILER_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
-    GET_FILENAME_COMPONENT(CUDA_TOOLKIT_ROOT "${CUDA_COMPILER_DIR}/.." ABSOLUTE)
-    
-    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib64")
-        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib64")
-    ELSEIF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib")
-        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib")
-    ELSE()
-        MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
-    ENDIF()
-    
-    MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
-    SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
-    
-    # Set CUDA architectures if not already set
-    IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        SET(CMAKE_CUDA_ARCHITECTURES "35;50;60;70;75;80" CACHE STRING "CUDA architectures to compile for")
-    ENDIF()
-    
+IF(PLUGIN_BUILD_CUDA_LIB)
     ADD_SUBDIRECTORY(platforms/cuda)
-ELSE(CMAKE_CUDA_COMPILER)
-    MESSAGE("Found CUDA: FALSE")
-    SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
-ENDIF(CMAKE_CUDA_COMPILER)
-
-# Download and configure VkFFT
-
-IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
-    include(ExternalProject)
-    SET(VKFFT_VERSION "v1.3.4")
-    SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
-    SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
-    MESSAGE(STATUS "VKFFT_SOURCE_DIR: ${VKFFT_SOURCE_DIR}")
-    MESSAGE(STATUS "VKFFT_INCLUDE_DIR: ${VKFFT_INCLUDE_DIR}")
-
-    # Download VkFFT
-    IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
-        MESSAGE(STATUS "Downloading VkFFT ${VKFFT_VERSION}")
-        EXECUTE_PROCESS(
-            COMMAND git -c advice.detachedHead=false clone --branch ${VKFFT_VERSION} --depth 1 https://github.com/DTolm/VkFFT.git ${VKFFT_SOURCE_DIR}
-            RESULT_VARIABLE GIT_RESULT
-        )
-        IF(NOT GIT_RESULT EQUAL 0)
-            MESSAGE(FATAL_ERROR "Failed to clone VkFFT repository")
-        ENDIF()
-    ENDIF()
-
-    # Add VkFFT include directory
-    INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
-ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+ENDIF(PLUGIN_BUILD_CUDA_LIB)
 
 # Build the Python API
 
