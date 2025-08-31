@@ -1184,7 +1184,7 @@ double CudaCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool in
                 energyParamDerivs[info.nameLJ] += subsetSelfEnergy[i].y;
         }
 #if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
-        double4 boxSize = cu.getPeriodicBoxSizeDouble();
+        double4 boxSize = cu.getPeriodicBoxSize();
         double volume = boxSize.x*boxSize.y*boxSize.z;
         for (int slice = 0; slice < numSlices; slice++) {
             ScalingParameterInfo info = sliceScalingParams[slice];
