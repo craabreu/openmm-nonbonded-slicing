@@ -49,21 +49,43 @@ the class API follows Python’s 0-based indexing.</p>
 subsets or “colors”. This procedure results in <span class="math notranslate nohighlight">\(n(n+1)/2\)</span> slices, distinguished by order-invariant
 pairs of subset indices. Slice <em>I, J</em> comprises all pairs involving a particle in subset <em>I</em> and a
 particle in another (or the same) subset <em>J</em>.</p>
-<figure class="align-default" id="id2">
+<figure class="align-default" id="id3">
 <img alt="_images/logo.png" src="_images/logo.png" />
 <figcaption>
-<p><span class="caption-text">Example: three particle subsets (<span class="subset1">●</span><span class="subset2">●</span><span class="subset3">●</span>) form six energy slices</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Example: three particle subsets (<span class="subset1">●</span><span class="subset2">●</span><span class="subset3">●</span>) form six energy slices</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
 <p>It is straightforward to slice pairwise Lennard-Jones interactions, as well as the direct-space,
 self-energy, and exclusion/exception parts of the Ewald summation. Therefore, the present section
-focuses on the reciprocal-space part. The goal is to express the reciprocal-space energy as</p>
-<div class="math notranslate nohighlight">
-\[E_{rec} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{rec}_{I,J},\]</div>
-<p>where <span class="math notranslate nohighlight">\(E^{rec}_{I,J}\)</span> is the reciprocal-space contribution of Slice <em>I, J</em>.</p>
+focuses on the reciprocal-space and background energy parts.</p>
 </section>
-<section id="reciprocal-space-energy">
-<h2>Reciprocal-Space Energy<a class="headerlink" href="#reciprocal-space-energy" title="Link to this heading">¶</a></h2>
+<section id="sliced-background-energy">
+<h2>Sliced Background Energy<a class="headerlink" href="#sliced-background-energy" title="Link to this heading">¶</a></h2>
+<p>In the case of systems with non-zero net charge, it is necessary to add the energy of
+interaction with a neutralizing background charge. The background energy is given by
+<span id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">1</a>]</span></p>
+<div class="math notranslate nohighlight">
+\[E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.\]</div>
+<p>where <span class="math notranslate nohighlight">\(Q = \sum_{i=1}^N q_i\)</span> is the total charge of the system.
+We can split the total charge into the sum of the charges in each subset,</p>
+<div class="math notranslate nohighlight">
+\[Q = \sum_{I=1}^n Q_I,\]</div>
+<p>where <span class="math notranslate nohighlight">\(Q_I = \sum_{i \in I} q_i\)</span> is the charge of subset <em>I</em>.</p>
+<p>The goal is to express the background energy as</p>
+<div class="math notranslate nohighlight">
+\[E_{bg} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{bg}_{I,J},\]</div>
+<p>where <span class="math notranslate nohighlight">\(E^{bg}_{I,J}\)</span> is the background contribution of Slice <em>I, J</em>.
+For this, we rewrite the square of the total charge as</p>
+<div class="math notranslate nohighlight">
+\[Q^2 = \sum_{I=1}^n \sum_{J=1}^n Q_I Q_J.\]</div>
+<p>Therefore, the background energy of a slice <em>I, J</em> is given by</p>
+<div class="math notranslate nohighlight">
+\[E^{bg}_{I,J} = (2 - \delta_{I,J}) \frac{Q_I Q_J}{8\epsilon_0 V \alpha^2},\]</div>
+<p>where <span class="math notranslate nohighlight">\(\delta_{I,J}\)</span> is the Kronecker delta. The prefactor <span class="math notranslate nohighlight">\(2 - \delta_{I,J}\)</span> allows
+us to run the summation over <em>J</em> only for <span class="math notranslate nohighlight">\(J \geq I\)</span>.</p>
+</section>
+<section id="sliced-reciprocal-space-energy">
+<h2>Sliced Reciprocal-Space Energy<a class="headerlink" href="#sliced-reciprocal-space-energy" title="Link to this heading">¶</a></h2>
 <p>For a simulation box with edge matrix <span class="math notranslate nohighlight">\(\mathbf L\)</span> containing <em>N</em> particles under periodic
 boundary conditions, the standard reciprocal part of the electrostatic potential energy can be
 expressed as</p>
@@ -74,6 +96,7 @@ expressed as</p>
 e^{\text{ⅈ} {\mathbf k}\cdot({\mathbf r}_i - {\mathbf r}_j)},\]</div>
 <p>where <span class="math notranslate nohighlight">\(\epsilon_0\)</span> is the vacuum permittivity,
 <span class="math notranslate nohighlight">\(V\)</span> is the box volume,
+<span class="math notranslate nohighlight">\(\alpha\)</span> is the Ewald splitting parameter,
 <span class="math notranslate nohighlight">\(\mathbf n \in \mathbb Z^3\)</span> is an integer lattice vector,
 <span class="math notranslate nohighlight">\(\mathbf k = 2\pi \mathbf L^{-1}{\mathbf n}\)</span> is a reciprocal space wave vector,
 <span class="math notranslate nohighlight">\(k = \|\mathbf k\|\)</span> is the norm of <span class="math notranslate nohighlight">\(\mathbf k\)</span>, and
@@ -92,9 +115,10 @@ so that we can write</p>
 <div class="math notranslate nohighlight">
 \[E_{rec} = \frac{2\pi}{\epsilon_0 V}
 \sum_{\mathbf n \neq \mathbf 0}\frac{e^{-\frac{k^2}{4\alpha^2}}}{k^2} |S(\mathbf k)|^2.\]</div>
-</section>
-<section id="sliced-reciprocal-space-energy">
-<h2>Sliced Reciprocal-Space Energy<a class="headerlink" href="#sliced-reciprocal-space-energy" title="Link to this heading">¶</a></h2>
+<p>The goal is to express the reciprocal-space energy as</p>
+<div class="math notranslate nohighlight">
+\[E_{rec} = \sum_{I=1}^n \sum_{J=I}^n \lambda^{elec}_{I,J} E^{rec}_{I,J},\]</div>
+<p>where <span class="math notranslate nohighlight">\(E^{rec}_{I,J}\)</span> is the reciprocal-space contribution of Slice <em>I, J</em>.</p>
 <p>The structure factor of a subset <em>I</em> can be computed as</p>
 <div class="math notranslate nohighlight">
 \[S_I(\mathbf k) = \sum_{i \in I} q_i e^{\text{ⅈ} {\mathbf k}\cdot{\mathbf r}_i}.\]</div>
@@ -108,17 +132,14 @@ imaginary terms cancel out, as expected. The reciprocal-space energy then become
 <p>where <span class="math notranslate nohighlight">\(x \cdot y = \text{Re}(x)\text{Re}(y) + \text{Im}(x)\text{Im}(y)\)</span> for two complex
 numbers <em>x</em> and <em>y</em>. It is now clear that the energy of a slice <em>I, J</em> should be calculated by</p>
 <div class="math notranslate nohighlight">
-\[E^{rec}_{I,J} = \frac{2\pi\alpha_{I,J}}{\epsilon_0 V}
+\[E^{rec}_{I,J} = (2-\delta_{I,J}) \frac{2\pi}{\epsilon_0 V}
 \sum_{\mathbf n \neq \mathbf 0} \frac{e^{-\frac{k^2}{4\alpha^2}}}{k^2}
-S_I(\mathbf k) \cdot S_J(\mathbf k),\]</div>
-<p>where a prefactor <span class="math notranslate nohighlight">\(\alpha_{I,J} = 2-\delta_{I,J}\)</span> accounts for the fact that
-<span class="math notranslate nohighlight">\(S_I(\mathbf k) \cdot S_J(\mathbf k)\)</span> shows up twice in the <span class="math notranslate nohighlight">\(E^{rec}_{I,J}\)</span> definition
-whenever <span class="math notranslate nohighlight">\(I \neq J\)</span>.</p>
+S_I(\mathbf k) \cdot S_J(\mathbf k).\]</div>
 </section>
 <section id="sliced-pme-implementation">
 <h2>Sliced PME Implementation<a class="headerlink" href="#sliced-pme-implementation" title="Link to this heading">¶</a></h2>
 <p>Each subset-specific structure factor <span class="math notranslate nohighlight">\(S(\mathbf k)\)</span> can be calculated using the smooth
-Particle Mesh Ewald method <span id="id1">[<a class="reference internal" href="references.html#id2" title="U. Essmann, L. Perera, M. L. Berkowitz, T. Darden, H. Lee, and L. G. Pedersen. A smooth particle mesh ewald method. J. Chem. Phys., 103:8577, 1995. doi:10.1063/1.470117.">1</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
+Particle Mesh Ewald method <span id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">2</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
 all slices. In the case of forces, <em>n</em> additional inverse FFT calculations are necessary.
 Therefore, in a single processor and for a fixed number of particles, the computational effort
 scales approximately linearly with the number of subsets (not the number of slices). In a GPU, as
@@ -158,7 +179,7 @@ package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFF
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Energy Slicing Theory</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#potential-energy-slicing">Potential Energy Slicing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#reciprocal-space-energy">Reciprocal-Space Energy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sliced-background-energy">Sliced Background Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-reciprocal-space-energy">Sliced Reciprocal-Space Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-pme-implementation">Sliced PME Implementation</a></li>
 </ul>
