@@ -4,14 +4,15 @@
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
-        GLOBAL real* RESTRICT chargeBuffer
+        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas, GLOBAL real* RESTRICT chargeBuffer
 #ifdef HAS_EXCEPTIONS
-        , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams, GLOBAL float4* RESTRICT exceptionParams,
-        GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
+        , int numExceptions, GLOBAL const int2* RESTRICT exceptionPairs, GLOBAL const float4* RESTRICT baseExceptionParams,
+        GLOBAL float4* RESTRICT exceptionParams, GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
-        ) {
-    mixed energy = 0;
-    real totalCharge = 0;
+) {
+    mixed clEnergy[NUM_SUBSETS] = {0};
+    mixed ljEnergy[NUM_SUBSETS] = {0};
+    real subsetCharge[NUM_SUBSETS] = {0};
 
     // Compute particle parameters.
     
@@ -33,14 +34,15 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         charge[i] = params.x;
 #endif
         sigmaEpsilon[i] = make_float2(0.5f*params.y, 2*SQRT(params.z));
-        totalCharge += params.x;
-#ifdef HAS_OFFSETS
+#if defined(HAS_OFFSETS) && (defined(INCLUDE_EWALD) || defined(INCLUDE_LJPME))
+    int subset = subsets[i];
     #ifdef INCLUDE_EWALD
-        energy -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
+        clEnergy[subset] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
+        subsetCharge[subset] += params.x;
     #endif
     #ifdef INCLUDE_LJPME
         real sig3 = params.y*params.y*params.y;
-        energy += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
+        ljEnergy[subset] += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
     #endif
 #endif
     }
@@ -60,31 +62,45 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
             params.z += value*offset.z;
         }
 #endif
-        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), 0);
+        int j = subsets[exceptionPairs[i].x];
+        int k = subsets[exceptionPairs[i].y];
+        union {int i; float f;} slice;
+        slice.i = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
+        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), slice.f);
     }
 #endif
-    if (includeSelfEnergy)
+    if (includeSelfEnergy) {
+        mixed energy = 0;
+        for (int j = 0; j < NUM_SUBSETS; j++) {
+            int slice = j*(j+3)/2;
+            energy += sliceLambdas[slice].x*clEnergy[j] + sliceLambdas[slice].y*ljEnergy[j];
+        }
         energyBuffer[GLOBAL_ID] += energy;
+    }
 
     // Record the total charge from particles processed by this block.
 
 #if defined(HAS_OFFSETS) && defined(INCLUDE_EWALD)
-    LOCAL real temp[WORK_GROUP_SIZE];
-    temp[LOCAL_ID] = totalCharge;
+    LOCAL real temp[WORK_GROUP_SIZE][NUM_SUBSETS];
+    for (int subset = 0; subset < NUM_SUBSETS; subset++)
+        temp[LOCAL_ID][subset] = subsetCharge[subset];
     for (int i = 1; i < WORK_GROUP_SIZE; i *= 2) {
         SYNC_THREADS;
         if (LOCAL_ID%(i*2) == 0 && LOCAL_ID+i < WORK_GROUP_SIZE)
-            temp[LOCAL_ID] += temp[LOCAL_ID+i];
+            for (int subset = 0; subset < NUM_SUBSETS; subset++)
+                temp[LOCAL_ID][subset] += temp[LOCAL_ID+i][subset];
     }
     if (LOCAL_ID == 0)
-        chargeBuffer[GROUP_ID] = temp[0];
+        for (int subset = 0; subset < NUM_SUBSETS; subset++)
+            chargeBuffer[GROUP_ID*NUM_SUBSETS + subset] = temp[0][subset];
 #endif
 }
 
 /**
  * Compute parameters for subtracting the reciprocal part of excluded interactions.
  */
-KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge, GLOBAL float2* RESTRICT sigmaEpsilon,
+KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
+        GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL const int* RESTRICT subsets,
         int numExclusions, GLOBAL const int2* RESTRICT exclusionAtoms, GLOBAL float4* RESTRICT exclusionParams) {
     for (int i = GLOBAL_ID; i < numExclusions; i += GLOBAL_SIZE) {
         int2 atoms = exclusionAtoms[i];
@@ -102,7 +118,11 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
         float sigma = 0;
         float epsilon = 0;
 #endif
-        exclusionParams[i] = make_float4((float) (ONE_4PI_EPS0*chargeProd), sigma, epsilon, 0);
+        int j = subsets[atoms.x];
+        int k = subsets[atoms.y];
+        union {int i; float f;} slice;
+        slice.i = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
+        exclusionParams[i] = make_float4((float) (ONE_4PI_EPS0*chargeProd), sigma, epsilon, slice.f);
     }
 }
 
@@ -112,19 +132,28 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
  * This kernel is executed by a single thread block.
  */
 KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-        real alpha, real volume) {
-    LOCAL real temp[WORK_GROUP_SIZE];
-    real sum = 0;
+    real alpha, real volume) {
+    LOCAL real temp[WORK_GROUP_SIZE][NUM_SUBSETS];
+    real sum[NUM_SUBSETS] = {0};
     for (unsigned int index = LOCAL_ID; index < NUM_GROUPS; index += LOCAL_SIZE)
-        sum += chargeBuffer[index];
-    temp[LOCAL_ID] = sum;
+        for (int subset = 0; subset < NUM_SUBSETS; subset++)
+            sum[subset] += chargeBuffer[index*NUM_SUBSETS + subset];
+    for (int subset = 0; subset < NUM_SUBSETS; subset++)
+        temp[LOCAL_ID][subset] = sum[subset];
     for (int i = 1; i < WORK_GROUP_SIZE; i *= 2) {
         SYNC_THREADS;
         if (LOCAL_ID%(i*2) == 0 && LOCAL_ID+i < WORK_GROUP_SIZE)
-            temp[LOCAL_ID] += temp[LOCAL_ID+i];
+            for (int subset = 0; subset < NUM_SUBSETS; subset++)
+                temp[LOCAL_ID][subset] += temp[LOCAL_ID+i][subset];
     }
     if (LOCAL_ID == 0) {
-        real totalCharge = temp[0];
-        energyBuffer[0] -= totalCharge*totalCharge/(8*EPSILON0*volume*alpha*alpha);
+        for (int i = 0; i < NUM_SUBSETS; i++) {
+            real qi = temp[0][i];
+            for (int j = i; j < NUM_SUBSETS; j++) {
+                real qj = temp[0][j];
+                int slice = j*(j+1)/2+i;
+                energyBuffer[slice] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
+            }
+        }
     }
 }

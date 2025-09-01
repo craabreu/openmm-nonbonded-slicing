@@ -1,4 +1,9 @@
 const float4 exclusionParams = PARAMS[index];
+union {int i; float f;} u;
+u.f = exclusionParams.w;
+int slice = u.i;
+real clLambda = LAMBDAS[slice].x;
+real ljLambda = LAMBDAS[slice].y;
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if USE_PERIODIC
     APPLY_PERIODIC_TO_DELTA(delta)
@@ -9,15 +14,17 @@ const real invR = RECIP(r);
 const real alphaR = EWALD_ALPHA*r;
 const real expAlphaRSqr = EXP(-alphaR*alphaR);
 real tempForce = 0.0f;
+real clEnergy;
 if (alphaR > 1e-6f) {
     const real erfAlphaR = ERF(alphaR);
     const real prefactor = exclusionParams.x*invR;
-    tempForce = -prefactor*(erfAlphaR-alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
-    energy -= prefactor*erfAlphaR;
+    tempForce = -clLambda*prefactor*(erfAlphaR-alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    clEnergy = -prefactor*erfAlphaR;
 }
 else {
-    energy -= TWO_OVER_SQRT_PI*EWALD_ALPHA*exclusionParams.x;
+    clEnergy = -TWO_OVER_SQRT_PI*EWALD_ALPHA*exclusionParams.x;
 }
+energy += clLambda*clEnergy;
 #if DO_LJPME
 const real dispersionAlphaR = EWALD_DISPERSION_ALPHA*r;
 const real dar2 = dispersionAlphaR*dispersionAlphaR;
@@ -29,11 +36,12 @@ const real c6 = 64*exclusionParams.y*exclusionParams.y*exclusionParams.y*exclusi
 const real coef = invR2*invR2*invR2*c6;
 const real eprefac = 1.0f + dar2 + 0.5f*dar4;
 const real dprefac = eprefac + dar6/6.0f;
-energy += coef*(1.0f - expDar2*eprefac);
-tempForce += 6.0f*coef*(1.0f - expDar2*dprefac);
+real ljEnergy = coef*(1.0f - expDar2*eprefac);
+tempForce += ljLambda*6.0f*coef*(1.0f - expDar2*dprefac);
+energy += ljLambda*ljEnergy;
 #endif
 if (r > 0)
     delta *= tempForce*invR*invR;
 real3 force1 = -delta;
 real3 force2 = delta;
-
+COMPUTE_DERIVATIVES

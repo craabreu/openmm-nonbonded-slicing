@@ -7,7 +7,7 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
@@ -98,11 +98,14 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
             const char* getSortKey() const {return "value.y";}
         };
         class ForceInfo;
+        class ScalingParameterInfo;
         class PmeIO;
         class PmePreComputation;
         class PmePostComputation;
         class SyncQueuePreComputation;
         class SyncQueuePostComputation;
+        class AddEnergyPostComputation;
+        class DispersionCorrectionPostComputation;
         ComputeContext& cc;
         ForceInfo* info;
         bool hasInitializedKernel;
@@ -129,6 +132,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray pmeDispersionBsplineModuliZ;
         ComputeArray pmeAtomGridIndex;
         ComputeArray pmeEnergyBuffer;
+        ComputeArray ljpmeEnergyBuffer;
         ComputeArray chargeBuffer;
         ComputeSort sort;
         ComputeQueue pmeQueue;
@@ -145,20 +149,56 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeKernel pmeConvolutionKernel, pmeDispersionConvolutionKernel;
         ComputeKernel pmeEvalEnergyKernel, pmeDispersionEvalEnergyKernel;
         ComputeKernel pmeInterpolateForceKernel, pmeDispersionInterpolateForceKernel;
+        ComputeKernel addEnergyKernel;
         std::map<std::string, std::string> pmeDefines;
         std::vector<std::pair<int, int> > exceptionAtoms;
         std::vector<std::string> paramNames;
         std::vector<double> paramValues;
         std::map<int, int> exceptionIndex;
-        double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, totalCharge;
+        double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, backgroundEnergyVolume;
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
         bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading, useCpuPme;
         bool hasCoulomb, hasLJ, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
         NonbondedMethod nonbondedMethod;
         static const int PmeOrder = 5;
+
+        int numSubsets, numSlices;
+        bool hasDerivatives;
+        vector<int> subsetsVec;
+        vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
+        vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
+        vector<ScalingParameterInfo> sliceScalingParams;
+        ComputeArray subsets;
+        ComputeArray sliceLambdas;
+        AddEnergyPostComputation* addEnergy;
+
+        std::string getDerivativeExpression(std::string param, bool conditionCoulomb, bool conditionLJ);
+    };
+
+class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
+    public:
+        std::string nameCoulomb, nameLJ;
+        bool includeCoulomb, includeLJ;
+        bool hasDerivativeCoulomb, hasDerivativeLJ;
+        ScalingParameterInfo() :
+            nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false),
+            hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
+        }
+        void addInfo(std::string name, bool includeCoulomb, bool includeLJ, bool hasDerivative) {
+            if (includeCoulomb) {
+                this->includeCoulomb = true;
+                nameCoulomb = name;
+                hasDerivativeCoulomb = hasDerivative;
+            }
+            if (includeLJ) {
+                this->includeLJ = true;
+                nameLJ = name;
+                hasDerivativeLJ = hasDerivative;
+            }
+        }
     };
     
-} // namespace SlicedNonbondedSlicing
+} // namespace NonbondedSlicing
 
 #endif /*COMMON_NONBONDED_SLICING_KERNELS_H_*/
