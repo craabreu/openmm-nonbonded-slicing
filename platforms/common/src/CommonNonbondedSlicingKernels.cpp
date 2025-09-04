@@ -1410,7 +1410,15 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     return energy;
 }
 
-void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force, int firstParticle, int lastParticle, int firstException, int lastException) {
+void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force
+    // , int firstParticle, int lastParticle, int firstException, int lastException
+) {
+    // TODO: Implement the approach added to OpenMM in commit 78902be (PR #4610)
+    int firstParticle = 0;
+    int lastParticle = force.getNumParticles();
+    int firstException = 0;
+    int lastException = force.getNumExceptions();
+
     // Make sure the new parameters are acceptable.
 
     ContextSelector selector(cc);

@@ -67,7 +67,11 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
          * @param firstException the index of the first exception whose parameters might have changed
          * @param lastException  the index of the last exception whose parameters might have changed
          */
-        void copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force, int firstParticle, int lastParticle, int firstException, int lastException);
+        void copyParametersToContext(
+            ContextImpl& context, const SlicedNonbondedForce& force
+            // , int firstParticle, int lastParticle, int firstException, int lastException
+            // TODO: Implement the approach added to OpenMM in commit 78902be (PR #4610)
+        );
         /**
          * Get the parameters being used for PME.
          *
