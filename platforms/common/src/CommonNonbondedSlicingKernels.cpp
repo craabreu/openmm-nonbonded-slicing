@@ -937,7 +937,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     globalParams.initialize(cc, max((int) paramValues.size(), 1), cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "globalParams");
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
-    chargeBuffer.initialize(cc, cc.getNumThreadBlocks(), cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "chargeBuffer");
+    chargeBuffer.initialize(cc, numSubsets*cc.getNumThreadBlocks(), cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "chargeBuffer");
     cc.clearBuffer(chargeBuffer);
     recomputeParams = true;
 
@@ -989,13 +989,15 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             computeExclusionParamsKernel->addArg(exclusionAtoms);
             computeExclusionParamsKernel->addArg(exclusionParams);
         }
-        computePlasmaCorrectionKernel->addArg(chargeBuffer);
-        computePlasmaCorrectionKernel->addArg(pmeEnergyBuffer);
-        if (cc.getUseDoublePrecision())
-            computePlasmaCorrectionKernel->addArg(alpha);
-        else
-            computePlasmaCorrectionKernel->addArg((float) alpha);
-        computePlasmaCorrectionKernel->addArg();
+        if (cosSinSums.isInitialized() || pmeGrid1.isInitialized()) {
+            computePlasmaCorrectionKernel->addArg(chargeBuffer);
+            computePlasmaCorrectionKernel->addArg(pmeEnergyBuffer);
+            if (cc.getUseDoublePrecision())
+                computePlasmaCorrectionKernel->addArg(alpha);
+            else
+                computePlasmaCorrectionKernel->addArg((float) alpha);
+            computePlasmaCorrectionKernel->addArg();
+        }
         if (cosSinSums.isInitialized()) {
             ewaldSumsKernel->addArg(pmeEnergyBuffer);
             ewaldSumsKernel->addArg(cc.getPosq());

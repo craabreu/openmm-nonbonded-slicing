@@ -6,7 +6,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
         GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas, GLOBAL real* RESTRICT chargeBuffer
 #ifdef HAS_EXCEPTIONS
-        , int numExceptions, GLOBAL const int2* RESTRICT exceptionPairs, GLOBAL const float4* RESTRICT baseExceptionParams,
+        , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams,
         GLOBAL float4* RESTRICT exceptionParams, GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
 ) {
@@ -62,11 +62,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
             params.z += value*offset.z;
         }
 #endif
-        int j = subsets[exceptionPairs[i].x];
-        int k = subsets[exceptionPairs[i].y];
-        union {int i; float f;} slice;
-        slice.i = j>k ? j*(j+1)/2+k : k*(k+1)/2+j;
-        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), slice.f);
+        exceptionParams[i] = make_float4((float) (ONE_4PI_EPS0*params.x), (float) params.y, (float) (4*params.z), (float) params.w);
     }
 #endif
     if (includeSelfEnergy) {
