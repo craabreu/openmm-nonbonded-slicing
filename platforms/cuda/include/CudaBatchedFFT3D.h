@@ -11,6 +11,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
+#include "FFT3DFactory.h"
 #include "openmm/common/FFT3D.h"
 #include "openmm/common/ArrayInterface.h"
 #include "openmm/cuda/CudaContext.h"
@@ -68,6 +69,14 @@ private:
     cufftHandle fftForward;
     cufftHandle fftBackward;
     bool realToComplex, hasInitialized;
+};
+
+class CudaBatchedFFT3DFactory : public FFT3DFactory {
+public:
+    FFT3D createFFT3D(ComputeContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex=false) {
+        CudaContext& cuContext = dynamic_cast<CudaContext&>(context);
+        return FFT3D(new CudaBatchedFFT3D(cuContext, xsize, ysize, zsize, numBatches, realToComplex));
+    }
 };
 
 } // namespace NonbondedSlicing

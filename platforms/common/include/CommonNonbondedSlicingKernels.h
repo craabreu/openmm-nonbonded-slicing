@@ -12,6 +12,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "NonbondedSlicingKernels.h"
+#include "FFT3DFactory.h"
 #include "openmm/kernels.h"
 #include "openmm/common/ComputeArray.h"
 #include "openmm/common/ComputeContext.h"
@@ -40,12 +41,13 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
          *
          * @param system       the System this kernel will be applied to
          * @param force        the SlicedNonbondedForce this kernel will be used for
+         * @param fftFactory   the factory for creating FFT3D objects
          * @param usePmeQueue  whether to perform PME on a separate queue
          * @param deviceIsCpu  whether the device this calculation is running on is a CPU
          * @param useFixedPointChargeSpreading  whether PME charge spreading should be done in fixed point or floating point
          * @param useCpuPme    whether to perform the PME reciprocal space calculation on the CPU
          */
-        void commonInitialize(const System& system, const SlicedNonbondedForce& force, bool usePmeQueue, bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme);
+        void commonInitialize(const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue, bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme);
         /**
          * Execute the kernel to calculate the forces and/or energy.
          *

@@ -26,6 +26,9 @@
 #include <iterator>
 #include <set>
 
+#include <iostream>
+
+
 using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
@@ -335,7 +338,7 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
     return derivative.str();
 }
 
-void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system, const SlicedNonbondedForce& force, bool usePmeQueue,
+void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue,
         bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme) {
     this->usePmeQueue = false;
     this->deviceIsCpu = deviceIsCpu;
@@ -474,6 +477,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     backgroundEnergyVolume = 0.0;
     vector<double> subsetCharges(numSubsets, 0.0);
     map<string, string> paramsDefines;
+    paramsDefines["NUM_SUBSETS"] = cc.intToString(numSubsets);
     paramsDefines["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
     paramsDefines["EPSILON0"] = cc.doubleToString(EPSILON0);
     paramsDefines["WORK_GROUP_SIZE"] = cc.intToString(cc.ThreadBlockSize);
@@ -642,9 +646,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
                     cc.clearBuffer(ljpmeEnergyBuffer);
                 }
                 sort = cc.createSort(new SortTrait(), cc.getNumAtoms());
-                fft = cc.createFFT(gridSizeX, gridSizeY, gridSizeZ, true);
+                fft = fftFactory.createFFT3D(cc, gridSizeX, gridSizeY, gridSizeZ, 1, true);
                 if (doLJPME)
-                    dispersionFft = cc.createFFT(dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, true);
+                    dispersionFft = fftFactory.createFFT3D(cc, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true);
                 this->usePmeQueue = usePmeQueue;
                 int recipForceGroup = force.getReciprocalSpaceForceGroup();
                 if (usePmeQueue) {

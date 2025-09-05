@@ -1,6 +1,10 @@
 build/
+.cache/
 .vscode/
 profiling/
+
+# macos
+.DS_Store
 
 # Sphinx documentation
 docs/_build/
