@@ -1059,6 +1059,8 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeInterpolateForceKernel->addArg();
             pmeInterpolateForceKernel->addArg(pmeAtomGridIndex);
             pmeInterpolateForceKernel->addArg(charges);
+            pmeInterpolateForceKernel->addArg(subsets);
+            pmeInterpolateForceKernel->addArg(sliceLambdas);
             if (useFixedPointChargeSpreading) {
                 pmeFinishSpreadChargeKernel = program->createKernel("finishSpreadCharge");
                 pmeFinishSpreadChargeKernel->addArg(pmeGrid2);
@@ -1415,6 +1417,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 energyParamDerivs[info.nameCoulomb] += sliceBackgroundEnergyVolume[slice]/(a[0]*b[1]*c[2]);
         }
     }
+    cout << "energy: " << energy << endl;
     return energy;
 }
 
