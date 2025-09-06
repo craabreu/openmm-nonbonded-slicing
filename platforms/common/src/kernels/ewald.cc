@@ -7,7 +7,7 @@ DEVICE real2 multofReal2(real2 a, real2 b) {
  */
 
 KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real4* RESTRICT posq,
-                GLOBAL const int* RESTRICT subsets, GLOBAL real2* RESTRICT cosSinSum, real4 periodicBoxSize) {
+                GLOBAL real2* RESTRICT cosSinSum, GLOBAL const int* RESTRICT subsets, real4 periodicBoxSize) {
     const unsigned int ksizex = 2*KMAX_X-1;
     const unsigned int ksizey = 2*KMAX_Y-1;
     const unsigned int ksizez = 2*KMAX_Z-1;

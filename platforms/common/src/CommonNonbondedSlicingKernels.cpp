@@ -522,6 +522,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
 
             map<string, string> replacements;
             replacements["NUM_ATOMS"] = cc.intToString(numParticles);
+            replacements["NUM_SUBSETS"] = cc.intToString(numSubsets);
+            replacements["NUM_SLICES"] = cc.intToString(numSlices);
             replacements["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
             replacements["KMAX_X"] = cc.intToString(kmaxx);
             replacements["KMAX_Y"] = cc.intToString(kmaxy);
@@ -1002,11 +1004,15 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             ewaldSumsKernel->addArg(pmeEnergyBuffer);
             ewaldSumsKernel->addArg(cc.getPosq());
             ewaldSumsKernel->addArg(cosSinSums);
+            ewaldSumsKernel->addArg(subsets);
             ewaldSumsKernel->addArg();
             ewaldForcesKernel->addArg(cc.getLongForceBuffer());
             ewaldForcesKernel->addArg(cc.getPosq());
             ewaldForcesKernel->addArg(cosSinSums);
+            ewaldForcesKernel->addArg(subsets);
+            ewaldForcesKernel->addArg(sliceLambdas);
             ewaldForcesKernel->addArg();
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, sliceScalingParams);
         }
         if (pmeGrid1.isInitialized()) {
             // Create kernels for Coulomb PME.
@@ -1060,6 +1066,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             }
             // if (usePmeQueue)
             //     syncQueue->setKernel(program->createKernel("addEnergy"));
+            addEnergy->initialize(pmeEnergyBuffer, ljpmeEnergyBuffer, sliceLambdas, sliceScalingParams);
 
             if (doLJPME) {
                 // Create kernels for LJ PME.
@@ -1407,11 +1414,6 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             if (info.hasDerivativeCoulomb)
                 energyParamDerivs[info.nameCoulomb] += sliceBackgroundEnergyVolume[slice]/(a[0]*b[1]*c[2]);
         }
-    }
-    if (dispersionCoefficient != 0.0 && includeDirect) {
-        Vec3 a, b, c;
-        cc.getPeriodicBoxVectors(a, b, c);
-        energy += dispersionCoefficient/(a[0]*b[1]*c[2]);
     }
     return energy;
 }
