@@ -88,8 +88,8 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
         int zindex = gridIndex.z+iz;
         zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
         real dz = 0;
-        for (int i = 0; i < PME_ORDER; i++) {
-            dz = i == iz ? data[i].z : dz;
+        for (int j = 0; j < PME_ORDER; j++) {
+            dz = j == iz ? data[j].z : dz;
         }
         dz *= charge;
         for (int ix = 0; ix < PME_ORDER; ix++) {
@@ -265,7 +265,7 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
 #else
         GLOBAL const real* RESTRICT charges
 #endif
-        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
+        , GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 ) {
     real3 data[PME_ORDER];
     real3 ddata[PME_ORDER];
