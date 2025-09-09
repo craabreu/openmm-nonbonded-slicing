@@ -4,10 +4,13 @@
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
-        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas, GLOBAL real* RESTRICT chargeBuffer
+        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
         , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams,
         GLOBAL float4* RESTRICT exceptionParams, GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
+#endif
+#if defined(HAS_OFFSETS) && defined(INCLUDE_EWALD)
+, GLOBAL real* RESTRICT chargeBuffer
 #endif
 ) {
     mixed clEnergy[NUM_SUBSETS] = {0};
