@@ -140,6 +140,8 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray pmeEnergyBuffer;
         ComputeArray ljpmeEnergyBuffer;
         ComputeArray chargeBuffer;
+        ComputeArray subsets;
+        ComputeArray sliceLambdas;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -175,11 +177,11 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
         vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
         vector<ScalingParameterInfo> sliceScalingParams;
-        ComputeArray subsets;
-        ComputeArray sliceLambdas;
         AddEnergyPostComputation* addEnergy;
 
         std::string getDerivativeExpression(std::string param, bool conditionCoulomb, bool conditionLJ);
+
+        double totalCharge;
     };
 
 class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

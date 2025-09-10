@@ -187,7 +187,7 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 
 KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT energyBuffer,
                       GLOBAL const real* RESTRICT pmeBsplineModuliX, GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
-                      real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
+                      real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const real2* RESTRICT sliceLambdas) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const unsigned int odist = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
@@ -201,7 +201,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
 #endif
 
-    mixed energy[NUM_SUBSETS] = {0};
+    mixed energy[NUM_SLICES] = { 0 };
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         // real indices
         int kx = index/(GRID_SIZE_Y*(GRID_SIZE_Z));
@@ -249,11 +249,18 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
                 energy[offset+j] += 0.5*eterm*(grid[j].x*grid[j].x + grid[j].y*grid[j].y);
             }
     }
+    mixed energySum = 0;
     for (int slice = 0; slice < NUM_SLICES; slice++)
-#if defined(USE_PME_STREAM) && !defined(USE_LJPME)
-        energyBuffer[GLOBAL_ID*NUM_SUBSETS+slice] = 0.5f*energy[slice];
+#if defined(USE_LJPME)
+        energySum += sliceLambdas[slice].y*energy[slice];
 #else
-        energyBuffer[GLOBAL_ID*NUM_SUBSETS+slice] += 0.5f*energy[slice];
+        energySum += sliceLambdas[slice].x*energy[slice];
+#endif
+
+#if defined(USE_PME_STREAM) && !defined(USE_LJPME)
+    energyBuffer[GLOBAL_ID] = energySum;
+#else
+    energyBuffer[GLOBAL_ID] += energySum;
 #endif
 }
 

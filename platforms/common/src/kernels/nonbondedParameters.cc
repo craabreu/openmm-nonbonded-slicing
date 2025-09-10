@@ -4,13 +4,10 @@
 KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
         int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
-        GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
+        GLOBAL real* RESTRICT chargeBuffer, GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
-        , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams,
-        GLOBAL float4* RESTRICT exceptionParams, GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
-#endif
-#if defined(HAS_OFFSETS) && defined(INCLUDE_EWALD)
-, GLOBAL real* RESTRICT chargeBuffer
+        , int numExceptions, GLOBAL const float4* RESTRICT baseExceptionParams, GLOBAL float4* RESTRICT exceptionParams,
+        GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
 ) {
     mixed clEnergy[NUM_SUBSETS] = {0};
@@ -18,7 +15,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     real subsetCharge[NUM_SUBSETS] = {0};
 
     // Compute particle parameters.
-    
+
     for (int i = GLOBAL_ID; i < numAtoms; i += GLOBAL_SIZE) {
         float4 params = baseParticleParams[i];
 #ifdef HAS_PARTICLE_OFFSETS
@@ -51,7 +48,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     }
 
     // Compute exception parameters.
-    
+
 #ifdef HAS_EXCEPTIONS
     for (int i = GLOBAL_ID; i < numExceptions; i += GLOBAL_SIZE) {
         float4 params = baseExceptionParams[i];
@@ -151,7 +148,8 @@ KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL m
             for (int j = i; j < NUM_SUBSETS; j++) {
                 real qj = temp[0][j];
                 int slice = j*(j+1)/2+i;
-                energyBuffer[slice] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
+                // energyBuffer[slice] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
+                energyBuffer[0] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
             }
         }
     }

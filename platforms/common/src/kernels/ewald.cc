@@ -7,7 +7,8 @@ DEVICE real2 multofReal2(real2 a, real2 b) {
  */
 
 KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real4* RESTRICT posq,
-                GLOBAL real2* RESTRICT cosSinSum, GLOBAL const int* RESTRICT subsets, real4 periodicBoxSize) {
+                GLOBAL real2* RESTRICT cosSinSum, real4 periodicBoxSize,
+                GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas) {
     const unsigned int ksizex = 2*KMAX_X-1;
     const unsigned int ksizey = 2*KMAX_Y-1;
     const unsigned int ksizez = 2*KMAX_Z-1;
@@ -44,6 +45,8 @@ KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL
             sum[subsets[atom]] += apos.w*structureFactor;
         }
 
+        // Compute the contribution to the energy.
+
         real k2 = kx*kx + ky*ky + kz*kz;
         real ak = EXP(k2*EXP_COEFFICIENT) / k2;
 
@@ -60,8 +63,9 @@ KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL
         }
         index += GLOBAL_SIZE;
     }
+    energyBuffer[GLOBAL_ID] = 0.0;
     for (int slice = 0; slice < NUM_SLICES; slice++)
-        energyBuffer[GLOBAL_ID*NUM_SLICES+slice] = reciprocalCoefficient*energy[slice];
+        energyBuffer[GLOBAL_ID] += sliceLambdas[slice].x*reciprocalCoefficient*energy[slice];
 }
 
 /**
@@ -69,8 +73,8 @@ KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL
  * previous routine.
  */
 
-KERNEL void calculateEwaldForces(GLOBAL mm_long* RESTRICT forceBuffers, GLOBAL const real4* RESTRICT posq, GLOBAL const real2* RESTRICT cosSinSum,
-            GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas, real4 periodicBoxSize) {
+KERNEL void calculateEwaldForces(GLOBAL mm_long* RESTRICT forceBuffers, GLOBAL const real4* RESTRICT posq, GLOBAL const real2* RESTRICT cosSinSum, real4 periodicBoxSize,
+            GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas) {
     unsigned int atom = GLOBAL_ID;
     real3 reciprocalBoxSize = make_real3(2*M_PI/periodicBoxSize.x, 2*M_PI/periodicBoxSize.y, 2*M_PI/periodicBoxSize.z);
     real reciprocalCoefficient = ONE_4PI_EPS0*4*M_PI/(periodicBoxSize.x*periodicBoxSize.y*periodicBoxSize.z);
