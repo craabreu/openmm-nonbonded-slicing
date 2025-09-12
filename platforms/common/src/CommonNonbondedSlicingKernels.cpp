@@ -377,6 +377,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     bool useCutoff = (nonbondedMethod != NoCutoff);
     bool usePeriodic = (nonbondedMethod != NoCutoff && nonbondedMethod != CutoffNonPeriodic);
     doLJPME = (nonbondedMethod == LJPME && hasLJ);
+    hasReciprocal = (nonbondedMethod == Ewald) || ((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME;
     usePosqCharges = hasCoulomb ? cc.requestPosqCharges() : false;
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
@@ -473,7 +474,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
             cosSinSums.initialize(cc, numSubsets*(2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
         }
     }
-    else if (((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME) {
+    else if (hasReciprocal) {
         // Compute the PME parameters.
 
         SlicedNonbondedForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
@@ -726,12 +727,12 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
                 replacements["EWALD_DISPERSION_ALPHA"] = cc.doubleToString(dispersionAlpha);
             replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
             stringstream code;
-            // for (string param : requestedDerivatives) {
-            //     string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
-            //     string expression = getDerivativeExpression(param, hasCoulomb, doLJPME);
-            //     if (expression.length() > 0)
-            //         code<<variableName<<" += "<<expression<<";"<<endl;
-            // }
+            for (string param : requestedDerivatives) {
+                string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
+                string expression = getDerivativeExpression(param, hasCoulomb, doLJPME);
+                if (expression.length() > 0)
+                    code<<variableName<<" += "<<expression<<";"<<endl;
+            }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
                 cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
@@ -768,12 +769,12 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     replacements["LAMBDA"] = prefix+"lambda";
     cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2, 2*sizeOfReal));
     stringstream code;
-    // for (string param : requestedDerivatives) {
-    //     string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
-    //     string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
-    //     if (expression.length() > 0)
-    //         code<<variableName<<" += interactionScale*("<<expression<<");"<<endl;
-    // }
+    for (string param : requestedDerivatives) {
+        string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
+        string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
+        if (expression.length() > 0)
+            code<<variableName<<" += interactionScale*("<<expression<<");"<<endl;
+    }
     replacements["COMPUTE_DERIVATIVES"] = code.str();
     source = cc.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
@@ -808,12 +809,12 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
         replacements["PARAMS"] = cc.getBondedUtilities().addArgument(exceptionParams, "float4");
         replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
         stringstream code;
-        // for (string param : requestedDerivatives) {
-        //     string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
-        //     string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
-        //     if (expression.length() > 0)
-        //         code<<variableName<<" += "<<expression<<";"<<endl;
-        // }
+        for (string param : requestedDerivatives) {
+            string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
+            string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
+            if (expression.length() > 0)
+                code<<variableName<<" += "<<expression<<";"<<endl;
+        }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())
             cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
@@ -946,6 +947,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         else
             computePlasmaCorrectionKernel->addArg((float) alpha);
         computePlasmaCorrectionKernel->addArg();
+        computePlasmaCorrectionKernel->addArg(sliceLambdas);
         if (cosSinSums.isInitialized()) {
             ewaldSumsKernel->addArg(cc.getEnergyBuffer());
             ewaldSumsKernel->addArg(cc.getPosq());
@@ -1106,14 +1108,16 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         }
     }
     if (scalingParamChanged) {
-        ewaldSelfEnergy = 0.0;
-        for (int i = 0; i < numSubsets; i++) {
-            int slice = sliceIndex(i, i);
-            ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+        if (hasReciprocal && cc.getContextIndex() == 0) {
+            ewaldSelfEnergy = 0.0;
+            for (int i = 0; i < numSubsets; i++) {
+                int slice = sliceIndex(i, i);
+                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            }
+            backgroundEnergyVolume = 0.0;
+            for (int slice = 0; slice < numSlices; slice++)
+                backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
         }
-        backgroundEnergyVolume = 0.0;
-        for (int slice = 0; slice < numSlices; slice++)
-            backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
         if (cc.getUseDoublePrecision())
             sliceLambdas.upload(sliceLambdasVec);
         else {

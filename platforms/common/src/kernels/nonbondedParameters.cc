@@ -67,9 +67,9 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 #endif
     if (includeSelfEnergy) {
         mixed energy = 0;
-        for (int j = 0; j < NUM_SUBSETS; j++) {
-            int slice = j*(j+3)/2;
-            energy += sliceLambdas[slice].x*clEnergy[j] + sliceLambdas[slice].y*ljEnergy[j];
+        for (int subset = 0; subset < NUM_SUBSETS; subset++) {
+            int slice = subset*(subset+3)/2;
+            energy += sliceLambdas[slice].x*clEnergy[subset] + sliceLambdas[slice].y*ljEnergy[subset];
         }
         energyBuffer[GLOBAL_ID] += energy;
     }
@@ -128,29 +128,28 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
  * This kernel is executed by a single thread block.
  */
 KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-    real alpha, real volume) {
-    LOCAL real temp[WORK_GROUP_SIZE][NUM_SUBSETS];
+    real alpha, real volume, GLOBAL const real2* RESTRICT sliceLambdas) {
+    LOCAL real subsetCharge[WORK_GROUP_SIZE][NUM_SUBSETS];
     real sum[NUM_SUBSETS] = {0};
     for (unsigned int index = LOCAL_ID; index < NUM_GROUPS; index += LOCAL_SIZE)
         for (int subset = 0; subset < NUM_SUBSETS; subset++)
             sum[subset] += chargeBuffer[index*NUM_SUBSETS + subset];
     for (int subset = 0; subset < NUM_SUBSETS; subset++)
-        temp[LOCAL_ID][subset] = sum[subset];
+        subsetCharge[LOCAL_ID][subset] = sum[subset];
     for (int i = 1; i < WORK_GROUP_SIZE; i *= 2) {
         SYNC_THREADS;
         if (LOCAL_ID%(i*2) == 0 && LOCAL_ID+i < WORK_GROUP_SIZE)
             for (int subset = 0; subset < NUM_SUBSETS; subset++)
-                temp[LOCAL_ID][subset] += temp[LOCAL_ID+i][subset];
+                subsetCharge[LOCAL_ID][subset] += subsetCharge[LOCAL_ID+i][subset];
     }
     if (LOCAL_ID == 0) {
+        mixed energy = 0;
         for (int i = 0; i < NUM_SUBSETS; i++) {
-            real qi = temp[0][i];
-            for (int j = i; j < NUM_SUBSETS; j++) {
-                real qj = temp[0][j];
-                int slice = j*(j+1)/2+i;
-                // energyBuffer[slice] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
-                energyBuffer[0] -= (i==j ? 1.0 : 2.0)*qi*qj/(8*EPSILON0*volume*alpha*alpha);
-            }
+            real factor = -subsetCharge[0][i]/(8*EPSILON0*volume*alpha*alpha);
+            for (int j = 0; j < i; j++)
+                energy += 2*sliceLambdas[i*(i+1)/2+j].x*subsetCharge[0][j]*factor;
+            energy += sliceLambdas[i*(i+3)/2].x*subsetCharge[0][i]*factor;
         }
+        energyBuffer[0] += energy;
     }
 }

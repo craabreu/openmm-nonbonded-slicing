@@ -167,7 +167,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
         bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading, useCpuPme;
-        bool hasCoulomb, hasLJ, doLJPME, usePosqCharges, recomputeParams, hasOffsets;
+        bool hasCoulomb, hasLJ, doLJPME, usePosqCharges, recomputeParams, hasOffsets, hasReciprocal;
         NonbondedMethod nonbondedMethod;
         static const int PmeOrder = 5;
 
