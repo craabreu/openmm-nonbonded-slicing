@@ -65,7 +65,9 @@ public:
         double charge1, charge2, sigma1, sigma2, epsilon1, epsilon2;
         force.getParticleParameters(particle1, charge1, sigma1, epsilon1);
         force.getParticleParameters(particle2, charge2, sigma2, epsilon2);
-        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        int subset1 = force.getParticleSubset(particle1);
+        int subset2 = force.getParticleSubset(particle2);
+        return (charge1 == charge2 && sigma1 == sigma2 && epsilon1 == epsilon2 && subset1 == subset2);
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
@@ -90,11 +92,17 @@ public:
             if (parameter1 != parameter2 || chargeProdScale1 != chargeProdScale2 || sigmaScale1 != sigmaScale2 || epsilonScale1 != epsilonScale2)
                 return false;
         }
-        int particle1, particle2;
+        int particle1, particle2, subset1, subset2, slice1, slice2;
         double chargeProd1, chargeProd2, sigma1, sigma2, epsilon1, epsilon2;
         force.getExceptionParameters(group1, particle1, particle2, chargeProd1, sigma1, epsilon1);
+        subset1 = force.getParticleSubset(particle1);
+        subset2 = force.getParticleSubset(particle2);
+        slice1 = sliceIndex(subset1, subset2);
         force.getExceptionParameters(group2, particle1, particle2, chargeProd2, sigma2, epsilon2);
-        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2);
+        subset1 = force.getParticleSubset(particle1);
+        subset2 = force.getParticleSubset(particle2);
+        slice2 = sliceIndex(subset1, subset2);
+        return (chargeProd1 == chargeProd2 && sigma1 == sigma2 && epsilon1 == epsilon2 && slice1 == slice2);
     }
 private:
     const SlicedNonbondedForce& force;
@@ -765,9 +773,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     }
     replacements["SUBSET1"] = prefix+"subset1";
     replacements["SUBSET2"] = prefix+"subset2";
-    cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1, sizeof(int)));
+    cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
     replacements["LAMBDA"] = prefix+"lambda";
-    cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2, 2*sizeOfReal));
+    cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2));
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
@@ -948,6 +956,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             computePlasmaCorrectionKernel->addArg((float) alpha);
         computePlasmaCorrectionKernel->addArg();
         computePlasmaCorrectionKernel->addArg(sliceLambdas);
+        // TODO: Use the kernel above to compute slice background energy times volume for each slice
         if (cosSinSums.isInitialized()) {
             ewaldSumsKernel->addArg(cc.getEnergyBuffer());
             ewaldSumsKernel->addArg(cc.getPosq());

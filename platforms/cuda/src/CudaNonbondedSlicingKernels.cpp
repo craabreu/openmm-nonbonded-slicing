@@ -19,8 +19,8 @@ using namespace OpenMM;
 using namespace std;
 
 void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
-    bool usePmeQueue = (!cu.getPlatformData().disablePmeStream && !cu.getPlatformData().useCpuPme);
+    bool usePmeQueue = !cu.getPlatformData().disablePmeStream;
     bool useFixedPointChargeSpreading = cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces;
     CudaBatchedFFT3DFactory fftFactory;
-    commonInitialize(system, force, fftFactory, usePmeQueue, false, useFixedPointChargeSpreading, cu.getPlatformData().useCpuPme);
+    commonInitialize(system, force, fftFactory, usePmeQueue, false, useFixedPointChargeSpreading, false);
 }

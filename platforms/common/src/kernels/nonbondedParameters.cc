@@ -128,7 +128,7 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
  * This kernel is executed by a single thread block.
  */
 KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-    real alpha, real volume, GLOBAL const real2* RESTRICT sliceLambdas) {
+    real alpha, real volume, GLOBAL const real2* RESTRICT sliceLambdas) {  // TODO: Compute background energy times volume for each slice
     LOCAL real subsetCharge[WORK_GROUP_SIZE][NUM_SUBSETS];
     real sum[NUM_SUBSETS] = {0};
     for (unsigned int index = LOCAL_ID; index < NUM_GROUPS; index += LOCAL_SIZE)
@@ -146,9 +146,10 @@ KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL m
         mixed energy = 0;
         for (int i = 0; i < NUM_SUBSETS; i++) {
             real factor = -subsetCharge[0][i]/(8*EPSILON0*volume*alpha*alpha);
+            int offset = i*(i+1)/2;
             for (int j = 0; j < i; j++)
-                energy += 2*sliceLambdas[i*(i+1)/2+j].x*subsetCharge[0][j]*factor;
-            energy += sliceLambdas[i*(i+3)/2].x*subsetCharge[0][i]*factor;
+                energy += 2*sliceLambdas[offset+j].x*subsetCharge[0][j]*factor;
+            energy += sliceLambdas[offset+i].x*subsetCharge[0][i]*factor;
         }
         energyBuffer[0] += energy;
     }
