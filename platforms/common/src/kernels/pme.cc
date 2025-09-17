@@ -190,7 +190,11 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 
 KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RESTRICT energyBuffer,
                       GLOBAL const real* RESTRICT pmeBsplineModuliX, GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ,
-                      real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const real2* RESTRICT sliceLambdas) {
+                      real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ, GLOBAL const real2* RESTRICT sliceLambdas
+#if HAS_DERIVATIVES
+    , GLOBAL mixed* RESTRICT energyParamDerivBuffer
+#endif
+) {
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     const unsigned int odist = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
@@ -265,6 +269,9 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     energyBuffer[GLOBAL_ID] = energySum;
 #else
     energyBuffer[GLOBAL_ID] += energySum;
+#endif
+#if HAS_DERIVATIVES
+    ADD_DERIVATIVES
 #endif
 }
 

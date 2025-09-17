@@ -21,7 +21,7 @@ KERNEL void calculateEwaldCosSinSums(
     real3 reciprocalBoxSize = make_real3(2*M_PI/periodicBoxSize.x, 2*M_PI/periodicBoxSize.y, 2*M_PI/periodicBoxSize.z);
     real reciprocalCoefficient = ONE_4PI_EPS0*4*M_PI/(periodicBoxSize.x*periodicBoxSize.y*periodicBoxSize.z);
     unsigned int index = GLOBAL_ID;
-    mixed clEnergy[NUM_SLICES] = {0};
+    mixed energy[NUM_SLICES] = {0};
     while (index < (KMAX_Y-1)*ksizez+KMAX_Z)
         index += GLOBAL_SIZE;
     while (index < totalK) {
@@ -63,16 +63,18 @@ KERNEL void calculateEwaldCosSinSums(
             // Compute the contribution to the energy.
 
             for (int i = 0; i < j; i++)
-                clEnergy[j*(j+1)/2+i] += 2*ak*(sum[i].x*sum_j.x + sum[i].y*sum_j.y);
-            clEnergy[j*(j+3)/2] += ak*(sum_j.x*sum_j.x + sum_j.y*sum_j.y);
+                energy[j*(j+1)/2+i] += 2*ak*(sum[i].x*sum_j.x + sum[i].y*sum_j.y);
+            energy[j*(j+3)/2] += ak*(sum_j.x*sum_j.x + sum_j.y*sum_j.y);
         }
         index += GLOBAL_SIZE;
     }
-    mixed energy = 0.0;
+    mixed energySum = 0.0;
     for (int slice = 0; slice < NUM_SLICES; slice++)
-        energy += sliceLambdas[slice].x*clEnergy[slice];
-    energyBuffer[GLOBAL_ID] += energy;
-ADD_DERIVATIVES
+        energySum += sliceLambdas[slice].x*energy[slice];
+    energyBuffer[GLOBAL_ID] += energySum;
+#if HAS_DERIVATIVES
+    ADD_DERIVATIVES
+#endif
 }
 
 /**
