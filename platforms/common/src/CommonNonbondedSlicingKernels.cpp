@@ -250,7 +250,7 @@ CommonCalcSlicedNonbondedForceKernel::~CommonCalcSlicedNonbondedForceKernel() {
         delete pmeio;
 }
 
-string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ, bool addSliceIndex) {
+string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ) {
     stringstream exprCoulomb, exprLJ, exprBoth;
     int countCoulomb = 0, countLJ = 0, countBoth = 0;
     for (int slice = 0; slice < numSlices; slice++) {
@@ -265,14 +265,13 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
             exprLJ<<(countLJ++ ? " || " : "")<<"slice=="<<slice;
     }
 
-    string index = addSliceIndex ? "[slice]" : "";
     stringstream derivative;
     if (countBoth)
-        derivative<<"("<<exprBoth.str()<<")*(clEnergy"<<index<<" + ljEnergy"<<index<<")";
+        derivative<<"("<<exprBoth.str()<<")*(clEnergy + ljEnergy)";
     if (countCoulomb)
-        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy"<<index;
+        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy";
     if (countLJ)
-        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy"<<index;
+        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy";
 
     return derivative.str();
 }
@@ -629,9 +628,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
                 pmeEnergyBuffer.initialize(cc, cc.getNumThreadBlocks()*ComputeContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
                 cc.clearBuffer(pmeEnergyBuffer);
                 sort = cc.createSort(new SortTrait(), cc.getNumAtoms());
-                fft = fftFactory.createFFT3D(cc, gridSizeX, gridSizeY, gridSizeZ, 1, true);
+                fft = fftFactory.createFFT3D(cc, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
                 if (doLJPME)
-                    dispersionFft = fftFactory.createFFT3D(cc, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, 1, true);
+                    dispersionFft = fftFactory.createFFT3D(cc, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true);
                 this->usePmeQueue = usePmeQueue;
                 if (usePmeQueue) {
                     pmeDefines["USE_PME_STREAM"] = "1";
@@ -1411,7 +1410,6 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     //     energy += dispersionCoefficient/(a[0]*b[1]*c[2]);
     // }
     if (!hasOffsets && hasReciprocal && includeReciprocal) {
-        // cout << "Adding derivatives" << endl;
         map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
         for (int i = 0; i < numSubsets; i++) {
             ScalingParameterInfo info = sliceScalingParams[sliceIndex(i, i)];

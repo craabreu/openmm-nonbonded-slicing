@@ -40,8 +40,10 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
 
     real3 data[PME_ORDER];
     const real scale = RECIP((real) (PME_ORDER-1));
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
     for (int i = GLOBAL_ID; i < NUM_ATOMS*PME_ORDER; i += GLOBAL_SIZE) {
         int atom = pmeAtomGridIndex[i/PME_ORDER].x;
+        int subset = pmeAtomGridIndex[i/PME_ORDER].y/gridSize;
         real4 pos = posq[atom];
 #ifdef CHARGE_FROM_SIGEPS
         const float2 sigEps = sigmaEpsilon[atom];
@@ -104,7 +106,7 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
                 int index = xbase + ybase + zindex;
                 real add = dzdx*data[iy].y;
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
-                ATOMIC_ADD(&pmeGrid[index], (mm_ulong) realToFixedPoint(add));
+                ATOMIC_ADD(&pmeGrid[gridSize*subset+index], (mm_ulong) realToFixedPoint(add));
 #if defined(__GFX12__)
                 // Workaround for rare cases when few values of pmeGrid are very large and
                 // incorrect. The cause is unknown. Why this workaround or other irrelevant
@@ -112,7 +114,7 @@ KERNEL void gridSpreadCharge(GLOBAL const real4* RESTRICT posq,
                 asm volatile("s_wait_storecnt 0x0");
 #endif
 #else
-                ATOMIC_ADD(&pmeGrid[index], add);
+                ATOMIC_ADD(&pmeGrid[gridSize*subset+index], add);
 #endif
             }
         }
@@ -178,9 +180,10 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 #else
         real denom = m2*bx*by*bz;
         real eterm = recipScaleFactor*EXP(-RECIP_EXP_FACTOR*m2)/denom;
-        if (kx != 0 || ky != 0 || kz != 0)
+        if (kx != 0 || ky != 0 || kz != 0) {
             for (int j = 0; j < NUM_SUBSETS; j++)
                 pmeGrid[j*gridSize+index] *= eterm;
+        }
 #endif
     }
 }
@@ -250,12 +253,13 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
             }
     }
     mixed energySum = 0;
-    for (int slice = 0; slice < NUM_SLICES; slice++)
+    for (int slice = 0; slice < NUM_SLICES; slice++) {
 #if defined(USE_LJPME)
         energySum += sliceLambdas[slice].y*energy[slice];
 #else
         energySum += sliceLambdas[slice].x*energy[slice];
 #endif
+    }
 
 #if defined(USE_PME_STREAM) && !defined(USE_LJPME)
     energyBuffer[GLOBAL_ID] = energySum;
@@ -391,6 +395,7 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
 }
 
 KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
+    printf("addEnergy\n");
     for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
         energyBuffer[i] += pmeEnergyBuffer[i];
 }

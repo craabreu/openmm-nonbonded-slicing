@@ -142,6 +142,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray chargeBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
+        ComputeArray paramDerivIndices;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -163,6 +164,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         std::vector<std::string> paramNames;
         std::vector<double> paramValues;
         std::map<int, int> exceptionIndex;
+        std::set<std::string> requestedDerivatives;
         double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, backgroundEnergyVolume;
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
