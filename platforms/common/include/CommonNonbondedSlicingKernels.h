@@ -142,7 +142,6 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray chargeBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
-        ComputeArray paramDerivIndices;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -159,7 +158,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeKernel pmeEvalEnergyKernel, pmeDispersionEvalEnergyKernel;
         ComputeKernel pmeInterpolateForceKernel, pmeDispersionInterpolateForceKernel;
         ComputeKernel addEnergyKernel;
-        std::map<std::string, std::string> pmeDefines;
+        std::map<std::string, std::string> ewaldDefines, pmeDefines;
         std::vector<std::pair<int, int> > exceptionAtoms;
         std::vector<std::string> paramNames;
         std::vector<double> paramValues;

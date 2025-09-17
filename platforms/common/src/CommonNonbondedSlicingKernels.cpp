@@ -306,8 +306,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
     hasDerivatives = numDerivs > 0;
     for (int i = 0; i < numDerivs; i++)
         requestedDerivatives.insert(force.getScalingParameterDerivativeName(i));
-    if (requestedDerivatives.size() > 0)
-        paramDerivIndices.initialize<int>(cc, requestedDerivatives.size(), "paramDerivIndices");
 
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;
@@ -463,43 +461,19 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
                     sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
             }
 
-            // Create the reciprocal space kernels.
+            // Prepare the reciprocal space kernels.
 
-            map<string, string> replacements;
-            replacements["NUM_ATOMS"] = cc.intToString(numParticles);
-            replacements["NUM_SUBSETS"] = cc.intToString(numSubsets);
-            replacements["NUM_SLICES"] = cc.intToString(numSlices);
-            replacements["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
-            replacements["KMAX_X"] = cc.intToString(kmaxx);
-            replacements["KMAX_Y"] = cc.intToString(kmaxy);
-            replacements["KMAX_Z"] = cc.intToString(kmaxz);
-            replacements["EXP_COEFFICIENT"] = cc.doubleToString(-1.0/(4.0*alpha*alpha));
-            replacements["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
-            replacements["M_PI"] = cc.doubleToString(M_PI);
-            map<string, string> ewaldDefines;
+            ewaldDefines["NUM_ATOMS"] = cc.intToString(numParticles);
+            ewaldDefines["NUM_SUBSETS"] = cc.intToString(numSubsets);
+            ewaldDefines["NUM_SLICES"] = cc.intToString(numSlices);
+            ewaldDefines["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
+            ewaldDefines["KMAX_X"] = cc.intToString(kmaxx);
+            ewaldDefines["KMAX_Y"] = cc.intToString(kmaxy);
+            ewaldDefines["KMAX_Z"] = cc.intToString(kmaxz);
+            ewaldDefines["EXP_COEFFICIENT"] = cc.doubleToString(-1.0/(4.0*alpha*alpha));
+            ewaldDefines["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
+            ewaldDefines["M_PI"] = cc.doubleToString(M_PI);
             ewaldDefines["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
-            stringstream code;
-            if (hasDerivatives) {
-                int i = 0;
-                for (string param : requestedDerivatives) {
-                    stringstream expr;
-                    expr<<"energyParamDerivBuffer[GLOBAL_ID*numParamDerivs+paramDerivIndices["<<i++<<"]] += ";
-                    bool first = true;
-                    for (int slice = 0; slice < numSlices; slice++) {
-                        ScalingParameterInfo info = sliceScalingParams[slice];
-                        if (info.nameCoulomb == param) {
-                            expr<<(first ? "" : "+")<<"clEnergy["<<slice<<"]";
-                            first = false;
-                        }
-                    }
-                    if (!first)
-                        code<<expr.str()<<";"<<endl;
-                }
-            }
-            replacements["ADD_DERIVATIVES"] = code.str();
-            ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::ewald, replacements), ewaldDefines);
-            ewaldSumsKernel = program->createKernel("calculateEwaldCosSinSums");
-            ewaldForcesKernel = program->createKernel("calculateEwaldForces");
             int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double2) : sizeof(mm_float2));
             cosSinSums.initialize(cc, numSubsets*(2*kmaxx-1)*(2*kmaxy-1)*(2*kmaxz-1), elementSize, "cosSinSums");
         }
@@ -941,17 +915,6 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     ContextSelector selector(cc);
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
-
-        if (hasDerivatives) {
-            vector<int> paramDerivIndicesVec;
-            const vector<string>& allDerivatives = cc.getEnergyParamDerivNames();
-            for (auto param : requestedDerivatives) {
-                int position = find(allDerivatives.begin(), allDerivatives.end(), param) - allDerivatives.begin();
-                paramDerivIndicesVec.push_back(position);
-            }
-            paramDerivIndices.upload(paramDerivIndicesVec);
-        }
-
         computeParamsKernel->addArg(cc.getEnergyBuffer());
         computeParamsKernel->addArg();
         computeParamsKernel->addArg(globalParams);
@@ -990,18 +953,37 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         computePlasmaCorrectionKernel->addArg();
         computePlasmaCorrectionKernel->addArg(sliceLambdas);
         // TODO: Use the kernel above to compute slice background energy times volume for each slice
+
         if (cosSinSums.isInitialized()) {
+            stringstream code;
+            if (hasDerivatives) {
+                const vector<string>& allDerivatives = cc.getEnergyParamDerivNames();
+                for (int i = 0; i < allDerivatives.size(); i++) {
+                    stringstream expr;
+                    expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivatives.size()<<"+"<<i<<"] += ";
+                    bool first = true;
+                    for (int slice = 0; slice < numSlices; slice++)
+                        if (sliceScalingParams[slice].nameCoulomb == allDerivatives[i]) {
+                            expr<<(first ? "" : "+")<<"clEnergy["<<slice<<"]";
+                            first = false;
+                        }
+                    if (!first)
+                        code<<expr.str()<<";"<<endl;
+                }
+            }
+            map<string, string> replacements;
+            replacements["ADD_DERIVATIVES"] = code.str();
+            ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::ewald, replacements), ewaldDefines);
+            ewaldSumsKernel = program->createKernel("calculateEwaldCosSinSums");
+            ewaldForcesKernel = program->createKernel("calculateEwaldForces");
             ewaldSumsKernel->addArg(cc.getEnergyBuffer());
             ewaldSumsKernel->addArg(cc.getPosq());
             ewaldSumsKernel->addArg(cosSinSums);
             ewaldSumsKernel->addArg();
             ewaldSumsKernel->addArg(subsets);
             ewaldSumsKernel->addArg(sliceLambdas);
-            if (hasDerivatives) {
+            if (hasDerivatives)
                 ewaldSumsKernel->addArg(cc.getEnergyParamDerivBuffer());
-                ewaldSumsKernel->addArg(cc.getEnergyParamDerivNames().size());
-                ewaldSumsKernel->addArg(paramDerivIndices);
-            }
             ewaldForcesKernel->addArg(cc.getLongForceBuffer());
             ewaldForcesKernel->addArg(cc.getPosq());
             ewaldForcesKernel->addArg(cosSinSums);

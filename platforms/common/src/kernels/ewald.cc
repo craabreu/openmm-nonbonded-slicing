@@ -11,7 +11,7 @@ KERNEL void calculateEwaldCosSinSums(
     GLOBAL real2* RESTRICT cosSinSum, real4 periodicBoxSize,
     GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #if HAS_DERIVATIVES
-    , GLOBAL mixed* RESTRICT energyParamDerivBuffer, int numParamDerivs, GLOBAL const int* RESTRICT paramDerivIndices
+    , GLOBAL mixed* RESTRICT energyParamDerivBuffer
 #endif
 ) {
     const unsigned int ksizex = 2*KMAX_X-1;
