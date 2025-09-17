@@ -6,9 +6,14 @@ DEVICE real2 multofReal2(real2 a, real2 b) {
  * Precompute the cosine and sine sums which appear in each force term.
  */
 
-KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real4* RESTRICT posq,
-                GLOBAL real2* RESTRICT cosSinSum, real4 periodicBoxSize,
-                GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas) {
+KERNEL void calculateEwaldCosSinSums(
+    GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real4* RESTRICT posq,
+    GLOBAL real2* RESTRICT cosSinSum, real4 periodicBoxSize,
+    GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
+#if HAS_DERIVATIVES
+    , GLOBAL mixed* RESTRICT energyParamDerivBuffer, int numParamDerivs, GLOBAL const int* RESTRICT paramDerivIndices
+#endif
+) {
     const unsigned int ksizex = 2*KMAX_X-1;
     const unsigned int ksizey = 2*KMAX_Y-1;
     const unsigned int ksizez = 2*KMAX_Z-1;
@@ -48,7 +53,7 @@ KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL
         // Compute the contribution to the energy.
 
         real k2 = kx*kx + ky*ky + kz*kz;
-        real ak = EXP(k2*EXP_COEFFICIENT) / k2;
+        real ak = reciprocalCoefficient * EXP(k2*EXP_COEFFICIENT) / k2;
 
         for (int j = 0; j < NUM_SUBSETS; j++) {
             real2 sum_j = sum[j];
@@ -65,8 +70,9 @@ KERNEL void calculateEwaldCosSinSums(GLOBAL mixed* RESTRICT energyBuffer, GLOBAL
     }
     mixed energy = 0.0;
     for (int slice = 0; slice < NUM_SLICES; slice++)
-        energy += sliceLambdas[slice].x*reciprocalCoefficient*clEnergy[slice];
+        energy += sliceLambdas[slice].x*clEnergy[slice];
     energyBuffer[GLOBAL_ID] += energy;
+ADD_DERIVATIVES
 }
 
 /**

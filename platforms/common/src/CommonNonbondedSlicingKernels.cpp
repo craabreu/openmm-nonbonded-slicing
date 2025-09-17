@@ -250,7 +250,7 @@ CommonCalcSlicedNonbondedForceKernel::~CommonCalcSlicedNonbondedForceKernel() {
         delete pmeio;
 }
 
-string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ) {
+string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ, bool addSliceIndex) {
     stringstream exprCoulomb, exprLJ, exprBoth;
     int countCoulomb = 0, countLJ = 0, countBoth = 0;
     for (int slice = 0; slice < numSlices; slice++) {
@@ -265,13 +265,14 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
             exprLJ<<(countLJ++ ? " || " : "")<<"slice=="<<slice;
     }
 
+    string index = addSliceIndex ? "[slice]" : "";
     stringstream derivative;
     if (countBoth)
-        derivative<<"("<<exprBoth.str()<<")*(clEnergy + ljEnergy)";
+        derivative<<"("<<exprBoth.str()<<")*(clEnergy"<<index<<" + ljEnergy"<<index<<")";
     if (countCoulomb)
-        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy";
+        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy"<<index;
     if (countLJ)
-        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy";
+        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy"<<index;
 
     return derivative.str();
 }
@@ -304,9 +305,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
 
     int numDerivs = force.getNumScalingParameterDerivatives();
     hasDerivatives = numDerivs > 0;
-    set<string> requestedDerivatives;
     for (int i = 0; i < numDerivs; i++)
         requestedDerivatives.insert(force.getScalingParameterDerivativeName(i));
+    if (requestedDerivatives.size() > 0)
+        paramDerivIndices.initialize<int>(cc, requestedDerivatives.size(), "paramDerivIndices");
 
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;
@@ -475,7 +477,28 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
             replacements["EXP_COEFFICIENT"] = cc.doubleToString(-1.0/(4.0*alpha*alpha));
             replacements["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
             replacements["M_PI"] = cc.doubleToString(M_PI);
-            ComputeProgram program = cc.compileProgram(CommonNonbondedSlicingKernelSources::ewald, replacements);
+            map<string, string> ewaldDefines;
+            ewaldDefines["HAS_DERIVATIVES"] = hasDerivatives ? "1" : "0";
+            stringstream code;
+            if (hasDerivatives) {
+                int i = 0;
+                for (string param : requestedDerivatives) {
+                    stringstream expr;
+                    expr<<"energyParamDerivBuffer[GLOBAL_ID*numParamDerivs+paramDerivIndices["<<i++<<"]] += ";
+                    bool first = true;
+                    for (int slice = 0; slice < numSlices; slice++) {
+                        ScalingParameterInfo info = sliceScalingParams[slice];
+                        if (info.nameCoulomb == param) {
+                            expr<<(first ? "" : "+")<<"clEnergy["<<slice<<"]";
+                            first = false;
+                        }
+                    }
+                    if (!first)
+                        code<<expr.str()<<";"<<endl;
+                }
+            }
+            replacements["ADD_DERIVATIVES"] = code.str();
+            ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::ewald, replacements), ewaldDefines);
             ewaldSumsKernel = program->createKernel("calculateEwaldCosSinSums");
             ewaldForcesKernel = program->createKernel("calculateEwaldForces");
             int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double2) : sizeof(mm_float2));
@@ -919,6 +942,17 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     ContextSelector selector(cc);
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
+
+        if (hasDerivatives) {
+            vector<int> paramDerivIndicesVec;
+            const vector<string>& allDerivatives = cc.getEnergyParamDerivNames();
+            for (auto param : requestedDerivatives) {
+                int position = find(allDerivatives.begin(), allDerivatives.end(), param) - allDerivatives.begin();
+                paramDerivIndicesVec.push_back(position);
+            }
+            paramDerivIndices.upload(paramDerivIndicesVec);
+        }
+
         computeParamsKernel->addArg(cc.getEnergyBuffer());
         computeParamsKernel->addArg();
         computeParamsKernel->addArg(globalParams);
@@ -964,6 +998,11 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             ewaldSumsKernel->addArg();
             ewaldSumsKernel->addArg(subsets);
             ewaldSumsKernel->addArg(sliceLambdas);
+            if (hasDerivatives) {
+                ewaldSumsKernel->addArg(cc.getEnergyParamDerivBuffer());
+                ewaldSumsKernel->addArg(cc.getEnergyParamDerivNames().size());
+                ewaldSumsKernel->addArg(paramDerivIndices);
+            }
             ewaldForcesKernel->addArg(cc.getLongForceBuffer());
             ewaldForcesKernel->addArg(cc.getPosq());
             ewaldForcesKernel->addArg(cosSinSums);
@@ -1371,6 +1410,25 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     //     cc.getPeriodicBoxVectors(a, b, c);
     //     energy += dispersionCoefficient/(a[0]*b[1]*c[2]);
     // }
+    if (!hasOffsets && hasReciprocal && includeReciprocal) {
+        // cout << "Adding derivatives" << endl;
+        map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
+        for (int i = 0; i < numSubsets; i++) {
+            ScalingParameterInfo info = sliceScalingParams[sliceIndex(i, i)];
+            if (info.hasDerivativeCoulomb)
+                energyParamDerivs[info.nameCoulomb] += subsetSelfEnergy[i].x;
+            if (doLJPME && info.hasDerivativeLJ)
+                energyParamDerivs[info.nameLJ] += subsetSelfEnergy[i].y;
+        }
+        Vec3 a, b, c;
+        cc.getPeriodicBoxVectors(a, b, c);
+        double volume = a[0]*b[1]*c[2];
+        for (int slice = 0; slice < numSlices; slice++) {
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            if (info.hasDerivativeCoulomb)
+                energyParamDerivs[info.nameCoulomb] += sliceBackgroundEnergyVolume[slice]/volume;
+        }
+    }
     return energy;
 }
 
