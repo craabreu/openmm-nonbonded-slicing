@@ -1087,7 +1087,9 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDefines["RECIP_EXP_FACTOR"] = cc.doubleToString(M_PI*M_PI/(dispersionAlpha*dispersionAlpha));
                 pmeDefines["USE_LJPME"] = "1";
                 pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
-                program = cc.compileProgram(CommonNonbondedSlicingKernelSources::pme, pmeDefines);
+                map<string, string> replacements;
+                replacements["ADD_DERIVATIVES"] = ljDerivativeCode.str();
+                program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
                 pmeDispersionGridIndexKernel = program->createKernel("findAtomGridIndex");
                 pmeDispersionSpreadChargeKernel = program->createKernel("gridSpreadCharge");
                 pmeDispersionConvolutionKernel = program->createKernel("reciprocalConvolution");
@@ -1124,6 +1126,8 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 for (int i = 0; i < 3; i++)
                     pmeDispersionEvalEnergyKernel->addArg();
                 pmeDispersionEvalEnergyKernel->addArg(sliceLambdas);
+                if (hasDerivatives)
+                    pmeDispersionEvalEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
                 pmeDispersionInterpolateForceKernel->addArg(cc.getPosq());
                 pmeDispersionInterpolateForceKernel->addArg(cc.getLongForceBuffer());
                 pmeDispersionInterpolateForceKernel->addArg(pmeGrid1);
@@ -1387,7 +1391,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             }
             if (!hasCoulomb)
                 cc.clearBuffer(pmeEnergyBuffer);
-            if (includeEnergy)
+            if (includeEnergy || hasDerivatives)
                 pmeDispersionEvalEnergyKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             pmeDispersionConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             dispersionFft->execFFT(pmeGrid2, pmeGrid1, false);
