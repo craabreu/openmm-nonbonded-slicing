@@ -23,14 +23,15 @@ jobs:
             openmm-version: "8.3"
             cuda-version: "12.9"
             compiler-version: "14.3"
-          - python-version: "3.12"
-            openmm-version: "8.2"
-            cuda-version: "12.4"
-            compiler-version: "12.2"
-          - python-version: "3.11"
-            openmm-version: "8.1"
-            cuda-version: "12.9"
-            compiler-version: "13.3"
+          # Temporarily disabled OpenMM 8.2 and 8.1 workflows
+          # - python-version: "3.12"
+          #   openmm-version: "8.2"
+          #   cuda-version: "12.4"
+          #   compiler-version: "12.2"
+          # - python-version: "3.11"
+          #   openmm-version: "8.1"
+          #   cuda-version: "12.9"
+          #   compiler-version: "13.3"
 
     steps:
       - name: "Check out"

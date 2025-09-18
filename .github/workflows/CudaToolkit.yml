@@ -1,12 +1,13 @@
 name: Linux
 
-on:
-  push:
-    branches:
-      - "main"
-  pull_request:
-    branches:
-      - "main"
+# Temporarily disabled - uses OpenMM 8.1
+# on:
+#   push:
+#     branches:
+#       - "main"
+#   pull_request:
+#     branches:
+#       - "main"
 
 jobs:
   unix:

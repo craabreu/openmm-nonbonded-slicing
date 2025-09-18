@@ -19,8 +19,6 @@
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "sfmt/SFMT.h"
-#include <iomanip>
-#include <vector>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -29,9 +27,8 @@ using namespace std;
 const double TOL = 1e-4;
 
 void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
-    bool hasReciprocal = (method == NonbondedForce::Ewald) || (method == NonbondedForce::PME) || (method == NonbondedForce::LJPME);
-
     NonbondedForce* force = new NonbondedForce();
+    force->setCutoffDistance(2.0);
     force->setNonbondedMethod(method);
     force->addParticle(0.0, 1.0, 0.5);
     force->addParticle(1.0, 0.5, 0.6);
@@ -72,7 +69,21 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
 
     context.setPositions(positions);
 
-    assertForcesAndEnergy(context, TOL);
+    State state = context.getState(State::Forces | State::Energy, true);
+
+    State state1 = context.getState(State::Forces | State::Energy, true, 1<<0);
+    State state2 = context.getState(State::Forces | State::Energy, true, 1<<1);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
+
+    context.setParameter("p1", 1);
+
+    State state3 = context.getState(State::Forces | State::Energy, true, 1<<2);
+    State state4 = context.getState(State::Forces | State::Energy, true, 1<<3);
+    // cout << "state3: " << state3.getPotentialEnergy() << endl;
+    // cout << "state4: " << state4.getPotentialEnergy() << endl;
+    assertEnergy(state3, state4, TOL);
+    assertForces(state3, state4, TOL);
 }
 
 void testCoulomb() {
@@ -711,9 +722,11 @@ void testChangingParameters() {
     nonbonded->setNonbondedMethod(NonbondedForce::PME);
     nonbonded->setCutoffDistance(cutoff);
     nonbonded->setForceGroup(0);
+    nonbonded->setReciprocalSpaceForceGroup(2);
     system.addForce(nonbonded);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 1);
     sliced->setForceGroup(1);
+    sliced->setReciprocalSpaceForceGroup(3);
     system.addForce(sliced);
     system.setDefaultPeriodicBoxVectors(Vec3(boxSize, 0, 0), Vec3(0, boxSize, 0), Vec3(0, 0, boxSize));
 
@@ -722,7 +735,15 @@ void testChangingParameters() {
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    assertForcesAndEnergy(context, TOL);
+    State state1 = context.getState(State::Forces | State::Energy, true, 1<<0);
+    State state2 = context.getState(State::Forces | State::Energy, true, 1<<1);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
+
+    State state3 = context.getState(State::Forces | State::Energy, true, 1<<2);
+    State state4 = context.getState(State::Forces | State::Energy, true, 1<<3);
+    assertEnergy(state3, state4, TOL);
+    assertForces(state3, state4, TOL);
 
     // Now modify parameters and see if they still agree.
 
@@ -1038,6 +1059,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     auto q = [](int k) { return 1-2*(k%2); };
 
     int M = (int) pow(numMolecules, 1.0/3.0);
+    double eps = 1.0;
     if (M*M*M < numMolecules)
         M++;
     for (int k = 0; k < numMolecules; k++) {
@@ -1049,10 +1071,10 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         int i = 2*k, j = i+1;
         positions[i] = center + delta;
         positions[j] = center - delta;
-        nonbonded->addParticle(q(i), 1, 1);
-        nonbonded->addParticle(q(j), 1, 1);
+        nonbonded->addParticle(q(i), 1, eps);
+        nonbonded->addParticle(q(j), 1, eps);
         if (exceptions)
-            nonbonded->addException(i, j, q(i)*q(j), 1, 1);
+            nonbonded->addException(i, j, q(i)*q(j), 1, eps);
     }
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
@@ -1101,8 +1123,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     // Direct space
 
-    State state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
-    State state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+    State state1 = context1.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
+    State state2 = context2.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1129,11 +1151,11 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
     for (int k = 0; k < numParticles; k++)
         nonbonded->setParticleParameters(
-            k, q(k)*value[particleScale[k].first], 1, value[particleScale[k].second]
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
         );
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(
-            k, 2*k, 2*k+1, q(2*k)*q(2*k+1)*value[exceptionScale[k].first], 1, value[exceptionScale[k].second]
+            k, 2*k, 2*k+1, q(2*k)*q(2*k+1)*value[exceptionScale[k].first], 1, eps*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param01, value[param01]);
@@ -1168,11 +1190,11 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["lambdaSq"] = value["lambda"]*value["lambda"];
     for (int k = 0; k < numParticles; k++)
         nonbonded->setParticleParameters(
-            k, q(k)*value[particleScale[k].first], 1, value[particleScale[k].second]
+            k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
         );
     for (int k = 0; k < numExceptions; k++)
         nonbonded->setExceptionParameters(
-            k, 2*k, 2*k+1, q(2*k)*q(2*k+1)*value[exceptionScale[k].first], 1, value[exceptionScale[k].second]
+            k, 2*k, 2*k+1, q(2*k)*q(2*k+1)*value[exceptionScale[k].first], 1, eps*value[exceptionScale[k].second]
         );
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param01, value[param01]);
@@ -1195,9 +1217,9 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     // Sum of derivatives
 
     for (int k = 0; k < nonbonded->getNumParticles(); k++)
-        nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? 1 : 0);
+        nonbonded->setParticleParameters(k, includeCoulomb ? q(k) : 0, 1, includeLJ ? eps : 0);
     for (int k = 0; k < nonbonded->getNumExceptions(); k++)
-        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? q(2*k)*q(2*k+1) : 0, 1, includeLJ ? 1 : 0);
+        nonbonded->setExceptionParameters(k, 2*k, 2*k+1, includeCoulomb ? q(2*k)*q(2*k+1) : 0, 1, includeLJ ? eps : 0);
     nonbonded->updateParametersInContext(context1);
     state1 = context1.getState(State::Energy | State::Forces);
     double energy = state1.getPotentialEnergy();
