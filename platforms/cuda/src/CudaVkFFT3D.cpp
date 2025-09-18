@@ -4,67 +4,93 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "internal/CudaVkFFT3D.h"
+#include "CudaVkFFT3D.h"
 #include "openmm/cuda/CudaContext.h"
-#include <string>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
-using namespace std;
 
-CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
-        CudaFFT3D(context, stream, xsize, ysize, zsize, batch, realToComplex, in, out) {
+CudaVkFFT::CudaVkFFT(
+    CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex
+) : context(context), realToComplex(realToComplex), hasInitialized(false) {
+    cufftType type1, type2;
+    if (realToComplex) {
+        if (context.getUseDoublePrecision()) {
+            type1 = CUFFT_D2Z;
+            type2 = CUFFT_Z2D;
+        }
+        else {
+            type1 = CUFFT_R2C;
+            type2 = CUFFT_C2R;
+        }
+    }
+    else {
+        if (context.getUseDoublePrecision())
+            type1 = type2 = CUFFT_Z2Z;
+        else
+            type1 = type2 = CUFFT_C2C;
+    }
+    int n[3] = {xsize, ysize, zsize};
     int outputZSize = realToComplex ? (zsize/2+1) : zsize;
-    size_t realTypeSize = doublePrecision ? sizeof(double) : sizeof(float);
-    size_t inputElementSize = realToComplex ? realTypeSize : 2*realTypeSize;
-    device = context.getDeviceIndex();
-    inputBufferSize = inputElementSize*zsize*ysize*xsize*batch;
-    outputBufferSize = 2*realTypeSize*outputZSize*ysize*xsize*batch;
+    int inembed[] = {xsize, ysize, zsize};
+    int onembed[] = {xsize, ysize, outputZSize};
+    int idist = xsize*ysize*zsize;
+    int odist = xsize*ysize*outputZSize;
 
-    VkFFTConfiguration config = {};
-    config.performR2C = realToComplex;
-    config.device = &device;
-    config.num_streams = 1;
-    config.stream = &stream;
-    config.doublePrecision = doublePrecision;
-
-    config.FFTdim = 3;
-    config.size[0] = zsize;
-    config.size[1] = ysize;
-    config.size[2] = xsize;
-    config.numberBatches = batch;
-
-    config.inverseReturnToInputBuffer = true;
-    config.isInputFormatted = true;
-    config.inputBufferSize = &inputBufferSize;
-    config.inputBuffer = (void**) &inputBuffer;
-    config.inputBufferStride[0] = zsize;
-    config.inputBufferStride[1] = zsize*ysize;
-    config.inputBufferStride[2] = zsize*ysize*xsize;
-
-    config.bufferSize = &outputBufferSize;
-    config.buffer = (void**) &outputBuffer;
-    config.bufferStride[0] = outputZSize;
-    config.bufferStride[1] = outputZSize*ysize;
-    config.bufferStride[2] = outputZSize*ysize*xsize;
-
-    app = new VkFFTApplication();
-    VkFFTResult result = initializeVkFFT(app, config);
-    if (result != VKFFT_SUCCESS)
-        throw OpenMMException("Error initializing VkFFT: "+to_string(result));
+    cufftResult result = cufftPlanMany(&fftForward, 3, n, inembed, 1, idist, onembed, 1, odist, type1, numBatches);
+    if (result != CUFFT_SUCCESS)
+        throw OpenMMException("Error initializing FFT: "+context.intToString(result));
+    result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, type2, numBatches);
+    if (result != CUFFT_SUCCESS)
+        throw OpenMMException("Error initializing FFT: "+context.intToString(result));
+        hasInitialized = true;
 }
 
-CudaVkFFT3D::~CudaVkFFT3D() {
-    deleteVkFFT(app);
-    delete app;
+CudaVkFFT::~CudaVkFFT() {
+    if (hasInitialized) {
+        cufftDestroy(fftForward);
+        cufftDestroy(fftBackward);
+    }
 }
 
-void CudaVkFFT3D::execFFT(bool forward) {
-    VkFFTResult result = VkFFTAppend(app, forward ? -1 : 1, NULL);
-    if (result != VKFFT_SUCCESS)
-        throw OpenMMException("Error executing VkFFT: "+to_string(result));
+void CudaVkFFT::execFFT(ArrayInterface& in, ArrayInterface& out, bool forward) {
+    CUdeviceptr in2 = context.unwrap(in).getDevicePointer();
+    CUdeviceptr out2 = context.unwrap(out).getDevicePointer();
+    cufftResult result;
+    if (forward) {
+        cufftSetStream(fftForward, context.getCurrentStream());
+        if (realToComplex) {
+            if (context.getUseDoublePrecision())
+                result = cufftExecD2Z(fftForward, (double*) in2, (double2*) out2);
+            else
+                result = cufftExecR2C(fftForward, (float*) in2, (float2*) out2);
+        }
+        else {
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2Z(fftForward, (double2*) in2, (double2*) out2, CUFFT_FORWARD);
+            else
+                result = cufftExecC2C(fftForward, (float2*) in2, (float2*) out2, CUFFT_FORWARD);
+        }
+    }
+    else {
+        cufftSetStream(fftBackward, context.getCurrentStream());
+        if (realToComplex) {
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2D(fftBackward, (double2*) in2, (double*) out2);
+            else
+                result = cufftExecC2R(fftBackward, (float2*) in2, (float*) out2);
+        }
+        else {
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2Z(fftBackward, (double2*) in2, (double2*) out2, CUFFT_INVERSE);
+            else
+                result = cufftExecC2C(fftBackward, (float2*) in2, (float2*) out2, CUFFT_INVERSE);
+        }
+    }
+    if (result != CUFFT_SUCCESS)
+        throw OpenMMException("Error executing FFT: "+context.intToString(result));
 }

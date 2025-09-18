@@ -4,15 +4,15 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 /**
- * This tests the CUDA implementation of FFT3D.
+ * This tests the CUDA implementation of CudaVkFFT.
  */
 
-#include "internal/CudaOldVkFFT3D.h"
+#include "CudaVkFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
@@ -33,8 +33,8 @@ using namespace std;
 
 static CudaPlatform platform;
 
-template <class FFT3D, typename Real, class Real2>
-void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batch) {
+template <typename Real, class Real2>
+void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int numBatches) {
     System system;
     system.addParticle(0.0);
 
@@ -45,19 +45,10 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
         "true",
         platform.getPropertyDefaultValue("CudaPrecision"),
         "false",
-#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
-        platform.getPropertyDefaultValue(CudaPlatform::CudaCompiler()),  // openmm<8.1
-#endif
         platform.getPropertyDefaultValue(CudaPlatform::CudaTempDirectory()),
-#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
-        platform.getPropertyDefaultValue(CudaPlatform::CudaHostCompiler()),  // openmm<8.1
-#endif
         platform.getPropertyDefaultValue(CudaPlatform::CudaDisablePmeStream()),
         "false",
         1,
-#if (OPENMM_VERSION_MAJOR < 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR == 0))
-        true, // openmm<8.1
-#endif
         NULL
     );
     CudaContext& context = *platformData.contexts[0];
@@ -68,8 +59,8 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     int gridSize = xsize*ysize*zsize;
     int outputZSize = (realToComplex ? zsize/2+1 : zsize);
 
-    vector<vector<complex<double>>> reference(batch);
-    for (int j = 0; j < batch; j++) {
+    vector<vector<complex<double>>> reference(numBatches);
+    for (int j = 0; j < numBatches; j++) {
         reference[j].resize(gridSize);
         for (int i = 0; i < gridSize; i++) {
             Real x = (float) genrand_real2(sfmt);
@@ -78,9 +69,9 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
         }
     }
 
-    vector<Real2> complexOriginal(gridSize*batch);
+    vector<Real2> complexOriginal(gridSize*numBatches);
     Real* realOriginal = (Real*) &complexOriginal[0];
-    for (int j = 0; j < batch; j++)
+    for (int j = 0; j < numBatches; j++)
         for (int i = 0; i < gridSize; i++) {
             int offset = j*gridSize;
             if (realToComplex)
@@ -95,12 +86,11 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     CudaArray grid2(context, complexOriginal.size(), sizeof(Real2), "grid2");
     grid1.upload(complexOriginal);
 
-    CUstream stream = context.getCurrentStream();
-    FFT3D fft(context, stream, xsize, ysize, zsize, batch, realToComplex, grid1, grid2);
+    CudaVkFFT fft(context, xsize, ysize, zsize, numBatches, realToComplex);
 
     // Perform a forward FFT, then verify the result is correct.
 
-    fft.execFFT(true);
+    fft.execFFT(grid1, grid2, true);
     vector<Real2> result;
     grid2.download(result);
 
@@ -109,7 +99,7 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
     vector<ptrdiff_t> stride = {(ptrdiff_t) (ysize*zsize*sizeof(complex<double>)),
                                 (ptrdiff_t) (zsize*sizeof(complex<double>)),
                                 (ptrdiff_t) sizeof(complex<double>)};
-    for (int j = 0; j < batch; j++) {
+    for (int j = 0; j < numBatches; j++) {
         pocketfft::c2c(shape, stride, stride, axes, true, reference[j].data(), reference[j].data(), 1.0);
         for (int x = 0; x < xsize; x++)
             for (int y = 0; y < ysize; y++)
@@ -123,11 +113,11 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
 
     // Perform a backward transform and see if we get the original values.
 
-    fft.execFFT(false);
+    fft.execFFT(grid2, grid1, false);
     grid1.download(result);
     double scale = 1.0/(xsize*ysize*zsize);
     Real* realResult = (Real*) &result[0];
-    for (int j = 0; j < batch; j++)
+    for (int j = 0; j < numBatches; j++)
         for (int i = 0; i < gridSize; i++) {
             int offset = j*gridSize;
             if (realToComplex) {
@@ -141,13 +131,13 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int batc
         }
 }
 
-template <class FFT3D, typename Real, class Real2>
-void executeTests(int batch) {
-    testTransform<FFT3D, Real, Real2>(false, 28, 25, 30, batch);
-    testTransform<FFT3D, Real, Real2>(true, 28, 25, 25, batch);
-    testTransform<FFT3D, Real, Real2>(true, 25, 28, 25, batch);
-    testTransform<FFT3D, Real, Real2>(true, 25, 25, 28, batch);
-    testTransform<FFT3D, Real, Real2>(true, 21, 25, 27, batch);
+template <typename Real, class Real2>
+void executeTests(int numBatches) {
+    testTransform<Real, Real2>(false, 28, 25, 30, numBatches);
+    testTransform<Real, Real2>(true, 28, 25, 25, numBatches);
+    testTransform<Real, Real2>(true, 25, 28, 25, numBatches);
+    testTransform<Real, Real2>(true, 25, 25, 28, numBatches);
+    testTransform<Real, Real2>(true, 21, 25, 27, numBatches);
 }
 
 int main(int argc, char* argv[]) {
@@ -155,14 +145,14 @@ int main(int argc, char* argv[]) {
         if (argc > 1)
             platform.setPropertyDefaultValue("CudaPrecision", string(argv[1]));
         if (platform.getPropertyDefaultValue("CudaPrecision") == "double") {
-            executeTests<CudaOldVkFFT3D, double, double2>(1);
-            executeTests<CudaOldVkFFT3D, double, double2>(2);
-            executeTests<CudaOldVkFFT3D, double, double2>(3);
+            executeTests<double, double2>(1);
+            executeTests<double, double2>(2);
+            executeTests<double, double2>(3);
         }
         else {
-            executeTests<CudaOldVkFFT3D, float, float2>(1);
-            executeTests<CudaOldVkFFT3D, float, float2>(2);
-            executeTests<CudaOldVkFFT3D, float, float2>(3);
+            executeTests<float, float2>(1);
+            executeTests<float, float2>(2);
+            executeTests<float, float2>(3);
         }
     }
     catch(const exception& e) {

@@ -1,5 +1,5 @@
-#ifndef __OPENMM_CUDAVKFFT3D_H__
-#define __OPENMM_CUDAVKFFT3D_H__
+#ifndef __OPENMM_CudaOldVkFFT3D_H__
+#define __OPENMM_CudaOldVkFFT3D_H__
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -29,10 +29,10 @@ namespace NonbondedSlicing {
  * multiply every value of the original data set by the total number of data points.
  */
 
-class CudaVkFFT3D : public CudaFFT3D {
+class CudaOldVkFFT3D : public CudaFFT3D {
 public:
     /**
-     * Create an CudaVkFFT3D object for performing transforms of a particular size.
+     * Create an CudaOldVkFFT3D object for performing transforms of a particular size.
      *
      * The transform cannot be done in-place: the input and output
      * arrays must be different.  Also, the input array is used as workspace, so its contents
@@ -52,8 +52,8 @@ public:
      * @param in      the data to transform, ordered such that in[x*ysize*zsize + y*zsize + z] contains element (x, y, z)
      * @param out     on exit, this contains the transformed data
      */
-    CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out);
-    ~CudaVkFFT3D();
+    CudaOldVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out);
+    ~CudaOldVkFFT3D();
     /**
      * Perform a Fourier transform.
      *
@@ -69,4 +69,4 @@ private:
 
 } // namespace NonbondedSlicing
 
-#endif // __OPENMM_CUDAVKFFT3D_H__
+#endif // __OPENMM_CudaOldVkFFT3D_H__

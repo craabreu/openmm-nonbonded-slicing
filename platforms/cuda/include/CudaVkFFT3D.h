@@ -1,5 +1,5 @@
-#ifndef __OPENMM_CUDACUFFT3D_H__
-#define __OPENMM_CUDACUFFT3D_H__
+#ifndef __OPENMM_CUDAVKFFT3D_H__
+#define __OPENMM_CUDAVKFFT3D_H__
 
 /* -------------------------------------------------------------------------- *
  *                          OpenMM Nonbonded Slicing                          *
@@ -24,10 +24,10 @@ namespace NonbondedSlicing {
 
 /**
     * This class performs three dimensional Fast Fourier Transforms.  It is implemented
-    * using cuFFT.
+    * using VkFFT.
     *
     * FFTs tend to be most efficient when the size of each dimension is a product of
-    * small prime factors.  You can call findLegalDimension() on the CudaCuFFTFactory
+    * small prime factors.  You can call findLegalDimension() on the CudaVkFFTFactory
     * to determine the smallest size that satisfies this requirement and is greater
     * than or equal to a specified minimum size.
     *
@@ -36,7 +36,7 @@ namespace NonbondedSlicing {
     * multiply every value of the original data set by the total number of data points.
     */
 
-class CudaCuFFT : public FFT3DImpl {
+class CudaVkFFT : public FFT3DImpl {
 public:
     /**
         * Create a CudaFFT3D object for performing transforms of a particular size.
@@ -48,8 +48,8 @@ public:
         * @param numBatches the number of FFT batches to perform
         * @param realToComplex  if true, a real-to-complex transform will be done.  Otherwise, it is complex-to-complex.
         */
-    CudaCuFFT(CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex=false);
-    ~CudaCuFFT();
+    CudaVkFFT(CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex=false);
+    ~CudaVkFFT();
     /**
         * Perform a Fourier transform.  The transform cannot be done in-place: the input and output
         * arrays must be different.  Also, the input array is used as workspace, so its contents
@@ -71,14 +71,14 @@ private:
     bool realToComplex, hasInitialized;
 };
 
-class CudaCuFFTFactory : public FFT3DFactory {
+class CudaVkFFTFactory : public FFT3DFactory {
 public:
     FFT3D createFFT3D(ComputeContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex=false) {
         CudaContext& cuContext = dynamic_cast<CudaContext&>(context);
-        return FFT3D(new CudaCuFFT(cuContext, xsize, ysize, zsize, numBatches, realToComplex));
+        return FFT3D(new CudaVkFFT(cuContext, xsize, ysize, zsize, numBatches, realToComplex));
     }
 };
 
 } // namespace NonbondedSlicing
 
-#endif // __OPENMM_CUDACUFFT3D_H__
+#endif // __OPENMM_CUDAVKFFT3D_H__
