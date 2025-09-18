@@ -77,6 +77,9 @@ public:
         CudaContext& cuContext = dynamic_cast<CudaContext&>(context);
         return FFT3D(new CudaCuFFT(cuContext, xsize, ysize, zsize, numBatches, realToComplex));
     }
+    int findLegalDimension(int minimum) override {
+        return FFT3DFactory::findLegalDimension(minimum, 7);
+    }
 };
 
 } // namespace NonbondedSlicing

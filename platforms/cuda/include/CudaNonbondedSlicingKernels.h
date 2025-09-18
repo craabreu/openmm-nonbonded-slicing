@@ -13,6 +13,7 @@
 
 #include "CommonNonbondedSlicingKernels.h"
 #include "NonbondedSlicingKernels.h"
+#include "CudaCuFFT3D.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/Platform.h"
 #include "openmm/System.h"

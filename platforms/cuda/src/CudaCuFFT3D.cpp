@@ -19,21 +19,11 @@ CudaCuFFT::CudaCuFFT(
 ) : context(context), realToComplex(realToComplex), hasInitialized(false) {
     cufftType type1, type2;
     if (realToComplex) {
-        if (context.getUseDoublePrecision()) {
-            type1 = CUFFT_D2Z;
-            type2 = CUFFT_Z2D;
-        }
-        else {
-            type1 = CUFFT_R2C;
-            type2 = CUFFT_C2R;
-        }
+        type1 = context.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C;
+        type2 = context.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R;
     }
-    else {
-        if (context.getUseDoublePrecision())
-            type1 = type2 = CUFFT_Z2Z;
-        else
-            type1 = type2 = CUFFT_C2C;
-    }
+    else
+        type1 = type2 = context.getUseDoublePrecision() ? CUFFT_Z2Z : CUFFT_C2C;
     int n[3] = {xsize, ysize, zsize};
     int outputZSize = realToComplex ? (zsize/2+1) : zsize;
     int inembed[] = {xsize, ysize, zsize};
