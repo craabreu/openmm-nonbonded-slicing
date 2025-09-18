@@ -181,17 +181,25 @@ class CommonCalcSlicedNonbondedForceKernel::SyncQueuePostComputation : public Co
 public:
     SyncQueuePostComputation(ComputeContext& cc, ComputeEvent event, ComputeArray& pmeEnergyBuffer, int forceGroup) : cc(cc), event(event),
             pmeEnergyBuffer(pmeEnergyBuffer), forceGroup(forceGroup) {
+        bufferSize = pmeEnergyBuffer.getSize();
+        hasDerivatives = false;
     }
     void setKernel(ComputeKernel kernel) {
         addEnergyKernel = kernel;
         addEnergyKernel->addArg(pmeEnergyBuffer);
         addEnergyKernel->addArg(cc.getEnergyBuffer());
-        addEnergyKernel->addArg((int) pmeEnergyBuffer.getSize());
+        addEnergyKernel->addArg(bufferSize);
+    }
+    void addDerivatives(ComputeArray& pmeEnergyParamDerivBuffer, int numParamDerivs) {
+        addEnergyKernel->addArg(pmeEnergyParamDerivBuffer);
+        addEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
+        addEnergyKernel->addArg(numParamDerivs);
+        hasDerivatives = true;
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             event->wait();
-            if (includeEnergy)
+            if (includeEnergy || hasDerivatives)
                 addEnergyKernel->execute(pmeEnergyBuffer.getSize());
         }
         return 0.0;
@@ -202,6 +210,8 @@ private:
     ComputeKernel addEnergyKernel;
     ComputeArray& pmeEnergyBuffer;
     int forceGroup;
+    int bufferSize;
+    bool hasDerivatives;
 };
 
 
@@ -955,22 +965,32 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         computePlasmaCorrectionKernel->addArg(sliceLambdas);
         // TODO: Use the kernel above to compute slice background energy times volume for each slice
 
+        if (usePmeQueue && hasDerivatives) {
+            int energyElementSize = (cc.getUseDoublePrecision() || cc.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+            int bufferSize = pmeEnergyBuffer.getSize() * cc.getEnergyParamDerivNames().size();
+            pmeEnergyParamDerivBuffer.initialize(cc, bufferSize, energyElementSize, "pmeEnergyParamDerivBuffer");
+            cc.clearBuffer(pmeEnergyParamDerivBuffer);
+        }
+
         stringstream coulombDerivativeCode;
         if (hasDerivatives && (cosSinSums.isInitialized() || (pmeGrid1.isInitialized() && hasCoulomb))) {
+            bool assign = (pmeGrid1.isInitialized() && usePmeQueue && !doLJPME);
             const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
             for (int i = 0; i < allDerivParams.size(); i++) {
                 stringstream expr;
-                expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] += ";
+                expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] "<<(assign ? "=" : "+=");
                 bool empty = true;
                 for (int slice = 0; slice < numSlices; slice++) {
                     ScalingParameterInfo info = sliceScalingParams[slice];
                     if (info.includeCoulomb && info.nameCoulomb == allDerivParams[i]) {
-                        expr<<(empty ? "" : "+")<<"energy["<<slice<<"]";
+                        expr<<(empty ? " " : "+")<<"energy["<<slice<<"]";
                         empty = false;
                     }
                 }
                 if (!empty)
                     coulombDerivativeCode<<expr.str()<<";"<<endl;
+                else if (assign)
+                    coulombDerivativeCode<<expr.str()<<"0;"<<endl;
             }
         }
 
@@ -1057,8 +1077,12 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             for (int i = 0; i < 3; i++)
                 pmeEvalEnergyKernel->addArg();
             pmeEvalEnergyKernel->addArg(sliceLambdas);
-            if (hasDerivatives)
-                pmeEvalEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
+            if (hasDerivatives) {
+                if (usePmeQueue)
+                    pmeEvalEnergyKernel->addArg(pmeEnergyParamDerivBuffer);
+                else
+                    pmeEvalEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
+            }
             pmeInterpolateForceKernel->addArg(cc.getPosq());
             pmeInterpolateForceKernel->addArg(cc.getLongForceBuffer());
             pmeInterpolateForceKernel->addArg(pmeGrid1);
@@ -1073,8 +1097,11 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeFinishSpreadChargeKernel->addArg(pmeGrid2);
                 pmeFinishSpreadChargeKernel->addArg(pmeGrid1);
             }
-            if (usePmeQueue)
+            if (usePmeQueue) {
                 syncQueue->setKernel(program->createKernel("addEnergy"));
+                if (hasDerivatives)
+                    syncQueue->addDerivatives(pmeEnergyParamDerivBuffer, cc.getEnergyParamDerivNames().size());
+            }
 
             if (doLJPME) {
                 // Create kernels for LJ PME.
@@ -1126,8 +1153,12 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 for (int i = 0; i < 3; i++)
                     pmeDispersionEvalEnergyKernel->addArg();
                 pmeDispersionEvalEnergyKernel->addArg(sliceLambdas);
-                if (hasDerivatives)
-                    pmeDispersionEvalEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
+                if (hasDerivatives) {
+                    if (usePmeQueue)
+                        pmeDispersionEvalEnergyKernel->addArg(pmeEnergyParamDerivBuffer);
+                    else
+                        pmeDispersionEvalEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
+                }
                 pmeDispersionInterpolateForceKernel->addArg(cc.getPosq());
                 pmeDispersionInterpolateForceKernel->addArg(cc.getLongForceBuffer());
                 pmeDispersionInterpolateForceKernel->addArg(pmeGrid1);
@@ -1389,8 +1420,11 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionEvalEnergyKernel->setArg(6, recipBoxVectorsFloat[1]);
                 pmeDispersionEvalEnergyKernel->setArg(7, recipBoxVectorsFloat[2]);
             }
-            if (!hasCoulomb)
+            if (!hasCoulomb) {
                 cc.clearBuffer(pmeEnergyBuffer);
+                if (hasDerivatives)
+                    cc.clearBuffer(pmeEnergyParamDerivBuffer);
+            }
             if (includeEnergy || hasDerivatives)
                 pmeDispersionEvalEnergyKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             pmeDispersionConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ);

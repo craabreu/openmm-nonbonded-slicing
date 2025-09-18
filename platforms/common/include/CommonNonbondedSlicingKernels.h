@@ -138,6 +138,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray pmeDispersionBsplineModuliZ;
         ComputeArray pmeAtomGridIndex;
         ComputeArray pmeEnergyBuffer;
+        ComputeArray pmeEnergyParamDerivBuffer;
         ComputeArray ljpmeEnergyBuffer;
         ComputeArray chargeBuffer;
         ComputeArray subsets;

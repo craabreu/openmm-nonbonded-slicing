@@ -270,9 +270,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
 #else
     energyBuffer[GLOBAL_ID] += energySum;
 #endif
-#if HAS_DERIVATIVES
     ADD_DERIVATIVES
-#endif
 }
 
 KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL const real* RESTRICT pmeGrid,
@@ -401,8 +399,17 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
     }
 }
 
-KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize) {
-    printf("addEnergy\n");
-    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE)
+KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize
+#if HAS_DERIVATIVES
+    , GLOBAL const mixed* RESTRICT pmeEnergyParamDerivBuffer, GLOBAL mixed* RESTRICT energyParamDerivBuffer, int numDerivParams
+#endif
+) {
+    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE) {
         energyBuffer[i] += pmeEnergyBuffer[i];
+#if HAS_DERIVATIVES
+        for (int param = 0; param < numDerivParams; param++) {
+            energyParamDerivBuffer[i*numDerivParams+param] += pmeEnergyParamDerivBuffer[i*numDerivParams+param];
+        }
+#endif
+    }
 }
