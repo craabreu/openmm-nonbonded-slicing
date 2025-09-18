@@ -16,7 +16,7 @@ using namespace OpenMM;
 
 CudaCuFFT::CudaCuFFT(
     CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex
-) : context(context), realToComplex(realToComplex), hasInitialized(false) {
+) : context(context), realToComplex(realToComplex) {
     cufftType type1, type2;
     if (realToComplex) {
         type1 = context.getUseDoublePrecision() ? CUFFT_D2Z : CUFFT_R2C;
@@ -37,14 +37,11 @@ CudaCuFFT::CudaCuFFT(
     result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, type2, numBatches);
     if (result != CUFFT_SUCCESS)
         throw OpenMMException("Error initializing FFT: "+context.intToString(result));
-        hasInitialized = true;
 }
 
 CudaCuFFT::~CudaCuFFT() {
-    if (hasInitialized) {
-        cufftDestroy(fftForward);
-        cufftDestroy(fftBackward);
-    }
+    cufftDestroy(fftForward);
+    cufftDestroy(fftBackward);
 }
 
 void CudaCuFFT::execFFT(ArrayInterface& in, ArrayInterface& out, bool forward) {

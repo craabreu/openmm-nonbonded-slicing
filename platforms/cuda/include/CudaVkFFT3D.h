@@ -15,8 +15,8 @@
 #include "openmm/common/FFT3D.h"
 #include "openmm/common/ArrayInterface.h"
 #include "openmm/cuda/CudaContext.h"
-#include <cuda.h>
-#include <cufft.h>
+#define VKFFT_BACKEND 1 // CUDA
+#include "vkFFT.h"
 
 using namespace OpenMM;
 
@@ -66,9 +66,13 @@ public:
     void execFFT(ArrayInterface& in, ArrayInterface& out, bool forward = true);
 private:
     CudaContext& context;
-    cufftHandle fftForward;
-    cufftHandle fftBackward;
-    bool realToComplex, hasInitialized;
+    CUstream stream;
+    CUdeviceptr inputBuffer;
+    CUdeviceptr outputBuffer;
+    int device;
+    uint64_t inputBufferSize;
+    uint64_t outputBufferSize;
+    VkFFTApplication* app;
 };
 
 class CudaVkFFTFactory : public FFT3DFactory {

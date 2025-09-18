@@ -68,7 +68,7 @@ private:
     CudaContext& context;
     cufftHandle fftForward;
     cufftHandle fftBackward;
-    bool realToComplex, hasInitialized;
+    bool realToComplex;
 };
 
 class CudaCuFFTFactory : public FFT3DFactory {

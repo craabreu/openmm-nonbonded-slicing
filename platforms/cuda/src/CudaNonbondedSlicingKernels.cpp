@@ -22,7 +22,7 @@ using namespace std;
 void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
     bool usePmeQueue = !cu.getPlatformData().disablePmeStream;
     bool useFixedPointChargeSpreading = cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces;
-    if (force.getUseCudaFFT()) {
+    if (force.getUseCuFFT()) {
         CudaCuFFTFactory cuFFTFactory;
         commonInitialize(system, force, cuFFTFactory, usePmeQueue, false, useFixedPointChargeSpreading, false);
     }

@@ -202,8 +202,8 @@ void testUseCuFFT() {
     }
 
     SlicedNonbondedForce* nonbonded2 = new SlicedNonbondedForce(*nonbonded1, 2);
-    nonbonded2->setUseCuFFT(!nonbonded1->getUseCudaFFT());
-    assertEqualTo(nonbonded1->getUseCudaFFT(), !nonbonded2->getUseCudaFFT(), tol);
+    nonbonded2->setUseCuFFT(!nonbonded1->getUseCuFFT());
+    assertEqualTo(nonbonded1->getUseCuFFT(), !nonbonded2->getUseCuFFT(), tol);
 
     system1.addForce(nonbonded1);
     system2.addForce(nonbonded2);

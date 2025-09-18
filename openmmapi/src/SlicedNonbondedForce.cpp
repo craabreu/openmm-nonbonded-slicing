@@ -29,7 +29,7 @@ using namespace NonbondedSlicing;
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) :
-    NonbondedForce(), numSubsets(numSubsets), useCudaFFT(true) {
+    NonbondedForce(), numSubsets(numSubsets), useCuFFT(true) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : SlicedNonbondedForce(numSubsets) {
