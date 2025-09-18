@@ -12,7 +12,6 @@
  * This tests the CUDA implementation of FFT3D.
  */
 
-#include "internal/CudaCuFFT3D.h"
 #include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
@@ -156,17 +155,11 @@ int main(int argc, char* argv[]) {
         if (argc > 1)
             platform.setPropertyDefaultValue("CudaPrecision", string(argv[1]));
         if (platform.getPropertyDefaultValue("CudaPrecision") == "double") {
-            executeTests<CudaCuFFT3D, double, double2>(1);
-            executeTests<CudaCuFFT3D, double, double2>(2);
-            executeTests<CudaCuFFT3D, double, double2>(3);
             executeTests<CudaVkFFT3D, double, double2>(1);
             executeTests<CudaVkFFT3D, double, double2>(2);
             executeTests<CudaVkFFT3D, double, double2>(3);
         }
         else {
-            executeTests<CudaCuFFT3D, float, float2>(1);
-            executeTests<CudaCuFFT3D, float, float2>(2);
-            executeTests<CudaCuFFT3D, float, float2>(3);
             executeTests<CudaVkFFT3D, float, float2>(1);
             executeTests<CudaVkFFT3D, float, float2>(2);
             executeTests<CudaVkFFT3D, float, float2>(3);

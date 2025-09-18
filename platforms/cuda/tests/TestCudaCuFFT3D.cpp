@@ -9,10 +9,10 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * This tests the CUDA implementation of CudaBatchedFFT3D.
+ * This tests the CUDA implementation of CudaCuFFT.
  */
 
-#include "CudaBatchedFFT3D.h"
+#include "CudaCuFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
@@ -86,7 +86,7 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int numB
     CudaArray grid2(context, complexOriginal.size(), sizeof(Real2), "grid2");
     grid1.upload(complexOriginal);
 
-    CudaBatchedFFT3D fft(context, xsize, ysize, zsize, numBatches, realToComplex);
+    CudaCuFFT fft(context, xsize, ysize, zsize, numBatches, realToComplex);
 
     // Perform a forward FFT, then verify the result is correct.
 

@@ -4,82 +4,93 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "internal/CudaCuFFT3D.h"
+#include "CudaCuFFT3D.h"
 #include "openmm/cuda/CudaContext.h"
-#include <string>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
-using namespace std;
 
-CudaCuFFT3D::CudaCuFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
-        CudaFFT3D(context, stream, xsize, ysize, zsize, batch, realToComplex, in, out) {
-    int outputZSize = realToComplex ? (zsize/2+1) : zsize;
+CudaCuFFT::CudaCuFFT(
+    CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex
+) : context(context), realToComplex(realToComplex), hasInitialized(false) {
+    cufftType type1, type2;
+    if (realToComplex) {
+        if (context.getUseDoublePrecision()) {
+            type1 = CUFFT_D2Z;
+            type2 = CUFFT_Z2D;
+        }
+        else {
+            type1 = CUFFT_R2C;
+            type2 = CUFFT_C2R;
+        }
+    }
+    else {
+        if (context.getUseDoublePrecision())
+            type1 = type2 = CUFFT_Z2Z;
+        else
+            type1 = type2 = CUFFT_C2C;
+    }
     int n[3] = {xsize, ysize, zsize};
+    int outputZSize = realToComplex ? (zsize/2+1) : zsize;
     int inembed[] = {xsize, ysize, zsize};
     int onembed[] = {xsize, ysize, outputZSize};
     int idist = xsize*ysize*zsize;
     int odist = xsize*ysize*outputZSize;
 
-    cufftType_t forwardType, backwardType;
-    if (realToComplex) {
-        forwardType = doublePrecision ? CUFFT_D2Z : CUFFT_R2C;
-        backwardType = doublePrecision ? CUFFT_Z2D : CUFFT_C2R;
+    cufftResult result = cufftPlanMany(&fftForward, 3, n, inembed, 1, idist, onembed, 1, odist, type1, numBatches);
+    if (result != CUFFT_SUCCESS)
+        throw OpenMMException("Error initializing FFT: "+context.intToString(result));
+    result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, type2, numBatches);
+    if (result != CUFFT_SUCCESS)
+        throw OpenMMException("Error initializing FFT: "+context.intToString(result));
+        hasInitialized = true;
+}
+
+CudaCuFFT::~CudaCuFFT() {
+    if (hasInitialized) {
+        cufftDestroy(fftForward);
+        cufftDestroy(fftBackward);
     }
-    else
-        forwardType = backwardType = doublePrecision ? CUFFT_Z2Z : CUFFT_C2C;
-
-    cufftResult result = cufftPlanMany(&fftForward, 3, n, inembed, 1, idist, onembed, 1, odist, forwardType, batch);
-    if (result != CUFFT_SUCCESS)
-        throw OpenMMException("Error initializing CuFFT: "+to_string(result));
-
-    result = cufftPlanMany(&fftBackward, 3, n, onembed, 1, odist, inembed, 1, idist, backwardType, batch);
-    if (result != CUFFT_SUCCESS)
-        throw OpenMMException("Error initializing FFT: "+to_string(result));
-
-    cufftSetStream(fftForward, stream);
-    cufftSetStream(fftBackward, stream);
 }
 
-CudaCuFFT3D::~CudaCuFFT3D() {
-    cufftDestroy(fftForward);
-    cufftDestroy(fftBackward);
-}
-
-void CudaCuFFT3D::execFFT(bool forward) {
+void CudaCuFFT::execFFT(ArrayInterface& in, ArrayInterface& out, bool forward) {
+    CUdeviceptr in2 = context.unwrap(in).getDevicePointer();
+    CUdeviceptr out2 = context.unwrap(out).getDevicePointer();
     cufftResult result;
     if (forward) {
+        cufftSetStream(fftForward, context.getCurrentStream());
         if (realToComplex) {
-            if (doublePrecision)
-                result = cufftExecD2Z(fftForward, (double*) inputBuffer, (double2*) outputBuffer);
+            if (context.getUseDoublePrecision())
+                result = cufftExecD2Z(fftForward, (double*) in2, (double2*) out2);
             else
-                result = cufftExecR2C(fftForward, (float*) inputBuffer, (float2*) outputBuffer);
+                result = cufftExecR2C(fftForward, (float*) in2, (float2*) out2);
         }
         else {
-            if (doublePrecision)
-                result = cufftExecZ2Z(fftForward, (double2*) inputBuffer, (double2*) outputBuffer, CUFFT_FORWARD);
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2Z(fftForward, (double2*) in2, (double2*) out2, CUFFT_FORWARD);
             else
-                result = cufftExecC2C(fftForward, (float2*) inputBuffer, (float2*) outputBuffer, CUFFT_FORWARD);
+                result = cufftExecC2C(fftForward, (float2*) in2, (float2*) out2, CUFFT_FORWARD);
         }
     }
     else {
+        cufftSetStream(fftBackward, context.getCurrentStream());
         if (realToComplex) {
-            if (doublePrecision)
-                result = cufftExecZ2D(fftBackward, (double2*) outputBuffer, (double*) inputBuffer);
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2D(fftBackward, (double2*) in2, (double*) out2);
             else
-                result = cufftExecC2R(fftBackward, (float2*) outputBuffer, (float*) inputBuffer);
+                result = cufftExecC2R(fftBackward, (float2*) in2, (float*) out2);
         }
         else {
-            if (doublePrecision)
-                result = cufftExecZ2Z(fftBackward, (double2*) outputBuffer, (double2*) inputBuffer, CUFFT_INVERSE);
+            if (context.getUseDoublePrecision())
+                result = cufftExecZ2Z(fftBackward, (double2*) in2, (double2*) out2, CUFFT_INVERSE);
             else
-                result = cufftExecC2C(fftBackward, (float2*) outputBuffer, (float2*) inputBuffer, CUFFT_INVERSE);
+                result = cufftExecC2C(fftBackward, (float2*) in2, (float2*) out2, CUFFT_INVERSE);
         }
     }
     if (result != CUFFT_SUCCESS)
-        throw OpenMMException("Error executing FFT: "+to_string(result));
+        throw OpenMMException("Error executing FFT: "+context.intToString(result));
 }
