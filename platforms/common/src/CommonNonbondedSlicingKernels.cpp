@@ -190,10 +190,9 @@ public:
         addEnergyKernel->addArg(cc.getEnergyBuffer());
         addEnergyKernel->addArg(bufferSize);
     }
-    void addDerivatives(ComputeArray& pmeEnergyParamDerivBuffer, int numParamDerivs) {
+    void addDerivatives(ComputeArray& pmeEnergyParamDerivBuffer) {
         addEnergyKernel->addArg(pmeEnergyParamDerivBuffer);
         addEnergyKernel->addArg(cc.getEnergyParamDerivBuffer());
-        addEnergyKernel->addArg(numParamDerivs);
         hasDerivatives = true;
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
@@ -974,7 +973,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
 
         stringstream coulombDerivativeCode;
         if (hasDerivatives && (cosSinSums.isInitialized() || (pmeGrid1.isInitialized() && hasCoulomb))) {
-            bool assign = (pmeGrid1.isInitialized() && usePmeQueue && !doLJPME);
+            bool assign = (pmeGrid1.isInitialized() && usePmeQueue);
             const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
             for (int i = 0; i < allDerivParams.size(); i++) {
                 stringstream expr;
@@ -999,17 +998,28 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
             for (int i = 0; i < allDerivParams.size(); i++) {
                 stringstream expr;
-                expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] += ";
+                expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] +=";
                 bool empty = true;
                 for (int slice = 0; slice < numSlices; slice++) {
                     ScalingParameterInfo info = sliceScalingParams[slice];
                     if (info.includeLJ && info.nameLJ == allDerivParams[i]) {
-                        expr<<(empty ? "" : "+")<<"energy["<<slice<<"]";
+                        expr<<(empty ? " " : "+")<<"energy["<<slice<<"]";
                         empty = false;
                     }
                 }
                 if (!empty)
                     ljDerivativeCode<<expr.str()<<";"<<endl;
+            }
+        }
+
+        stringstream accumulateDerivativesCode;
+        if (hasDerivatives && usePmeQueue) {
+            const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
+            accumulateDerivativesCode<<"int offset = index*"<<allDerivParams.size()<<";"<<endl;
+            for (int i = 0; i < allDerivParams.size(); i++) {
+                if (requestedDerivatives.find(allDerivParams[i]) == requestedDerivatives.end())
+                    continue;
+                accumulateDerivativesCode<<"energyParamDerivBuffer[offset+"<<i<<"] += pmeEnergyParamDerivBuffer[offset+"<<i<<"];"<<endl;
             }
         }
 
@@ -1040,6 +1050,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
             replacements["ADD_DERIVATIVES"] = coulombDerivativeCode.str();
+            replacements["ACCUMULATE_DERIVATIVES"] = accumulateDerivativesCode.str();
             ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
             pmeGridIndexKernel = program->createKernel("findAtomGridIndex");
             pmeSpreadChargeKernel = program->createKernel("gridSpreadCharge");
@@ -1100,7 +1111,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             if (usePmeQueue) {
                 syncQueue->setKernel(program->createKernel("addEnergy"));
                 if (hasDerivatives)
-                    syncQueue->addDerivatives(pmeEnergyParamDerivBuffer, cc.getEnergyParamDerivNames().size());
+                    syncQueue->addDerivatives(pmeEnergyParamDerivBuffer);
             }
 
             if (doLJPME) {
@@ -1116,6 +1127,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDefines["CHARGE_FROM_SIGEPS"] = "1";
                 map<string, string> replacements;
                 replacements["ADD_DERIVATIVES"] = ljDerivativeCode.str();
+                replacements["ACCUMULATE_DERIVATIVES"] = accumulateDerivativesCode.str();
                 program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
                 pmeDispersionGridIndexKernel = program->createKernel("findAtomGridIndex");
                 pmeDispersionSpreadChargeKernel = program->createKernel("gridSpreadCharge");

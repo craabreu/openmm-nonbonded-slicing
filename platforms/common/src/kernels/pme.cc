@@ -401,15 +401,13 @@ KERNEL void addForces(GLOBAL const real4* RESTRICT forces, GLOBAL mm_long* RESTR
 
 KERNEL void addEnergy(GLOBAL const mixed* RESTRICT pmeEnergyBuffer, GLOBAL mixed* RESTRICT energyBuffer, int bufferSize
 #if HAS_DERIVATIVES
-    , GLOBAL const mixed* RESTRICT pmeEnergyParamDerivBuffer, GLOBAL mixed* RESTRICT energyParamDerivBuffer, int numDerivParams
+    , GLOBAL const mixed* RESTRICT pmeEnergyParamDerivBuffer, GLOBAL mixed* RESTRICT energyParamDerivBuffer
 #endif
 ) {
-    for (int i = GLOBAL_ID; i < bufferSize; i += GLOBAL_SIZE) {
-        energyBuffer[i] += pmeEnergyBuffer[i];
+    for (int index = GLOBAL_ID; index < bufferSize; index += GLOBAL_SIZE) {
+        energyBuffer[index] += pmeEnergyBuffer[index];
 #if HAS_DERIVATIVES
-        for (int param = 0; param < numDerivParams; param++) {
-            energyParamDerivBuffer[i*numDerivParams+param] += pmeEnergyParamDerivBuffer[i*numDerivParams+param];
-        }
+    ACCUMULATE_DERIVATIVES
 #endif
     }
 }
