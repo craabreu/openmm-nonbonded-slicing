@@ -8,7 +8,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
-#include "CudaVkFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "openmm/cuda/CudaContext.h"
 
 using namespace NonbondedSlicing;

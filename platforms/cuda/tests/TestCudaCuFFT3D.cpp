@@ -12,7 +12,7 @@
  * This tests the CUDA implementation of CudaCuFFT.
  */
 
-#include "CudaCuFFT3D.h"
+#include "internal/CudaCuFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"

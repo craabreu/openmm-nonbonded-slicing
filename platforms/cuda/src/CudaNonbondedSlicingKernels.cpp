@@ -10,8 +10,8 @@
 
 #include "CudaNonbondedSlicingKernels.h"
 #include "CudaNonbondedSlicingKernelSources.h"
-#include "CudaCuFFT3D.h"
-#include "CudaVkFFT3D.h"
+#include "internal/CudaCuFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "SlicedNonbondedForce.h"
 #include "openmm/System.h"
 

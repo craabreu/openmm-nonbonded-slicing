@@ -12,7 +12,7 @@
  * This tests the CUDA implementation of CudaVkFFT.
  */
 
-#include "CudaVkFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
