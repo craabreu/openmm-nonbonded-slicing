@@ -272,7 +272,7 @@ parameter cannot be used simultaneously to apply offsets and scale energy terms.
 <tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getSwitchingDistance</span></code></a>(self)</p></td>
 <td><p>Get the distance at which the switching function begins to reduce the Lennard-Jones interaction.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT" title="nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseCudaFFT</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseCuFFT" title="nonbondedslicing.SlicedNonbondedForce.getUseCuFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseCuFFT</span></code></a>()</p></td>
 <td><p>Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseDispersionCorrection</span></code></a>(self)</p></td>
@@ -920,10 +920,10 @@ derivative.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT">
-<span class="sig-name descname"><span class="pre">getUseCudaFFT</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getUseCudaFFT" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getUseCuFFT">
+<span class="sig-name descname"><span class="pre">getUseCuFFT</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getUseCuFFT" title="Link to this definition">¶</a></dt>
 <dd><p>Get whether to use CUDA Toolkit’s cuFFT library when executing in the CUDA platform.
-The default value is <cite>False</cite>.</p>
+The default value is <cite>True</cite>.</p>
 </dd></dl>
 
 <dl class="py method">

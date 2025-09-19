@@ -57,7 +57,7 @@ SlicedNonbondedForce
         getScalingParameter
         getScalingParameterDerivativeName
         getSwitchingDistance
-        getUseCudaFFT
+        getUseCuFFT
         getUseDispersionCorrection
         getUseSwitchingFunction
         setCutoffDistance
