@@ -4,26 +4,26 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 #include "internal/CudaVkFFT3D.h"
 #include "openmm/cuda/CudaContext.h"
-#include <string>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
-using namespace std;
 
-CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int ysize, int zsize, int batch, bool realToComplex, CudaArray& in, CudaArray& out) :
-        CudaFFT3D(context, stream, xsize, ysize, zsize, batch, realToComplex, in, out) {
+CudaVkFFT::CudaVkFFT(
+    CudaContext& context, int xsize, int ysize, int zsize, int numBatches, bool realToComplex
+) : context(context) {
     int outputZSize = realToComplex ? (zsize/2+1) : zsize;
+    bool doublePrecision = context.getUseDoublePrecision();
     size_t realTypeSize = doublePrecision ? sizeof(double) : sizeof(float);
     size_t inputElementSize = realToComplex ? realTypeSize : 2*realTypeSize;
     device = context.getDeviceIndex();
-    inputBufferSize = inputElementSize*zsize*ysize*xsize*batch;
-    outputBufferSize = 2*realTypeSize*outputZSize*ysize*xsize*batch;
+    inputBufferSize = inputElementSize*zsize*ysize*xsize*numBatches;
+    outputBufferSize = 2*realTypeSize*outputZSize*ysize*xsize*numBatches;
 
     VkFFTConfiguration config = {};
     config.performR2C = realToComplex;
@@ -36,7 +36,7 @@ CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int 
     config.size[0] = zsize;
     config.size[1] = ysize;
     config.size[2] = xsize;
-    config.numberBatches = batch;
+    config.numberBatches = numBatches;
 
     config.inverseReturnToInputBuffer = true;
     config.isInputFormatted = true;
@@ -55,16 +55,25 @@ CudaVkFFT3D::CudaVkFFT3D(CudaContext& context, CUstream& stream, int xsize, int 
     app = new VkFFTApplication();
     VkFFTResult result = initializeVkFFT(app, config);
     if (result != VKFFT_SUCCESS)
-        throw OpenMMException("Error initializing VkFFT: "+to_string(result));
+        throw OpenMMException("Error initializing VkFFT: "+context.intToString(result));
 }
 
-CudaVkFFT3D::~CudaVkFFT3D() {
+CudaVkFFT::~CudaVkFFT() {
     deleteVkFFT(app);
     delete app;
 }
 
-void CudaVkFFT3D::execFFT(bool forward) {
+void CudaVkFFT::execFFT(ArrayInterface& in, ArrayInterface& out, bool forward) {
+    stream = context.getCurrentStream();
+    if (forward) {
+        inputBuffer = context.unwrap(in).getDevicePointer();
+        outputBuffer = context.unwrap(out).getDevicePointer();
+    }
+    else {
+        inputBuffer = context.unwrap(out).getDevicePointer();
+        outputBuffer = context.unwrap(in).getDevicePointer();
+    }
     VkFFTResult result = VkFFTAppend(app, forward ? -1 : 1, NULL);
     if (result != VKFFT_SUCCESS)
-        throw OpenMMException("Error executing VkFFT: "+to_string(result));
+        throw OpenMMException("Error executing VkFFT: "+context.intToString(result));
 }

@@ -391,9 +391,9 @@ public:
     void setScalingParameterDerivative(int index, const std::string& parameter);
 	/**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
-     * The default value is `False`.
+     * The default value is `True`.
      */
-    bool getUseCudaFFT() const;
+    bool getUseCuFFT() const;
  	/**
      * Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0

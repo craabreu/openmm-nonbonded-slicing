@@ -51,11 +51,11 @@ public:
     int addScalingParameterDerivative(const string& parameter);
     const string& getScalingParameterDerivativeName(int index) const;
     void setScalingParameterDerivative(int index, const string& parameter);
-    bool getUseCudaFFT() const {
-        return useCudaFFT;
+    bool getUseCuFFT() const {
+        return useCuFFT;
     };
     void setUseCuFFT(bool use) {
-        useCudaFFT = use;
+        useCuFFT = use;
     };
 protected:
     ForceImpl* createImpl() const;
@@ -67,7 +67,7 @@ private:
     map<int, int> subsets;
     vector<ScalingParameterInfo> scalingParameters;
     vector<int> scalingParameterDerivatives;
-    bool useCudaFFT;
+    bool useCuFFT;
 };
 
 /**

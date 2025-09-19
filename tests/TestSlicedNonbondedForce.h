@@ -80,8 +80,6 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
 
     State state3 = context.getState(State::Forces | State::Energy, true, 1<<2);
     State state4 = context.getState(State::Forces | State::Energy, true, 1<<3);
-    // cout << "state3: " << state3.getPotentialEnergy() << endl;
-    // cout << "state4: " << state4.getPotentialEnergy() << endl;
     assertEnergy(state3, state4, TOL);
     assertForces(state3, state4, TOL);
 }

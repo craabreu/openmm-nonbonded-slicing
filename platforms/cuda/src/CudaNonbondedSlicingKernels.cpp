@@ -10,7 +10,8 @@
 
 #include "CudaNonbondedSlicingKernels.h"
 #include "CudaNonbondedSlicingKernelSources.h"
-#include "CudaBatchedFFT3D.h"
+#include "internal/CudaCuFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "SlicedNonbondedForce.h"
 #include "openmm/System.h"
 
@@ -21,6 +22,12 @@ using namespace std;
 void CudaCalcSlicedNonbondedForceKernel::initialize(const System& system, const SlicedNonbondedForce& force) {
     bool usePmeQueue = !cu.getPlatformData().disablePmeStream;
     bool useFixedPointChargeSpreading = cu.getUseDoublePrecision() || cu.getPlatformData().deterministicForces;
-    CudaBatchedFFT3DFactory fftFactory;
-    commonInitialize(system, force, fftFactory, usePmeQueue, false, useFixedPointChargeSpreading, false);
+    if (force.getUseCuFFT()) {
+        CudaCuFFTFactory cuFFTFactory;
+        commonInitialize(system, force, cuFFTFactory, usePmeQueue, false, useFixedPointChargeSpreading, false);
+    }
+    else {
+        CudaVkFFTFactory vkFFTFactory;
+        commonInitialize(system, force, vkFFTFactory, usePmeQueue, false, useFixedPointChargeSpreading, false);
+    }
 }

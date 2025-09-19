@@ -285,8 +285,10 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
     return derivative.str();
 }
 
-void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue,
-        bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme) {
+void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
+    const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue,
+    bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme
+) {
     this->usePmeQueue = false;
     this->deviceIsCpu = deviceIsCpu;
     this->useFixedPointChargeSpreading = useFixedPointChargeSpreading;
@@ -491,15 +493,15 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(const System& system
         // Compute the PME parameters.
 
         SlicedNonbondedForceImpl::calcPMEParameters(system, force, alpha, gridSizeX, gridSizeY, gridSizeZ, false);
-        gridSizeX = cc.findLegalFFTDimension(gridSizeX);
-        gridSizeY = cc.findLegalFFTDimension(gridSizeY);
-        gridSizeZ = cc.findLegalFFTDimension(gridSizeZ);
+        gridSizeX = fftFactory.findLegalDimension(gridSizeX);
+        gridSizeY = fftFactory.findLegalDimension(gridSizeY);
+        gridSizeZ = fftFactory.findLegalDimension(gridSizeZ);
         if (doLJPME) {
             SlicedNonbondedForceImpl::calcPMEParameters(system, force, dispersionAlpha, dispersionGridSizeX,
                                                   dispersionGridSizeY, dispersionGridSizeZ, true);
-            dispersionGridSizeX = cc.findLegalFFTDimension(dispersionGridSizeX);
-            dispersionGridSizeY = cc.findLegalFFTDimension(dispersionGridSizeY);
-            dispersionGridSizeZ = cc.findLegalFFTDimension(dispersionGridSizeZ);
+            dispersionGridSizeX = fftFactory.findLegalDimension(dispersionGridSizeX);
+            dispersionGridSizeY = fftFactory.findLegalDimension(dispersionGridSizeY);
+            dispersionGridSizeZ = fftFactory.findLegalDimension(dispersionGridSizeZ);
         }
         defines["EWALD_ALPHA"] = cc.doubleToString(alpha);
         defines["TWO_OVER_SQRT_PI"] = cc.doubleToString(2.0/sqrt(M_PI));

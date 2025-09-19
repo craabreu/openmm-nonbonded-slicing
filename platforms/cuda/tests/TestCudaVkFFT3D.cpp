@@ -4,15 +4,15 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
 /**
- * This tests the CUDA implementation of CudaBatchedFFT3D.
+ * This tests the CUDA implementation of CudaVkFFT.
  */
 
-#include "CudaBatchedFFT3D.h"
+#include "internal/CudaVkFFT3D.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
@@ -86,7 +86,7 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int numB
     CudaArray grid2(context, complexOriginal.size(), sizeof(Real2), "grid2");
     grid1.upload(complexOriginal);
 
-    CudaBatchedFFT3D fft(context, xsize, ysize, zsize, numBatches, realToComplex);
+    CudaVkFFT fft(context, xsize, ysize, zsize, numBatches, realToComplex);
 
     // Perform a forward FFT, then verify the result is correct.
 
