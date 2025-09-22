@@ -445,6 +445,12 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         paramsDefines["USE_POSQ_CHARGES"] = "1";
     if (doLJPME)
         paramsDefines["INCLUDE_LJPME_EXCEPTIONS"] = "1";
+    sumsPerSubset = (hasReciprocal && hasOffsets && cc.getContextIndex() == 0) ? (doLJPME ? 3 : 2) : 0;
+    if (sumsPerSubset > 0) {
+        paramsDefines["SUMS_PER_SUBSET"] = cc.intToString(sumsPerSubset);
+        paramsDefines["HANDLE_RECIPROCAL"] = "1";
+    }
+
     if (nonbondedMethod == Ewald) {
         // Compute the Ewald parameters.
 
@@ -464,6 +470,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 // totalCharge += charge;
             }
             for (int i = 0; i < numSubsets; i++) {
+                cout << "subsetCharges[" << i << "] = " << subsetCharges[i] << endl;
                 int slice = sliceIndex(i, i);
                 ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
                 double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
@@ -901,11 +908,16 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         exceptionParamOffsets.upload(e);
         exceptionOffsetIndices.upload(exceptionOffsetIndicesVec);
     }
-    globalParams.initialize(cc, max((int) paramValues.size(), 1), cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "globalParams");
+    globalParams.initialize(cc, max((int) paramValues.size(), 1), sizeOfReal, "globalParams");
     if (paramValues.size() > 0)
         globalParams.upload(paramValues, true);
-    chargeBuffer.initialize(cc, numSubsets*cc.getNumThreadBlocks(), cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float), "chargeBuffer");
+    chargeBuffer.initialize(cc, numSubsets*cc.getNumThreadBlocks(), sizeOfReal, "chargeBuffer");
     cc.clearBuffer(chargeBuffer);
+    if (sumsPerSubset > 0) {
+        subsetSums.initialize(cc, numSubsets*sumsPerSubset, sizeOfReal, "subsetSums");
+        subsetSumsBuffer.initialize(cc, numSubsets*sumsPerSubset*cc.getNumThreadBlocks(), sizeOfReal, "subsetSumsBuffer");
+        cc.clearBuffer(subsetSumsBuffer);
+    }
     recomputeParams = true;
 
     // Add post-computation for dispersion correction.
@@ -919,6 +931,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     computeParamsKernel = program->createKernel("computeParameters");
     computeExclusionParamsKernel = program->createKernel("computeExclusionParameters");
     computePlasmaCorrectionKernel = program->createKernel("computePlasmaCorrection");
+    if (sumsPerSubset > 0)
+        computeSubsetSumsKernel = program->createKernel("computeSubsetSums");
     info = new ForceInfo(force);
     cc.addForce(info);
 }
@@ -929,6 +943,8 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         hasInitializedKernel = true;
         computeParamsKernel->addArg(cc.getEnergyBuffer());
         computeParamsKernel->addArg();
+        if (sumsPerSubset > 0)
+            computeParamsKernel->addArg(subsetSumsBuffer);
         computeParamsKernel->addArg(globalParams);
         computeParamsKernel->addArg(cc.getPaddedNumAtoms());
         computeParamsKernel->addArg(baseParticleParams);
@@ -958,6 +974,10 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         }
         computePlasmaCorrectionKernel->addArg(chargeBuffer);
         computePlasmaCorrectionKernel->addArg(cc.getEnergyBuffer());
+        if (sumsPerSubset > 0) {
+            computeSubsetSumsKernel->addArg(subsetSums);
+            computeSubsetSumsKernel->addArg(subsetSumsBuffer);
+        }
         if (cc.getUseDoublePrecision())
             computePlasmaCorrectionKernel->addArg(alpha);
         else
@@ -1256,6 +1276,61 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     if (recomputeParams || hasOffsets) {
         computeParamsKernel->setArg(1, (int) (includeEnergy && includeReciprocal));
         computeParamsKernel->execute(cc.getNumAtoms());
+        if (sumsPerSubset > 0) {
+            computeSubsetSumsKernel->execute(ComputeContext::ThreadBlockSize, ComputeContext::ThreadBlockSize);
+            vector<double> subsetSumsVec(numSubsets*sumsPerSubset);
+            if (cc.getUseDoublePrecision())
+                subsetSums.download(subsetSumsVec);
+            else {
+                vector<float> subsetSumsVecFloat(numSubsets*sumsPerSubset);
+                subsetSums.download(subsetSumsVecFloat);
+                for (int i = 0; i < numSubsets*sumsPerSubset; i++)
+                    subsetSumsVec[i] = subsetSumsVecFloat[i];
+            }
+            // for (int i = 0; i < numSubsets; i++)
+            //     for (int j = 0; j < sumsPerSubset; j++)
+            //         cout << "subsetSumsVec["<<i<<"]["<<j<<"] = " << subsetSumsVec[i*sumsPerSubset+j] << endl;
+            // for (int i = 0; i < numSubsets; i++)
+            //     cout << "subsetSumsVec[" << sumsPerSubset*i << "] = " << subsetSumsVec[sumsPerSubset*i] << endl;
+            for (int i = 0; i < numSubsets; i++)
+                cout << "subsetSelfEnergy[" << i << "] = " << subsetSelfEnergy[i].x << ", " << subsetSelfEnergy[i].y << endl;
+            for (int i = 0; i < numSlices; i++)
+                cout << "sliceBackgroundEnergyVolume[" << i << "] = " << sliceBackgroundEnergyVolume[i] << endl;
+            vector<double> subsetCharges(numSubsets);
+            double ewaldSelfEnergyScale = -ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            double backgroundEnergyVolumeScale = -1.0/(8*EPSILON0*alpha*alpha);
+            for (int subset = 0; subset < numSubsets; subset++) {
+                subsetCharges[subset] = subsetSumsVec[subset*sumsPerSubset];
+                subsetSelfEnergy[subset].x = subsetSumsVec[subset*sumsPerSubset+1]*ewaldSelfEnergyScale;
+                int offset = subset*(subset+1)/2;
+                double factor = subsetCharges[subset]*backgroundEnergyVolumeScale;
+                sliceBackgroundEnergyVolume[offset+subset] = subsetCharges[subset]*factor;
+                for (int j = 0; j < subset; j++)
+                    sliceBackgroundEnergyVolume[offset+j] = 2.0*subsetCharges[j]*factor;
+            }
+            if (doLJPME) {
+                double ljpmeSelfEnergyScale = pow(dispersionAlpha, 6)/3.0;
+                for (int subset = 0; subset < numSubsets; subset++)
+                    subsetSelfEnergy[subset].y = subsetSumsVec[subset*sumsPerSubset+2]*ljpmeSelfEnergyScale;
+            }
+
+            Vec3 a, b, c;
+            cc.getPeriodicBoxVectors(a, b, c);
+            double volume = a[0]*b[1]*c[2];
+            ewaldSelfEnergy = 0.0;
+            for (int i = 0; i < numSubsets; i++) {
+                int slice = sliceIndex(i, i);
+                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            }
+            backgroundEnergyVolume = 0.0;
+            for (int i = 0; i < numSubsets; i++)
+                cout << "recomputed subsetSelfEnergy[" << i << "] = " << subsetSelfEnergy[i].x << ", " << subsetSelfEnergy[i].y << endl;
+            for (int i = 0; i < numSlices; i++)
+                cout << "recomputed sliceBackgroundEnergyVolume[" << i << "] = " << sliceBackgroundEnergyVolume[i] << endl;
+            for (int slice = 0; slice < numSlices; slice++)
+                backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
+            // energy = ewaldSelfEnergy + backgroundEnergyVolume/volume;
+        }
         if (exclusionParams.isInitialized())
             computeExclusionParamsKernel->execute(exclusionParams.getSize());
         if (usePmeQueue) {

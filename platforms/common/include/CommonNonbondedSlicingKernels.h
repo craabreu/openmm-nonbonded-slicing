@@ -141,6 +141,8 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray pmeEnergyParamDerivBuffer;
         ComputeArray ljpmeEnergyBuffer;
         ComputeArray chargeBuffer;
+        ComputeArray subsetSums;
+        ComputeArray subsetSumsBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
         ComputeSort sort;
@@ -151,6 +153,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         PmeIO* pmeio;
         SyncQueuePostComputation* syncQueue;
         ComputeKernel computeParamsKernel, computeExclusionParamsKernel, computePlasmaCorrectionKernel;
+        ComputeKernel computeSubsetSumsKernel;
         ComputeKernel ewaldSumsKernel, ewaldForcesKernel;
         ComputeKernel pmeGridIndexKernel, pmeDispersionGridIndexKernel;
         ComputeKernel pmeSpreadChargeKernel, pmeDispersionSpreadChargeKernel;
@@ -166,6 +169,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         std::map<int, int> exceptionIndex;
         std::set<std::string> requestedDerivatives;
         double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, backgroundEnergyVolume;
+        int sumsPerSubset;
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
         bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading, useCpuPme;
