@@ -1111,19 +1111,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         if (genrand_real2(sfmt) < 0.5)
             sliced->setParticleSubset(k, 1);
 
-    double subsetCharges[2], subsetChargeSquaredSums[2];
-    for (int k = 0; k < numParticles; k++) {
-        subsetCharges[sliced->getParticleSubset(k)] += q(k);
-        subsetChargeSquaredSums[sliced->getParticleSubset(k)] += q(k)*q(k);
-    }
-    for (auto& po : particleOffsets) {
-        double charge = offsetParamValue*po.charge;
-        subsetCharges[sliced->getParticleSubset(po.particle)] += charge;
-        subsetChargeSquaredSums[sliced->getParticleSubset(po.particle)] += charge*charge;
-    }
-    // for (int k = 0; k < 2; k++)
-    //     cout << "actual subsetCharges[" << k << "] = " << subsetCharges[k] << ", subsetChargeSquaredSums[" << k << "] = " << subsetChargeSquaredSums[k] << endl;
-
     string param01 = includeCoulomb ? "lambda" : "sqrtLambda";
     sliced->addGlobalParameter(param01, 1);
     sliced->addScalingParameter(param01, 0, 1, includeCoulomb, includeLJ);
@@ -1166,7 +1153,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     State state1 = context1.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
     State state2 = context2.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
-    cout << "Direct space: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1174,7 +1160,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-    cout << "Reciprocal space: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1182,7 +1167,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    cout << "Overall: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1223,7 +1207,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
-    cout << "lambda = 0: Direct space: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1231,7 +1214,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
     state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-    cout << "lambda = 0: Reciprocal space: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1239,7 +1221,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     state1 = context1.getState(State::Energy | State::Forces);
     state2 = context2.getState(State::Energy | State::Forces);
-    cout << "lambda = 0: Overall: state1 = " << state1.getPotentialEnergy() << ", state2 = " << state2.getPotentialEnergy() << endl;
     assertEnergy(state1, state2, tol);
     assertForces(state1, state2, tol);
 
@@ -1479,9 +1460,9 @@ void runPlatformTests();
 
 int main(int argc, char* argv[]) {
     vector<NonbondedForce::NonbondedMethod> nonbondedMethods = {
-        // NonbondedForce::NoCutoff,
-        // NonbondedForce::CutoffNonPeriodic,
-        // NonbondedForce::CutoffPeriodic,
+        NonbondedForce::NoCutoff,
+        NonbondedForce::CutoffNonPeriodic,
+        NonbondedForce::CutoffPeriodic,
         NonbondedForce::Ewald,
         NonbondedForce::PME,
         NonbondedForce::LJPME
@@ -1490,37 +1471,33 @@ int main(int argc, char* argv[]) {
     init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
-        // for (auto method : nonbondedMethods)
-        //     testInstantiateFromNonbondedForce(method);
-        // testCoulomb();
-        // testLJ();
-        // testExclusionsAnd14();
-        // testCutoff();
-        // testCutoff14();
-        // testPeriodic();
-        // testPeriodicExceptions();
-        // testTriclinic();
-        // testLargeSystem();
-        // testDispersionCorrection();
-        // testChangingParameters();
-        // testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
-        // testSwitchingFunction(SlicedNonbondedForce::PME);
-        // testTwoForces();
-        // testParameterOffsets();
-        // testEwaldExceptions();
-        // testDirectAndReciprocal();
         for (auto method : nonbondedMethods)
-            // for (auto offsets : {false, true})
-            // for (auto offsets : {true})
+            testInstantiateFromNonbondedForce(method);
+        testCoulomb();
+        testLJ();
+        testExclusionsAnd14();
+        testCutoff();
+        testCutoff14();
+        testPeriodic();
+        testPeriodicExceptions();
+        testTriclinic();
+        testLargeSystem();
+        testDispersionCorrection();
+        testChangingParameters();
+        testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
+        testSwitchingFunction(SlicedNonbondedForce::PME);
+        testTwoForces();
+        testParameterOffsets();
+        testEwaldExceptions();
+        testDirectAndReciprocal();
+        for (auto method : nonbondedMethods)
+            for (auto offsets : {false, true})
                 for (auto exceptions : {false, true})
-                    for (auto lj : {false, true}) for (auto offsets : {false, true}) {
-                        cout<<"**** method: "<<method<<", offsets: "<<offsets<<", exceptions: "<<exceptions<<", lj: "<<lj<<" ****"<<endl;
-                        init_gen_rand(0, sfmt);
+                    for (auto lj : {false, true})
                         testNonbondedSlicing(sfmt, method, offsets, exceptions, lj);
-                    }
-        // for (auto method : nonbondedMethods)
-        //     for (auto exceptions : {false, true})
-        //         testScalingParameterSeparation(sfmt, method, exceptions);
+        for (auto method : nonbondedMethods)
+            for (auto exceptions : {false, true})
+                testScalingParameterSeparation(sfmt, method, exceptions);
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;

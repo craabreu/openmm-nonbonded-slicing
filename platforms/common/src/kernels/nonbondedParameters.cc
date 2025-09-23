@@ -1,12 +1,11 @@
 /**
  * Compute the nonbonded parameters for particles and exceptions.
  */
-KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer
+KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy
 #ifdef HAS_DERIVATIVES
     , GLOBAL mixed* RESTRICT energyParamDerivBuffer
 #endif
-    , int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
-        int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
+    ,   GLOBAL real* RESTRICT globalParams, int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
         GLOBAL real* RESTRICT chargeBuffer, GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
@@ -14,8 +13,8 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer
         GLOBAL float4* RESTRICT exceptionParamOffsets, GLOBAL int* RESTRICT exceptionOffsetIndices
 #endif
 ) {
-    mixed clEnergy[NUM_SUBSETS] = {0};
-    mixed ljEnergy[NUM_SUBSETS] = {0};
+    mixed clEnergy[NUM_SLICES] = {0};
+    mixed ljEnergy[NUM_SLICES] = {0};
     real subsetCharge[NUM_SUBSETS] = {0};
 
     // Compute particle parameters.
@@ -40,13 +39,14 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer
         sigmaEpsilon[i] = make_float2(0.5f*params.y, 2*SQRT(params.z));
 #if defined(HAS_OFFSETS) && (defined(INCLUDE_EWALD) || defined(INCLUDE_LJPME))
     int subset = subsets[i];
+    int slice = subset*(subset+3)/2;
     #ifdef INCLUDE_EWALD
-        clEnergy[subset] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
+        clEnergy[slice] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
         subsetCharge[subset] += params.x;
     #endif
     #ifdef INCLUDE_LJPME
         real sig3 = params.y*params.y*params.y;
-        ljEnergy[subset] += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
+        ljEnergy[slice] += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
     #endif
 #endif
     }
@@ -73,10 +73,19 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer
         mixed energy = 0;
         for (int subset = 0; subset < NUM_SUBSETS; subset++) {
             int slice = subset*(subset+3)/2;
-            energy += sliceLambdas[slice].x*clEnergy[subset] + sliceLambdas[slice].y*ljEnergy[subset];
+            energy += sliceLambdas[slice].x*clEnergy[slice] + sliceLambdas[slice].y*ljEnergy[slice];
         }
         energyBuffer[GLOBAL_ID] += energy;
     }
+
+#if defined(HAS_DERIVATIVES)
+#ifdef INCLUDE_EWALD
+    ADD_COULOMB_DERIVATIVES
+#endif
+#ifdef INCLUDE_LJPME
+    ADD_LJ_DERIVATIVES
+#endif
+#endif
 
     // Record the total charge from particles processed by this block.
 
@@ -132,7 +141,11 @@ KERNEL void computeExclusionParameters(GLOBAL real4* RESTRICT posq, GLOBAL real*
  * This kernel is executed by a single thread block.
  */
 KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL mixed* RESTRICT energyBuffer,
-    real alpha, real volume, GLOBAL const real2* RESTRICT sliceLambdas) {  // TODO: Compute background energy times volume for each slice
+    real alpha, real volume, GLOBAL const real2* RESTRICT sliceLambdas
+#ifdef HAS_DERIVATIVES
+    , GLOBAL mixed* RESTRICT energyParamDerivBuffer
+#endif
+) {
     LOCAL real subsetCharge[WORK_GROUP_SIZE][NUM_SUBSETS];
     real sum[NUM_SUBSETS] = {0};
     for (unsigned int index = LOCAL_ID; index < NUM_GROUPS; index += LOCAL_SIZE)
@@ -147,14 +160,20 @@ KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL m
                 subsetCharge[LOCAL_ID][subset] += subsetCharge[LOCAL_ID+i][subset];
     }
     if (LOCAL_ID == 0) {
-        mixed energy = 0;
+        mixed clEnergy[NUM_SLICES] = {0};
         for (int i = 0; i < NUM_SUBSETS; i++) {
             real factor = -subsetCharge[0][i]/(8*EPSILON0*volume*alpha*alpha);
             int offset = i*(i+1)/2;
             for (int j = 0; j < i; j++)
-                energy += 2*sliceLambdas[offset+j].x*subsetCharge[0][j]*factor;
-            energy += sliceLambdas[offset+i].x*subsetCharge[0][i]*factor;
+                clEnergy[offset+j] += 2*subsetCharge[0][j]*factor;
+            clEnergy[offset+i] += subsetCharge[0][i]*factor;
         }
+        mixed energy = 0;
+        for (int slice = 0; slice < NUM_SLICES; slice++)
+            energy += sliceLambdas[slice].x*clEnergy[slice];
         energyBuffer[0] += energy;
+#if defined(HAS_DERIVATIVES) && defined(HAS_OFFSETS) && defined(INCLUDE_EWALD)
+        ADD_COULOMB_DERIVATIVES
+#endif
     }
 }

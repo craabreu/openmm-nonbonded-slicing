@@ -23,9 +23,6 @@
 #include <assert.h>
 #include <cmath>
 
-#include <iostream>
-
-
 using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
@@ -132,33 +129,6 @@ private:
     ComputeArray forceTemp;
     ComputeKernel addForcesKernel;
 };
-
-// class CommonCalcSlicedNonbondedForceKernel::PmePreComputation : public ComputeContext::ForcePreComputation {
-// public:
-//     PmePreComputation(ComputeContext& cc, Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : cc(cc), pme(pme), io(io) {
-//     }
-//     void computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-//         Vec3 boxVectors[3];
-//         cc.getPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
-//         pme.getAs<CalcPmeReciprocalForceKernel>().beginComputation(io, boxVectors, includeEnergy);
-//     }
-// private:
-//     ComputeContext& cc;
-//     Kernel pme;
-//     CalcPmeReciprocalForceKernel::IO& io;
-// };
-
-// class CommonCalcSlicedNonbondedForceKernel::PmePostComputation : public ComputeContext::ForcePostComputation {
-// public:
-//     PmePostComputation(Kernel& pme, CalcPmeReciprocalForceKernel::IO& io) : pme(pme), io(io) {
-//     }
-//     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
-//         return pme.getAs<CalcPmeReciprocalForceKernel>().finishComputation(io);
-//     }
-// private:
-//     Kernel pme;
-//     CalcPmeReciprocalForceKernel::IO& io;
-// };
 
 class CommonCalcSlicedNonbondedForceKernel::SyncQueuePreComputation : public ComputeContext::ForcePreComputation {
 public:
@@ -283,6 +253,29 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
         derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy";
 
     return derivative.str();
+}
+
+string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign) {
+    stringstream derivativeCode;
+    int numSlices = sliceScalingParams.size();
+    const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
+    for (int i = 0; i < allDerivParams.size(); i++) {
+        stringstream expr;
+        expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] "<<(assign ? "=" : "+=");
+        bool empty = true;
+        for (int slice = 0; slice < numSlices; slice++) {
+            ScalingParameterInfo info = sliceScalingParams[slice];
+            if (info.includeCoulomb && info.nameCoulomb == allDerivParams[i]) {
+                expr<<(empty ? " " : "+")<<"clEnergy["<<slice<<"]";
+                empty = false;
+            }
+        }
+        if (!empty)
+            derivativeCode<<expr.str()<<";"<<endl;
+        else if (assign)
+            derivativeCode<<expr.str()<<"0;"<<endl;
+    }
+    return derivativeCode.str();
 }
 
 void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
@@ -418,19 +411,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             defines["LJ_SWITCH_C5"] = cc.doubleToString(6/pow(force.getSwitchingDistance()-force.getCutoffDistance(), 5.0));
         }
     }
-    // if (force.getUseDispersionCorrection() && cc.getContextIndex() == 0 && !doLJPME)
-    //     dispersionCoefficient = SlicedNonbondedForceImpl::calcDispersionCorrection(system, force);
-    // else
-    //     dispersionCoefficient = 0.0;
     if (force.getUseDispersionCorrection() && cc.getContextIndex() == 0 && hasLJ && useCutoff && usePeriodic && !doLJPME)
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     alpha = 0;
-    // ewaldSelfEnergy = 0.0;
-    // backgroundEnergyVolume = 0.0;
-    // totalCharge = 0.0;
-    // vector<double> subsetCharges(numSubsets, 0.0);
-    // map<string, string> paramsDefines;
     paramsDefines["NUM_SUBSETS"] = cc.intToString(numSubsets);
+    paramsDefines["NUM_SLICES"] = cc.intToString(numSlices);
     paramsDefines["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
     paramsDefines["EPSILON0"] = cc.doubleToString(EPSILON0);
     paramsDefines["WORK_GROUP_SIZE"] = cc.intToString(cc.ThreadBlockSize);
@@ -445,11 +430,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         paramsDefines["USE_POSQ_CHARGES"] = "1";
     if (doLJPME)
         paramsDefines["INCLUDE_LJPME_EXCEPTIONS"] = "1";
-    // sumsPerSubset = (hasReciprocal && hasOffsets && cc.getContextIndex() == 0) ? (doLJPME ? 3 : 2) : 0;
-    // if (sumsPerSubset > 0) {
-    //     paramsDefines["SUMS_PER_SUBSET"] = cc.intToString(sumsPerSubset);
-    //     paramsDefines["HANDLE_RECIPROCAL"] = "1";
-    // }
 
     if (nonbondedMethod == Ewald) {
         // Compute the Ewald parameters.
@@ -462,22 +442,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         if (cc.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cc.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            // for (int i = 0; i < numParticles; i++) {
-            //     int subset = subsetsVec[i];
-            //     double charge = baseParticleParamVec[i].x;
-            //     subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            //     subsetCharges[subset] += charge;
-            //     // totalCharge += charge;
-            // }
-            // for (int i = 0; i < numSubsets; i++) {
-            //     cout << "subsetCharges[" << i << "] = " << subsetCharges[i] << endl;
-            //     int slice = sliceIndex(i, i);
-            //     ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
-            //     double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
-            //     sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
-            //     for (int j = i + 1; j < numSubsets; j++)
-            //         sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
-            // }
 
             // Prepare the reciprocal space kernels.
 
@@ -527,35 +491,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         if (cc.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cc.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            // for (int i = 0; i < numParticles; i++) {
-            //     int subset = subsetsVec[i];
-            //     double charge = baseParticleParamVec[i].x;
-            //     subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            //     if (doLJPME)
-            //         subsetSelfEnergy[subset].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-            //     subsetCharges[subset] += charge;
-            //     // totalCharge += charge;
-            // }
-            // for (int i = 0; i < numSubsets; i++) {
-            //     int slice = sliceIndex(i, i);
-            //     ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
-            //     if (doLJPME)
-            //         ewaldSelfEnergy += sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
-            //     double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
-            //     sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
-            //     for (int j = i + 1; j < numSubsets; j++)
-            //         sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
-            // }
-            // for (int i = 0; i < numParticles; i++) {
-            //     ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-            //     totalCharge += baseParticleParamVec[i].x;
-            // }
-            // if (doLJPME) {
-            //     paramsDefines["INCLUDE_LJPME"] = "1";
-            //     paramsDefines["LJPME_SELF_ENERGY_SCALE"] = cc.doubleToString(pow(dispersionAlpha, 6)/3.0);
-            //     for (int i = 0; i < numParticles; i++)
-            //         ewaldSelfEnergy += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-            // }
             if (doLJPME) {
                 paramsDefines["INCLUDE_LJPME"] = "1";
                 paramsDefines["LJPME_SELF_ENERGY_SCALE"] = cc.doubleToString(pow(dispersionAlpha, 6)/3.0);
@@ -578,22 +513,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
             if (deviceIsCpu)
                 pmeDefines["DEVICE_IS_CPU"] = "1";
-            // if (useCpuPme && !doLJPME && usePosqCharges) {
-            //     // Create the CPU PME kernel.
-
-            //     try {
-            //         cpuPme = getPlatform().createKernel(CalcPmeReciprocalForceKernel::Name(), cc.getContextImpl());
-            //         cpuPme.getAs<CalcPmeReciprocalForceKernel>().initialize(gridSizeX, gridSizeY, gridSizeZ, numParticles, alpha, false);
-            //         ComputeProgram program = cc.compileProgram(CommonNonbondedSlicingKernelSources::pme, pmeDefines);
-            //         ComputeKernel addForcesKernel = program->createKernel("addForces");
-            //         pmeio = new PmeIO(cc, addForcesKernel);
-            //         cc.addPreComputation(new PmePreComputation(cc, cpuPme, *pmeio));
-            //         cc.addPostComputation(new PmePostComputation(cpuPme, *pmeio));
-            //     }
-            //     catch (OpenMMException& ex) {
-            //         // The CPU PME plugin isn't available.
-            //     }
-            // }
             if (pmeio == NULL) {
                 // Create required data structures.
 
@@ -939,11 +858,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         globalParams.upload(paramValues, true);
     chargeBuffer.initialize(cc, numSubsets*cc.getNumThreadBlocks(), sizeOfReal, "chargeBuffer");
     cc.clearBuffer(chargeBuffer);
-    // if (sumsPerSubset > 0) {
-    //     subsetSums.initialize(cc, numSubsets*sumsPerSubset, sizeOfReal, "subsetSums");
-    //     subsetSumsBuffer.initialize(cc, numSubsets*sumsPerSubset*cc.getNumThreadBlocks(), sizeOfReal, "subsetSumsBuffer");
-    //     cc.clearBuffer(subsetSumsBuffer);
-    // }
     recomputeParams = true;
 
     // Add post-computation for dispersion correction.
@@ -962,28 +876,6 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
 
-        stringstream coulombDerivativeCode;
-        if (hasDerivatives && (cosSinSums.isInitialized() || (pmeGrid1.isInitialized() && hasCoulomb))) {
-            bool assign = (pmeGrid1.isInitialized() && usePmeQueue);
-            const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
-            for (int i = 0; i < allDerivParams.size(); i++) {
-                stringstream expr;
-                expr<<"energyParamDerivBuffer[GLOBAL_ID*"<<allDerivParams.size()<<"+"<<i<<"] "<<(assign ? "=" : "+=");
-                bool empty = true;
-                for (int slice = 0; slice < numSlices; slice++) {
-                    ScalingParameterInfo info = sliceScalingParams[slice];
-                    if (info.includeCoulomb && info.nameCoulomb == allDerivParams[i]) {
-                        expr<<(empty ? " " : "+")<<"clEnergy["<<slice<<"]";
-                        empty = false;
-                    }
-                }
-                if (!empty)
-                    coulombDerivativeCode<<expr.str()<<";"<<endl;
-                else if (assign)
-                    coulombDerivativeCode<<expr.str()<<"0;"<<endl;
-            }
-        }
-
         stringstream ljDerivativeCode;
         if (hasDerivatives && (pmeGrid1.isInitialized() && doLJPME)) {
             const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
@@ -994,7 +886,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 for (int slice = 0; slice < numSlices; slice++) {
                     ScalingParameterInfo info = sliceScalingParams[slice];
                     if (info.includeLJ && info.nameLJ == allDerivParams[i]) {
-                        expr<<(empty ? " " : "+")<<"clEnergy["<<slice<<"]";
+                        expr<<(empty ? " " : "+")<<"ljEnergy["<<slice<<"]";
                         empty = false;
                     }
                 }
@@ -1014,19 +906,21 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             }
         }
 
-        ComputeProgram program = cc.compileProgram(CommonNonbondedSlicingKernelSources::nonbondedParameters, paramsDefines);
+        map<string, string> replacements;
+        if (hasOffsets && hasDerivatives) {
+            paramsDefines["HAS_DERIVATIVES"] = "1";
+            replacements["ADD_COULOMB_DERIVATIVES"] = getCoulombDerivativeCode(cc, sliceScalingParams, false);
+            replacements["ADD_LJ_DERIVATIVES"] = ljDerivativeCode.str();
+        }
+        ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedParameters, replacements), paramsDefines);
         computeParamsKernel = program->createKernel("computeParameters");
         computeExclusionParamsKernel = program->createKernel("computeExclusionParameters");
         computePlasmaCorrectionKernel = program->createKernel("computePlasmaCorrection");
 
         computeParamsKernel->addArg(cc.getEnergyBuffer());
-        // if (hasDerivatives)
-        //     computeParamsKernel->addArg(cc.getEnergyParamDerivBuffer());
         computeParamsKernel->addArg();
-        // if (sumsPerSubset > 0) {
-        //     computeParamsKernel->addArg(subsetSumsBuffer);
-        //     computeParamsKernel->addArg(cc.getEnergyParamDerivBuffer());
-        // }
+        if (hasOffsets && hasDerivatives)
+            computeParamsKernel->addArg(cc.getEnergyParamDerivBuffer());
         computeParamsKernel->addArg(globalParams);
         computeParamsKernel->addArg(cc.getPaddedNumAtoms());
         computeParamsKernel->addArg(baseParticleParams);
@@ -1056,17 +950,14 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         }
         computePlasmaCorrectionKernel->addArg(chargeBuffer);
         computePlasmaCorrectionKernel->addArg(cc.getEnergyBuffer());
-        // if (sumsPerSubset > 0) {
-        //     computeSubsetSumsKernel->addArg(subsetSums);
-        //     computeSubsetSumsKernel->addArg(subsetSumsBuffer);
-        // }
         if (cc.getUseDoublePrecision())
             computePlasmaCorrectionKernel->addArg(alpha);
         else
             computePlasmaCorrectionKernel->addArg((float) alpha);
         computePlasmaCorrectionKernel->addArg();
         computePlasmaCorrectionKernel->addArg(sliceLambdas);
-        // TODO: Use the kernel above to compute slice background energy times volume for each slice
+        if (hasOffsets && hasDerivatives)
+            computePlasmaCorrectionKernel->addArg(cc.getEnergyParamDerivBuffer());
 
         if (usePmeQueue && hasDerivatives) {
             int energyElementSize = (cc.getUseDoublePrecision() || cc.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
@@ -1077,7 +968,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
 
         if (cosSinSums.isInitialized()) {
             map<string, string> replacements;
-            replacements["ADD_DERIVATIVES"] = coulombDerivativeCode.str();
+            replacements["ADD_DERIVATIVES"] = getCoulombDerivativeCode(cc, sliceScalingParams, usePmeQueue);
             ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::ewald, replacements), ewaldDefines);
             ewaldSumsKernel = program->createKernel("calculateEwaldCosSinSums");
             ewaldForcesKernel = program->createKernel("calculateEwaldForces");
@@ -1101,7 +992,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
 
             map<string, string> replacements;
             replacements["CHARGE"] = (usePosqCharges ? "pos.w" : "charges[atom]");
-            replacements["ADD_DERIVATIVES"] = coulombDerivativeCode.str();
+            replacements["ADD_DERIVATIVES"] = getCoulombDerivativeCode(cc, sliceScalingParams, usePmeQueue);
             replacements["ACCUMULATE_DERIVATIVES"] = accumulateDerivativesCode.str();
             replacements["SLICE_ENERGY"] = "clEnergy";
             ComputeProgram program = cc.compileProgram(cc.replaceStrings(CommonNonbondedSlicingKernelSources::pme, replacements), pmeDefines);
@@ -1308,61 +1199,6 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     if (recomputeParams || hasOffsets) {
         computeParamsKernel->setArg(1, (int) (includeEnergy && includeReciprocal));
         computeParamsKernel->execute(cc.getNumAtoms());
-        // if (sumsPerSubset > 0) {
-        //     computeSubsetSumsKernel->execute(ComputeContext::ThreadBlockSize, ComputeContext::ThreadBlockSize);
-        //     vector<double> subsetSumsVec(numSubsets*sumsPerSubset);
-        //     if (cc.getUseDoublePrecision())
-        //         subsetSums.download(subsetSumsVec);
-        //     else {
-        //         vector<float> subsetSumsVecFloat(numSubsets*sumsPerSubset);
-        //         subsetSums.download(subsetSumsVecFloat);
-        //         for (int i = 0; i < numSubsets*sumsPerSubset; i++)
-        //             subsetSumsVec[i] = subsetSumsVecFloat[i];
-        //     }
-        //     // for (int i = 0; i < numSubsets; i++)
-        //     //     for (int j = 0; j < sumsPerSubset; j++)
-        //     //         cout << "subsetSumsVec["<<i<<"]["<<j<<"] = " << subsetSumsVec[i*sumsPerSubset+j] << endl;
-        //     // for (int i = 0; i < numSubsets; i++)
-        //     //     cout << "subsetSumsVec[" << sumsPerSubset*i << "] = " << subsetSumsVec[sumsPerSubset*i] << endl;
-        //     for (int i = 0; i < numSubsets; i++)
-        //         cout << "subsetSelfEnergy[" << i << "] = " << subsetSelfEnergy[i].x << ", " << subsetSelfEnergy[i].y << endl;
-        //     for (int i = 0; i < numSlices; i++)
-        //         cout << "sliceBackgroundEnergyVolume[" << i << "] = " << sliceBackgroundEnergyVolume[i] << endl;
-        //     vector<double> subsetCharges(numSubsets);
-        //     double ewaldSelfEnergyScale = -ONE_4PI_EPS0*alpha/sqrt(M_PI);
-        //     double backgroundEnergyVolumeScale = -1.0/(8*EPSILON0*alpha*alpha);
-        //     for (int subset = 0; subset < numSubsets; subset++) {
-        //         subsetCharges[subset] = subsetSumsVec[subset*sumsPerSubset];
-        //         subsetSelfEnergy[subset].x = subsetSumsVec[subset*sumsPerSubset+1]*ewaldSelfEnergyScale;
-        //         int offset = subset*(subset+1)/2;
-        //         double factor = subsetCharges[subset]*backgroundEnergyVolumeScale;
-        //         sliceBackgroundEnergyVolume[offset+subset] = subsetCharges[subset]*factor;
-        //         for (int j = 0; j < subset; j++)
-        //             sliceBackgroundEnergyVolume[offset+j] = 2.0*subsetCharges[j]*factor;
-        //     }
-        //     if (doLJPME) {
-        //         double ljpmeSelfEnergyScale = pow(dispersionAlpha, 6)/3.0;
-        //         for (int subset = 0; subset < numSubsets; subset++)
-        //             subsetSelfEnergy[subset].y = subsetSumsVec[subset*sumsPerSubset+2]*ljpmeSelfEnergyScale;
-        //     }
-
-        //     Vec3 a, b, c;
-        //     cc.getPeriodicBoxVectors(a, b, c);
-        //     double volume = a[0]*b[1]*c[2];
-        //     ewaldSelfEnergy = 0.0;
-        //     for (int i = 0; i < numSubsets; i++) {
-        //         int slice = sliceIndex(i, i);
-        //         ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
-        //     }
-        //     backgroundEnergyVolume = 0.0;
-        //     for (int i = 0; i < numSubsets; i++)
-        //         cout << "recomputed subsetSelfEnergy[" << i << "] = " << subsetSelfEnergy[i].x << ", " << subsetSelfEnergy[i].y << endl;
-        //     for (int i = 0; i < numSlices; i++)
-        //         cout << "recomputed sliceBackgroundEnergyVolume[" << i << "] = " << sliceBackgroundEnergyVolume[i] << endl;
-        //     for (int slice = 0; slice < numSlices; slice++)
-        //         backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
-        //     // energy = ewaldSelfEnergy + backgroundEnergyVolume/volume;
-        // }
         if (exclusionParams.isInitialized())
             computeExclusionParamsKernel->execute(exclusionParams.getSize());
         if (usePmeQueue) {
@@ -1571,11 +1407,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             cc.restoreDefaultQueue();
         }
     }
-    // if (dispersionCoefficient != 0.0 && includeDirect) {
-    //     Vec3 a, b, c;
-    //     cc.getPeriodicBoxVectors(a, b, c);
-    //     energy += dispersionCoefficient/(a[0]*b[1]*c[2]);
-    // }
+
     if (!hasOffsets && hasReciprocal && includeReciprocal) {
         map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
         for (int i = 0; i < numSubsets; i++) {
@@ -1665,7 +1497,6 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
 
         // Compute the self energy.
     
-        // totalCharge = 0.0;
         ewaldSelfEnergy = 0.0;
         backgroundEnergyVolume = 0.0;
         subsetSelfEnergy.assign(numSubsets, mm_double2(0, 0));
@@ -1767,26 +1598,17 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
 void CommonCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
     if (nonbondedMethod != PME)
         throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
-    // if (useCpuPme)
-    //     cpuPme.getAs<CalcPmeReciprocalForceKernel>().getPMEParameters(alpha, nx, ny, nz);
-    // else {
-        alpha = this->alpha;
-        nx = gridSizeX;
-        ny = gridSizeY;
-        nz = gridSizeZ;
-    // }
+    alpha = this->alpha;
+    nx = gridSizeX;
+    ny = gridSizeY;
+    nz = gridSizeZ;
 }
 
 void CommonCalcSlicedNonbondedForceKernel::getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
     if (nonbondedMethod != LJPME)
         throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
-    // if (useCpuPme)
-    //     //cpuPme.getAs<CalcPmeReciprocalForceKernel>().getLJPMEParameters(alpha, nx, ny, nz);
-    //     throw OpenMMException("getPMEParametersInContext: CPUPME has not been implemented for LJPME yet.");
-    // else {
-        alpha = this->dispersionAlpha;
-        nx = dispersionGridSizeX;
-        ny = dispersionGridSizeY;
-        nz = dispersionGridSizeZ;
-    // }
+    alpha = this->dispersionAlpha;
+    nx = dispersionGridSizeX;
+    ny = dispersionGridSizeY;
+    nz = dispersionGridSizeZ;
 }

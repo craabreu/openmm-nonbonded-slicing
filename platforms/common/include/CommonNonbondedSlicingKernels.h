@@ -141,8 +141,6 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray pmeEnergyParamDerivBuffer;
         ComputeArray ljpmeEnergyBuffer;
         ComputeArray chargeBuffer;
-        ComputeArray subsetSums;
-        ComputeArray subsetSumsBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
         ComputeSort sort;
@@ -169,7 +167,6 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         std::map<int, int> exceptionIndex;
         std::set<std::string> requestedDerivatives;
         double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, backgroundEnergyVolume;
-        int sumsPerSubset;
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
         bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading, useCpuPme;
@@ -186,6 +183,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         AddEnergyPostComputation* addEnergy;
 
         std::string getDerivativeExpression(std::string param, bool conditionCoulomb, bool conditionLJ);
+        std::string getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
 
         double totalCharge;
     };
