@@ -33,7 +33,7 @@ namespace NonbondedSlicing {
 class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
     public:
         CommonCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, ComputeContext& cc, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-                hasInitializedKernel(false), cc(cc), pmeio(NULL) {
+                hasInitializedKernel(false), cc(cc) {
         }
         ~CommonCalcSlicedNonbondedForceKernel();
         /**
@@ -45,9 +45,8 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
          * @param usePmeQueue  whether to perform PME on a separate queue
          * @param deviceIsCpu  whether the device this calculation is running on is a CPU
          * @param useFixedPointChargeSpreading  whether PME charge spreading should be done in fixed point or floating point
-         * @param useCpuPme    whether to perform the PME reciprocal space calculation on the CPU
          */
-        void commonInitialize(const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue, bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme);
+        void commonInitialize(const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue, bool deviceIsCpu, bool useFixedPointChargeSpreading);
         /**
          * Execute the kernel to calculate the forces and/or energy.
          *
@@ -105,7 +104,6 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         };
         class ForceInfo;
         class ScalingParameterInfo;
-        class PmeIO;
         class PmePreComputation;
         class PmePostComputation;
         class SyncQueuePreComputation;
@@ -147,10 +145,9 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
         FFT3D fft, dispersionFft;
-        Kernel cpuPme;
-        PmeIO* pmeio;
         SyncQueuePostComputation* syncQueue;
         ComputeKernel computeParamsKernel, computeExclusionParamsKernel, computePlasmaCorrectionKernel;
+        ComputeKernel computeSubsetSumsKernel;
         ComputeKernel ewaldSumsKernel, ewaldForcesKernel;
         ComputeKernel pmeGridIndexKernel, pmeDispersionGridIndexKernel;
         ComputeKernel pmeSpreadChargeKernel, pmeDispersionSpreadChargeKernel;
@@ -159,7 +156,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeKernel pmeEvalEnergyKernel, pmeDispersionEvalEnergyKernel;
         ComputeKernel pmeInterpolateForceKernel, pmeDispersionInterpolateForceKernel;
         ComputeKernel addEnergyKernel;
-        std::map<std::string, std::string> ewaldDefines, pmeDefines;
+        std::map<std::string, std::string> paramsDefines, ewaldDefines, pmeDefines;
         std::vector<std::pair<int, int> > exceptionAtoms;
         std::vector<std::string> paramNames;
         std::vector<double> paramValues;
@@ -168,7 +165,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         double ewaldSelfEnergy, dispersionCoefficient, alpha, dispersionAlpha, backgroundEnergyVolume;
         int gridSizeX, gridSizeY, gridSizeZ;
         int dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ;
-        bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading, useCpuPme;
+        bool usePmeQueue, deviceIsCpu, useFixedPointChargeSpreading;
         bool hasCoulomb, hasLJ, doLJPME, usePosqCharges, recomputeParams, hasOffsets, hasReciprocal;
         NonbondedMethod nonbondedMethod;
         static const int PmeOrder = 5;
@@ -182,6 +179,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         AddEnergyPostComputation* addEnergy;
 
         std::string getDerivativeExpression(std::string param, bool conditionCoulomb, bool conditionLJ);
+        std::string getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
 
         double totalCharge;
     };
