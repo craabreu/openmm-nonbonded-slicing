@@ -106,29 +106,6 @@ private:
     vector<int> particleOffset, exceptionOffset;
 };
 
-class CommonCalcSlicedNonbondedForceKernel::PmeIO : public CalcPmeReciprocalForceKernel::IO {
-public:
-    PmeIO(ComputeContext& cc, ComputeKernel addForcesKernel) : cc(cc), addForcesKernel(addForcesKernel) {
-        forceTemp.initialize<mm_float4>(cc, cc.getNumAtoms(), "PmeForce");
-        addForcesKernel->addArg(forceTemp);
-        addForcesKernel->addArg();
-    }
-    float* getPosq() {
-        ContextSelector selector(cc);
-        cc.getPosq().download(posq);
-        return (float*) &posq[0];
-    }
-    void setForce(float* force) {
-        forceTemp.upload(force);
-        addForcesKernel->setArg(1, cc.getLongForceBuffer());
-        addForcesKernel->execute(cc.getNumAtoms());
-    }
-private:
-    ComputeContext& cc;
-    vector<mm_float4> posq;
-    ComputeArray forceTemp;
-    ComputeKernel addForcesKernel;
-};
 
 class CommonCalcSlicedNonbondedForceKernel::SyncQueuePreComputation : public ComputeContext::ForcePreComputation {
 public:
@@ -225,8 +202,6 @@ private:
 
 CommonCalcSlicedNonbondedForceKernel::~CommonCalcSlicedNonbondedForceKernel() {
     ContextSelector selector(cc);
-    if (pmeio != NULL)
-        delete pmeio;
 }
 
 string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ) {
@@ -280,12 +255,11 @@ string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeCon
 
 void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     const System& system, const SlicedNonbondedForce& force, FFT3DFactory& fftFactory, bool usePmeQueue,
-    bool deviceIsCpu, bool useFixedPointChargeSpreading, bool useCpuPme
+    bool deviceIsCpu, bool useFixedPointChargeSpreading
 ) {
     this->usePmeQueue = false;
     this->deviceIsCpu = deviceIsCpu;
     this->useFixedPointChargeSpreading = useFixedPointChargeSpreading;
-    this->useCpuPme = useCpuPme;
     ContextSelector selector(cc);
     int forceIndex;
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
@@ -513,127 +487,125 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 pmeDefines["USE_FIXED_POINT_CHARGE_SPREADING"] = "1";
             if (deviceIsCpu)
                 pmeDefines["DEVICE_IS_CPU"] = "1";
-            if (pmeio == NULL) {
-                // Create required data structures.
+            // Create required data structures.
 
-                int elementSize = (cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
-                int gridElements = numSubsets*gridSizeX*gridSizeY*gridSizeZ;
-                if (doLJPME) {
-                    gridElements = max(gridElements, numSubsets*dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ);
+            int elementSize = (cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
+            int gridElements = numSubsets*gridSizeX*gridSizeY*gridSizeZ;
+            if (doLJPME) {
+                gridElements = max(gridElements, numSubsets*dispersionGridSizeX*dispersionGridSizeY*dispersionGridSizeZ);
+            }
+            pmeGrid1.initialize(cc, gridElements, 2*elementSize, "pmeGrid1");
+            pmeGrid2.initialize(cc, gridElements, 2*elementSize, "pmeGrid2");
+            if (useFixedPointChargeSpreading)
+                cc.addAutoclearBuffer(pmeGrid2);
+            else
+                cc.addAutoclearBuffer(pmeGrid1);
+            pmeBsplineModuliX.initialize(cc, gridSizeX, elementSize, "pmeBsplineModuliX");
+            pmeBsplineModuliY.initialize(cc, gridSizeY, elementSize, "pmeBsplineModuliY");
+            pmeBsplineModuliZ.initialize(cc, gridSizeZ, elementSize, "pmeBsplineModuliZ");
+            if (doLJPME) {
+                pmeDispersionBsplineModuliX.initialize(cc, dispersionGridSizeX, elementSize, "pmeDispersionBsplineModuliX");
+                pmeDispersionBsplineModuliY.initialize(cc, dispersionGridSizeY, elementSize, "pmeDispersionBsplineModuliY");
+                pmeDispersionBsplineModuliZ.initialize(cc, dispersionGridSizeZ, elementSize, "pmeDispersionBsplineModuliZ");
+            }
+            pmeAtomGridIndex.initialize<mm_int2>(cc, numParticles, "pmeAtomGridIndex");
+            int energyElementSize = (cc.getUseDoublePrecision() || cc.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
+            pmeEnergyBuffer.initialize(cc, cc.getNumThreadBlocks()*ComputeContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
+            cc.clearBuffer(pmeEnergyBuffer);
+            sort = cc.createSort(new SortTrait(), cc.getNumAtoms());
+            fft = fftFactory.createFFT3D(cc, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
+            if (doLJPME)
+                dispersionFft = fftFactory.createFFT3D(cc, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true);
+            this->usePmeQueue = usePmeQueue;
+            if (usePmeQueue) {
+                pmeDefines["USE_PME_STREAM"] = "1";
+                pmeQueue = cc.createQueue();
+                int recipForceGroup = force.getReciprocalSpaceForceGroup();
+                if (recipForceGroup < 0)
+                    recipForceGroup = force.getForceGroup();
+                pmeSyncEvent = cc.createEvent();
+                paramsSyncEvent = cc.createEvent();
+                cc.addPreComputation(new SyncQueuePreComputation(cc, pmeQueue, pmeSyncEvent, recipForceGroup));
+                cc.addPostComputation(syncQueue = new SyncQueuePostComputation(cc, pmeSyncEvent, pmeEnergyBuffer, recipForceGroup));
+            }
+
+            // Initialize the b-spline moduli.
+
+            for (int grid = 0; grid < 2; grid++) {
+                int xsize, ysize, zsize;
+                ComputeArray *xmoduli, *ymoduli, *zmoduli;
+                if (grid == 0) {
+                    xsize = gridSizeX;
+                    ysize = gridSizeY;
+                    zsize = gridSizeZ;
+                    xmoduli = &pmeBsplineModuliX;
+                    ymoduli = &pmeBsplineModuliY;
+                    zmoduli = &pmeBsplineModuliZ;
                 }
-                pmeGrid1.initialize(cc, gridElements, 2*elementSize, "pmeGrid1");
-                pmeGrid2.initialize(cc, gridElements, 2*elementSize, "pmeGrid2");
-                if (useFixedPointChargeSpreading)
-                    cc.addAutoclearBuffer(pmeGrid2);
-                else
-                    cc.addAutoclearBuffer(pmeGrid1);
-                pmeBsplineModuliX.initialize(cc, gridSizeX, elementSize, "pmeBsplineModuliX");
-                pmeBsplineModuliY.initialize(cc, gridSizeY, elementSize, "pmeBsplineModuliY");
-                pmeBsplineModuliZ.initialize(cc, gridSizeZ, elementSize, "pmeBsplineModuliZ");
-                if (doLJPME) {
-                    pmeDispersionBsplineModuliX.initialize(cc, dispersionGridSizeX, elementSize, "pmeDispersionBsplineModuliX");
-                    pmeDispersionBsplineModuliY.initialize(cc, dispersionGridSizeY, elementSize, "pmeDispersionBsplineModuliY");
-                    pmeDispersionBsplineModuliZ.initialize(cc, dispersionGridSizeZ, elementSize, "pmeDispersionBsplineModuliZ");
+                else {
+                    if (!doLJPME)
+                        continue;
+                    xsize = dispersionGridSizeX;
+                    ysize = dispersionGridSizeY;
+                    zsize = dispersionGridSizeZ;
+                    xmoduli = &pmeDispersionBsplineModuliX;
+                    ymoduli = &pmeDispersionBsplineModuliY;
+                    zmoduli = &pmeDispersionBsplineModuliZ;
                 }
-                pmeAtomGridIndex.initialize<mm_int2>(cc, numParticles, "pmeAtomGridIndex");
-                int energyElementSize = (cc.getUseDoublePrecision() || cc.getUseMixedPrecision() ? sizeof(double) : sizeof(float));
-                pmeEnergyBuffer.initialize(cc, cc.getNumThreadBlocks()*ComputeContext::ThreadBlockSize, energyElementSize, "pmeEnergyBuffer");
-                cc.clearBuffer(pmeEnergyBuffer);
-                sort = cc.createSort(new SortTrait(), cc.getNumAtoms());
-                fft = fftFactory.createFFT3D(cc, gridSizeX, gridSizeY, gridSizeZ, numSubsets, true);
-                if (doLJPME)
-                    dispersionFft = fftFactory.createFFT3D(cc, dispersionGridSizeX, dispersionGridSizeY, dispersionGridSizeZ, numSubsets, true);
-                this->usePmeQueue = usePmeQueue;
-                if (usePmeQueue) {
-                    pmeDefines["USE_PME_STREAM"] = "1";
-                    pmeQueue = cc.createQueue();
-                    int recipForceGroup = force.getReciprocalSpaceForceGroup();
-                    if (recipForceGroup < 0)
-                        recipForceGroup = force.getForceGroup();
-                    pmeSyncEvent = cc.createEvent();
-                    paramsSyncEvent = cc.createEvent();
-                    cc.addPreComputation(new SyncQueuePreComputation(cc, pmeQueue, pmeSyncEvent, recipForceGroup));
-                    cc.addPostComputation(syncQueue = new SyncQueuePostComputation(cc, pmeSyncEvent, pmeEnergyBuffer, recipForceGroup));
-                }
-
-                // Initialize the b-spline moduli.
-
-                for (int grid = 0; grid < 2; grid++) {
-                    int xsize, ysize, zsize;
-                    ComputeArray *xmoduli, *ymoduli, *zmoduli;
-                    if (grid == 0) {
-                        xsize = gridSizeX;
-                        ysize = gridSizeY;
-                        zsize = gridSizeZ;
-                        xmoduli = &pmeBsplineModuliX;
-                        ymoduli = &pmeBsplineModuliY;
-                        zmoduli = &pmeBsplineModuliZ;
-                    }
-                    else {
-                        if (!doLJPME)
-                            continue;
-                        xsize = dispersionGridSizeX;
-                        ysize = dispersionGridSizeY;
-                        zsize = dispersionGridSizeZ;
-                        xmoduli = &pmeDispersionBsplineModuliX;
-                        ymoduli = &pmeDispersionBsplineModuliY;
-                        zmoduli = &pmeDispersionBsplineModuliZ;
-                    }
-                    int maxSize = max(max(xsize, ysize), zsize);
-                    vector<double> data(PmeOrder);
-                    vector<double> ddata(PmeOrder);
-                    vector<double> bsplines_data(maxSize);
-                    data[PmeOrder-1] = 0.0;
-                    data[1] = 0.0;
-                    data[0] = 1.0;
-                    for (int i = 3; i < PmeOrder; i++) {
-                        double div = 1.0/(i-1.0);
-                        data[i-1] = 0.0;
-                        for (int j = 1; j < (i-1); j++)
-                            data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
-                        data[0] = div*data[0];
-                    }
-
-                    // Differentiate.
-
-                    ddata[0] = -data[0];
-                    for (int i = 1; i < PmeOrder; i++)
-                        ddata[i] = data[i-1]-data[i];
-                    double div = 1.0/(PmeOrder-1);
-                    data[PmeOrder-1] = 0.0;
-                    for (int i = 1; i < (PmeOrder-1); i++)
-                        data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+                int maxSize = max(max(xsize, ysize), zsize);
+                vector<double> data(PmeOrder);
+                vector<double> ddata(PmeOrder);
+                vector<double> bsplines_data(maxSize);
+                data[PmeOrder-1] = 0.0;
+                data[1] = 0.0;
+                data[0] = 1.0;
+                for (int i = 3; i < PmeOrder; i++) {
+                    double div = 1.0/(i-1.0);
+                    data[i-1] = 0.0;
+                    for (int j = 1; j < (i-1); j++)
+                        data[i-j-1] = div*(j*data[i-j-2]+(i-j)*data[i-j-1]);
                     data[0] = div*data[0];
-                    for (int i = 0; i < maxSize; i++)
-                        bsplines_data[i] = 0.0;
-                    for (int i = 1; i <= PmeOrder; i++)
-                        bsplines_data[i] = data[i-1];
+                }
 
-                    // Evaluate the actual bspline moduli for X/Y/Z.
+                // Differentiate.
 
-                    for (int dim = 0; dim < 3; dim++) {
-                        int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
-                        vector<double> moduli(ndata);
-                        for (int i = 0; i < ndata; i++) {
-                            double sc = 0.0;
-                            double ss = 0.0;
-                            for (int j = 0; j < ndata; j++) {
-                                double arg = (2.0*M_PI*i*j)/ndata;
-                                sc += bsplines_data[j]*cos(arg);
-                                ss += bsplines_data[j]*sin(arg);
-                            }
-                            moduli[i] = sc*sc+ss*ss;
+                ddata[0] = -data[0];
+                for (int i = 1; i < PmeOrder; i++)
+                    ddata[i] = data[i-1]-data[i];
+                double div = 1.0/(PmeOrder-1);
+                data[PmeOrder-1] = 0.0;
+                for (int i = 1; i < (PmeOrder-1); i++)
+                    data[PmeOrder-i-1] = div*(i*data[PmeOrder-i-2]+(PmeOrder-i)*data[PmeOrder-i-1]);
+                data[0] = div*data[0];
+                for (int i = 0; i < maxSize; i++)
+                    bsplines_data[i] = 0.0;
+                for (int i = 1; i <= PmeOrder; i++)
+                    bsplines_data[i] = data[i-1];
+
+                // Evaluate the actual bspline moduli for X/Y/Z.
+
+                for (int dim = 0; dim < 3; dim++) {
+                    int ndata = (dim == 0 ? xsize : dim == 1 ? ysize : zsize);
+                    vector<double> moduli(ndata);
+                    for (int i = 0; i < ndata; i++) {
+                        double sc = 0.0;
+                        double ss = 0.0;
+                        for (int j = 0; j < ndata; j++) {
+                            double arg = (2.0*M_PI*i*j)/ndata;
+                            sc += bsplines_data[j]*cos(arg);
+                            ss += bsplines_data[j]*sin(arg);
                         }
-                        for (int i = 0; i < ndata; i++)
-                            if (moduli[i] < 1.0e-7)
-                                moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
-                        if (dim == 0)
-                            xmoduli->upload(moduli, true);
-                        else if (dim == 1)
-                            ymoduli->upload(moduli, true);
-                        else
-                            zmoduli->upload(moduli, true);
+                        moduli[i] = sc*sc+ss*ss;
                     }
+                    for (int i = 0; i < ndata; i++)
+                        if (moduli[i] < 1.0e-7)
+                            moduli[i] = (moduli[(i-1+ndata)%ndata]+moduli[(i+1)%ndata])*0.5;
+                    if (dim == 0)
+                        xmoduli->upload(moduli, true);
+                    else if (dim == 1)
+                        ymoduli->upload(moduli, true);
+                    else
+                        zmoduli->upload(moduli, true);
                 }
             }
         }
@@ -667,7 +639,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
 
     // Add code to subtract off the reciprocal part of excluded interactions.
 
-    if ((nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) && pmeio == NULL) {
+    if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
         int numContexts = cc.getNumContexts();
         int startIndex = cc.getContextIndex()*force.getNumExceptions()/numContexts;
         int endIndex = (cc.getContextIndex()+1)*force.getNumExceptions()/numContexts;
