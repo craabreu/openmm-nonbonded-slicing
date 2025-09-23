@@ -28,11 +28,12 @@ using namespace NonbondedSlicing;
     } \
 }
 
-SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) :
-    NonbondedForce(), numSubsets(numSubsets), useCuFFT(true) {
+SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true) {
 }
 
-SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : SlicedNonbondedForce(numSubsets) {
+SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : NonbondedForce() {
+    this->numSubsets = numSubsets;
+    useCuFFT = true;
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
