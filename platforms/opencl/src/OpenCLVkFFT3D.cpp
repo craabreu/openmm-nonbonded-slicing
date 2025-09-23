@@ -25,6 +25,7 @@ OpenCLVkFFT::OpenCLVkFFT(
     config.size[0] = zsize;
     config.size[1] = ysize;
     config.size[2] = xsize;
+    config.numberBatches = numBatches;
     config.performR2C = realToComplex;
     config.doublePrecision = context.getUseDoublePrecision();
     config.device = &context.getDevice()();
