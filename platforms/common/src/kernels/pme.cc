@@ -208,7 +208,7 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
     const real recipScaleFactor = RECIP(M_PI)*recipBoxVecX.x*recipBoxVecY.y*recipBoxVecZ.z;
 #endif
 
-    mixed energy[NUM_SLICES] = { 0 };
+    mixed SLICE_ENERGY[NUM_SLICES] = { 0 };
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
         // real indices
         int kx = index/(GRID_SIZE_Y*(GRID_SIZE_Z));
@@ -252,16 +252,16 @@ KERNEL void gridEvaluateEnergy(GLOBAL real2* RESTRICT pmeGrid, GLOBAL mixed* RES
                 grid[j] = pmeGrid[j*odist+indexInHalfComplexGrid];
                 int offset = (j+1)*j/2;
                 for (int i = 0; i < j; i++)
-                    energy[offset+i] += eterm*(grid[i].x*grid[j].x + grid[i].y*grid[j].y);
-                energy[offset+j] += 0.5*eterm*(grid[j].x*grid[j].x + grid[j].y*grid[j].y);
+                    SLICE_ENERGY[offset+i] += eterm*(grid[i].x*grid[j].x + grid[i].y*grid[j].y);
+                SLICE_ENERGY[offset+j] += 0.5*eterm*(grid[j].x*grid[j].x + grid[j].y*grid[j].y);
             }
     }
     mixed energySum = 0;
     for (int slice = 0; slice < NUM_SLICES; slice++) {
 #if defined(USE_LJPME)
-        energySum += sliceLambdas[slice].y*energy[slice];
+        energySum += sliceLambdas[slice].y*SLICE_ENERGY[slice];
 #else
-        energySum += sliceLambdas[slice].x*energy[slice];
+        energySum += sliceLambdas[slice].x*SLICE_ENERGY[slice];
 #endif
     }
 

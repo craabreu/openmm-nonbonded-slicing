@@ -162,7 +162,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeKernel pmeEvalEnergyKernel, pmeDispersionEvalEnergyKernel;
         ComputeKernel pmeInterpolateForceKernel, pmeDispersionInterpolateForceKernel;
         ComputeKernel addEnergyKernel;
-        std::map<std::string, std::string> ewaldDefines, pmeDefines;
+        std::map<std::string, std::string> paramsDefines, ewaldDefines, pmeDefines;
         std::vector<std::pair<int, int> > exceptionAtoms;
         std::vector<std::string> paramNames;
         std::vector<double> paramValues;

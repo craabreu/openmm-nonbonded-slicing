@@ -1,11 +1,12 @@
 /**
  * Compute the nonbonded parameters for particles and exceptions.
  */
-KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy
-#if HANDLE_RECIPROCAL
-        , GLOBAL real* RESTRICT subsetSumsBuffer
+KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer
+#ifdef HAS_DERIVATIVES
+    , GLOBAL mixed* RESTRICT energyParamDerivBuffer
 #endif
-        , GLOBAL real* RESTRICT globalParams, int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
+    , int includeSelfEnergy, GLOBAL real* RESTRICT globalParams,
+        int numAtoms, GLOBAL const float4* RESTRICT baseParticleParams, GLOBAL real4* RESTRICT posq, GLOBAL real* RESTRICT charge,
         GLOBAL float2* RESTRICT sigmaEpsilon, GLOBAL float4* RESTRICT particleParamOffsets, GLOBAL int* RESTRICT particleOffsetIndices,
         GLOBAL real* RESTRICT chargeBuffer, GLOBAL const int* RESTRICT subsets, GLOBAL const real2* RESTRICT sliceLambdas
 #ifdef HAS_EXCEPTIONS
@@ -16,11 +17,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     mixed clEnergy[NUM_SUBSETS] = {0};
     mixed ljEnergy[NUM_SUBSETS] = {0};
     real subsetCharge[NUM_SUBSETS] = {0};
-
-#if HANDLE_RECIPROCAL
-    const int NUM_SUBSET_SUMS = NUM_SUBSETS*SUMS_PER_SUBSET;
-    real subsetSums[NUM_SUBSET_SUMS] = {0};
-#endif
 
     // Compute particle parameters.
 
@@ -42,19 +38,15 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
         charge[i] = params.x;
 #endif
         sigmaEpsilon[i] = make_float2(0.5f*params.y, 2*SQRT(params.z));
-#if HANDLE_RECIPROCAL
+#if defined(HAS_OFFSETS) && (defined(INCLUDE_EWALD) || defined(INCLUDE_LJPME))
     int subset = subsets[i];
-    int offset = subset*SUMS_PER_SUBSET;
     #ifdef INCLUDE_EWALD
         clEnergy[subset] -= EWALD_SELF_ENERGY_SCALE*params.x*params.x;
         subsetCharge[subset] += params.x;
-        subsetSums[offset] += params.x;
-        subsetSums[offset+1] += params.x*params.x;
     #endif
     #ifdef INCLUDE_LJPME
         real sig3 = params.y*params.y*params.y;
         ljEnergy[subset] += LJPME_SELF_ENERGY_SCALE*sig3*sig3*params.z;
-        subsetSums[offset+2] += sig3*sig3*params.z;
     #endif
 #endif
     }
@@ -88,7 +80,7 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
 
     // Record the total charge from particles processed by this block.
 
-#if HANDLE_RECIPROCAL
+#if defined(HAS_OFFSETS) && defined(INCLUDE_EWALD)
     LOCAL real temp[WORK_GROUP_SIZE][NUM_SUBSETS];
     for (int subset = 0; subset < NUM_SUBSETS; subset++)
         temp[LOCAL_ID][subset] = subsetCharge[subset];
@@ -101,20 +93,6 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     if (LOCAL_ID == 0)
         for (int subset = 0; subset < NUM_SUBSETS; subset++)
             chargeBuffer[GROUP_ID*NUM_SUBSETS + subset] = temp[0][subset];
-#endif
-#if HANDLE_RECIPROCAL
-    LOCAL real tempSubsetSums[WORK_GROUP_SIZE][NUM_SUBSET_SUMS];
-    for (int j = 0; j < NUM_SUBSET_SUMS; j++)
-        tempSubsetSums[LOCAL_ID][j] = subsetSums[j];
-    for (int i = 1; i < WORK_GROUP_SIZE; i *= 2) {
-        SYNC_THREADS;
-        if (LOCAL_ID%(i*2) == 0 && LOCAL_ID+i < WORK_GROUP_SIZE)
-            for (int j = 0; j < NUM_SUBSET_SUMS; j++)
-                tempSubsetSums[LOCAL_ID][j] += tempSubsetSums[LOCAL_ID+i][j];
-    }
-    if (LOCAL_ID == 0)
-        for (int j = 0; j < NUM_SUBSET_SUMS; j++)
-            subsetSumsBuffer[GROUP_ID*NUM_SUBSET_SUMS+j] = tempSubsetSums[0][j];
 #endif
 }
 
@@ -180,26 +158,3 @@ KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL m
         energyBuffer[0] += energy;
     }
 }
-
-#if HANDLE_RECIPROCAL
-KERNEL void computeSubsetSums(GLOBAL real* RESTRICT subsetSums, GLOBAL real* RESTRICT subsetSumsBuffer) {
-    const int NUM_SUBSET_SUMS = NUM_SUBSETS*SUMS_PER_SUBSET;
-    LOCAL real tempSubsetSums[WORK_GROUP_SIZE][NUM_SUBSET_SUMS];
-    real sum[NUM_SUBSET_SUMS] = {0};
-    for (unsigned int index = LOCAL_ID; index < NUM_GROUPS*NUM_SUBSET_SUMS; index += LOCAL_SIZE)
-        for (int i = 0; i < NUM_SUBSET_SUMS; i++)
-            sum[i] += subsetSumsBuffer[index*NUM_SUBSET_SUMS+i];
-    for (int i = 0; i < NUM_SUBSET_SUMS; i++)
-        tempSubsetSums[LOCAL_ID][i] = sum[i];
-    for (int j = 1; j < WORK_GROUP_SIZE; j *= 2) {
-        SYNC_THREADS;
-        if (LOCAL_ID%(j*2) == 0 && LOCAL_ID+j < WORK_GROUP_SIZE)
-            for (int i = 0; i < NUM_SUBSET_SUMS; i++)
-                tempSubsetSums[LOCAL_ID][i] += tempSubsetSums[LOCAL_ID+j][i];
-    }
-    if (LOCAL_ID == 0) {
-        for (int i = 0; i < NUM_SUBSET_SUMS; i++)
-            subsetSums[i] = tempSubsetSums[0][i];
-    }
-}
-#endif
