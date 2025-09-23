@@ -425,10 +425,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     if (force.getUseDispersionCorrection() && cc.getContextIndex() == 0 && hasLJ && useCutoff && usePeriodic && !doLJPME)
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     alpha = 0;
-    ewaldSelfEnergy = 0.0;
-    backgroundEnergyVolume = 0.0;
+    // ewaldSelfEnergy = 0.0;
+    // backgroundEnergyVolume = 0.0;
     // totalCharge = 0.0;
-    vector<double> subsetCharges(numSubsets, 0.0);
+    // vector<double> subsetCharges(numSubsets, 0.0);
     map<string, string> paramsDefines;
     paramsDefines["NUM_SUBSETS"] = cc.intToString(numSubsets);
     paramsDefines["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
@@ -462,22 +462,22 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         if (cc.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cc.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            for (int i = 0; i < numParticles; i++) {
-                int subset = subsetsVec[i];
-                double charge = baseParticleParamVec[i].x;
-                subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-                subsetCharges[subset] += charge;
-                // totalCharge += charge;
-            }
-            for (int i = 0; i < numSubsets; i++) {
-                cout << "subsetCharges[" << i << "] = " << subsetCharges[i] << endl;
-                int slice = sliceIndex(i, i);
-                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
-                double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
-                sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
-                for (int j = i + 1; j < numSubsets; j++)
-                    sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
-            }
+            // for (int i = 0; i < numParticles; i++) {
+            //     int subset = subsetsVec[i];
+            //     double charge = baseParticleParamVec[i].x;
+            //     subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            //     subsetCharges[subset] += charge;
+            //     // totalCharge += charge;
+            // }
+            // for (int i = 0; i < numSubsets; i++) {
+            //     cout << "subsetCharges[" << i << "] = " << subsetCharges[i] << endl;
+            //     int slice = sliceIndex(i, i);
+            //     ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
+            //     double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
+            //     sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
+            //     for (int j = i + 1; j < numSubsets; j++)
+            //         sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
+            // }
 
             // Prepare the reciprocal space kernels.
 
@@ -527,25 +527,25 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         if (cc.getContextIndex() == 0) {
             paramsDefines["INCLUDE_EWALD"] = "1";
             paramsDefines["EWALD_SELF_ENERGY_SCALE"] = cc.doubleToString(ONE_4PI_EPS0*alpha/sqrt(M_PI));
-            for (int i = 0; i < numParticles; i++) {
-                int subset = subsetsVec[i];
-                double charge = baseParticleParamVec[i].x;
-                subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
-                if (doLJPME)
-                    subsetSelfEnergy[subset].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
-                subsetCharges[subset] += charge;
-                // totalCharge += charge;
-            }
-            for (int i = 0; i < numSubsets; i++) {
-                int slice = sliceIndex(i, i);
-                ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
-                if (doLJPME)
-                    ewaldSelfEnergy += sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
-                double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
-                sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
-                for (int j = i + 1; j < numSubsets; j++)
-                    sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
-            }
+            // for (int i = 0; i < numParticles; i++) {
+            //     int subset = subsetsVec[i];
+            //     double charge = baseParticleParamVec[i].x;
+            //     subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            //     if (doLJPME)
+            //         subsetSelfEnergy[subset].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
+            //     subsetCharges[subset] += charge;
+            //     // totalCharge += charge;
+            // }
+            // for (int i = 0; i < numSubsets; i++) {
+            //     int slice = sliceIndex(i, i);
+            //     ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x;
+            //     if (doLJPME)
+            //         ewaldSelfEnergy += sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            //     double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
+            //     sliceBackgroundEnergyVolume[slice] += subsetCharges[i]*factor;
+            //     for (int j = i + 1; j < numSubsets; j++)
+            //         sliceBackgroundEnergyVolume[sliceIndex(i, j)] += 2.0*subsetCharges[j]*factor;
+            // }
             // for (int i = 0; i < numParticles; i++) {
             //     ewaldSelfEnergy -= baseParticleParamVec[i].x*baseParticleParamVec[i].x*ONE_4PI_EPS0*alpha/sqrt(M_PI);
             //     totalCharge += baseParticleParamVec[i].x;
@@ -718,6 +718,32 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 }
             }
         }
+    }
+
+    ewaldSelfEnergy = 0.0;
+    backgroundEnergyVolume = 0.0;
+    subsetSelfEnergy.resize(numSubsets, mm_double2(0, 0));
+    sliceBackgroundEnergyVolume.resize(numSlices, 0.0);
+    if (hasReciprocal && cc.getContextIndex() == 0) {
+        vector<double> subsetCharges(numSubsets, 0.0);
+        for (int i = 0; i < numParticles; i++) {
+            int subset = subsetsVec[i];
+            double charge = baseParticleParamVec[i].x;
+            subsetCharges[subset] += charge;
+            subsetSelfEnergy[subset].x -= charge*charge*ONE_4PI_EPS0*alpha/sqrt(M_PI);
+            if (doLJPME)
+                subsetSelfEnergy[subset].y += baseParticleParamVec[i].z*pow(baseParticleParamVec[i].y*dispersionAlpha, 6)/3.0;
+        }
+        for (int i = 0; i < numSubsets; i++) {
+            int slice = sliceIndex(i, i);
+            ewaldSelfEnergy += sliceLambdasVec[slice].x*subsetSelfEnergy[i].x + sliceLambdasVec[slice].y*subsetSelfEnergy[i].y;
+            double factor = -subsetCharges[i]/(8*EPSILON0*alpha*alpha);
+            sliceBackgroundEnergyVolume[slice] = subsetCharges[i]*factor;
+            for (int j = i + 1; j < numSubsets; j++)
+                sliceBackgroundEnergyVolume[sliceIndex(i, j)] = 2.0*subsetCharges[j]*factor;
+        }
+        for (int slice = 0; slice < numSlices; slice++)
+            backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
     }
 
     // Add code to subtract off the reciprocal part of excluded interactions.
