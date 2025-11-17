@@ -14,6 +14,7 @@ SlicedNonbondedForce
     .. rubric:: Methods
 
     .. autosummary::
+        addEnergyParameterDerivative
         addException
         addExceptionParameterOffset
         addException_usingRMin
@@ -22,9 +23,9 @@ SlicedNonbondedForce
         addParticleParameterOffset
         addParticle_usingRVdw
         addScalingParameter
-        addScalingParameterDerivative
         createExceptionsFromBonds
         getCutoffDistance
+        getEnergyParameterDerivativeName
         getEwaldErrorTolerance
         getExceptionParameterOffset
         getExceptionParameters
@@ -38,12 +39,12 @@ SlicedNonbondedForce
         getName
         getNonbondedMethod
         getNonbondedMethodName
+        getNumEnergyParameterDerivatives
         getNumExceptionParameterOffsets
         getNumExceptions
         getNumGlobalParameters
         getNumParticleParameterOffsets
         getNumParticles
-        getNumScalingParameterDerivatives
         getNumScalingParameters
         getNumSlices
         getNumSubsets
@@ -55,7 +56,6 @@ SlicedNonbondedForce
         getReactionFieldDielectric
         getReciprocalSpaceForceGroup
         getScalingParameter
-        getScalingParameterDerivativeName
         getSwitchingDistance
         getUseCuFFT
         getUseDispersionCorrection
@@ -79,7 +79,6 @@ SlicedNonbondedForce
         setReactionFieldDielectric
         setReciprocalSpaceForceGroup
         setScalingParameter
-        setScalingParameterDerivative
         setSwitchingDistance
         setUseCuFFT
         setUseDispersionCorrection
