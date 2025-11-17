@@ -54,7 +54,7 @@ void testSerialization() {
     force.addGlobalParameter("lambda", 0.5);
     force.addScalingParameter("lambda", 0, 1, true, true);
     force.addScalingParameter("lambda", 1, 1, false, true);
-    force.addScalingParameterDerivative("lambda");
+    force.addEnergyParameterDerivative("lambda");
 
     // Serialize and then deserialize it.
 
@@ -163,9 +163,9 @@ void testSerialization() {
         ASSERT_EQUAL(includeLJ1, includeLJ2);
         ASSERT_EQUAL(includeCoulomb1, includeCoulomb2);
     }
-    ASSERT_EQUAL(force.getNumScalingParameterDerivatives(), force2.getNumScalingParameterDerivatives());
-    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
-        ASSERT_EQUAL(force.getScalingParameterDerivativeName(i), force2.getScalingParameterDerivativeName(i))
+    ASSERT_EQUAL(force.getNumEnergyParameterDerivatives(), force2.getNumEnergyParameterDerivatives());
+    for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
+        ASSERT_EQUAL(force.getEnergyParameterDerivativeName(i), force2.getEnergyParameterDerivativeName(i))
 }
 
 int main() {

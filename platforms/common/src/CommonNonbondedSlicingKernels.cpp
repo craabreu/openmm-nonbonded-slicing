@@ -280,10 +280,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     subsets.initialize<int>(cc, cc.getPaddedNumAtoms(), "subsets");
     subsets.upload(subsetsVec);
 
-    int numDerivs = force.getNumScalingParameterDerivatives();
+    int numDerivs = force.getNumEnergyParameterDerivatives();
     hasDerivatives = numDerivs > 0;
     for (int i = 0; i < numDerivs; i++)
-        requestedDerivatives.insert(force.getScalingParameterDerivativeName(i));
+        requestedDerivatives.insert(force.getEnergyParameterDerivativeName(i));
 
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;

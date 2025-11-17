@@ -98,7 +98,7 @@ namespace NonbondedSlicing {
  * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
  * multiply the Coulomb and Lennard-Jones parts of that slice separately.
  *
- * With :func:`setScalingParameterDerivative`, you can request the derivative with respect to a scaling
+ * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
  * its getEnergyParameterDerivatives_ method.  For this, such State must have been generated from an
  * :OpenMM:`Context` by passing ``True`` to the keyword ``getParameterDerivatives`` of the Context's
@@ -348,8 +348,11 @@ public:
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
-     * can be used to obtain the sum of particular energy slices. The parameter must have already
-     * been added with :func:`addGlobalParameter` and :func:`addScalingParameter`.
+     * can be used to obtain the value of an energy slice or a sum thereof. The parameter must
+     * have already been added with :func:`addGlobalParameter` and :func:`addScalingParameter`.
+     * Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
+     * or Coulomb contributions. Requesting the derivative with respect to non-scaling global
+     * parameters will raise an exception.
      *
      * Parameters
      * ----------
@@ -361,11 +364,11 @@ public:
      *     index : int
      *         the index of scaling parameter derivative that was added
      */
-    int addScalingParameterDerivative(const std::string& parameter);
+    int addEnergyParameterDerivative(const std::string& parameter);
     /**
      * Get the number of requested scaling parameter derivatives.
      */
-    int getNumScalingParameterDerivatives() const;
+    int getNumEnergyParameterDerivatives() const;
     /**
      * Get the name of the global parameter associated with a requested scaling parameter
      * derivative.
@@ -374,21 +377,9 @@ public:
      * ----------
      *     index : int
      *         the index of the parameter derivative, between 0 and the result of
-     *         :func:`getNumScalingParameterDerivatives`
+     *         :func:`getNumEnergyParameterDerivatives`
      */
-    const std::string& getScalingParameterDerivativeName(int index) const;
-    /**
-     * Set the name of the global parameter to associate with a requested scaling parameter
-     * derivative.
-     *
-     * Parameters
-     * ----------
-     *     index : int
-     *         the index of the parameter derivative, between 0 and getNumScalingParameterDerivatives`
-     *     parameter : str
-     *         the name of the parameter
-     */
-    void setScalingParameterDerivative(int index, const std::string& parameter);
+    const std::string& getEnergyParameterDerivativeName(int index) const;
 	/**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * The default value is `True`.

@@ -161,32 +161,20 @@ int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) cons
     throw OpenMMException("There is no scaling parameter called '"+parameter+"'");
 }
 
-int SlicedNonbondedForce::addScalingParameterDerivative(const string& parameter) {
+int SlicedNonbondedForce::addEnergyParameterDerivative(const string& parameter) {
     int scalingParameterIndex = getScalingParameterIndex(parameter);
-    auto begin = scalingParameterDerivatives.begin();
-    auto end = scalingParameterDerivatives.end();
+    auto begin = energyParameterDerivatives.begin();
+    auto end = energyParameterDerivatives.end();
     if (find(begin, end, scalingParameterIndex) != end)
         throwException(__FILE__, __LINE__, "This scaling parameter derivative has already been requested");
-    scalingParameterDerivatives.push_back(scalingParameterIndex);
-    return scalingParameterDerivatives.size()-1;
+    energyParameterDerivatives.push_back(scalingParameterIndex);
+    return energyParameterDerivatives.size()-1;
 }
 
-const string& SlicedNonbondedForce::getScalingParameterDerivativeName(int index) const {
-    ASSERT_VALID("Index", index, scalingParameterDerivatives.size());
-    int globalParamIndex = scalingParameters[scalingParameterDerivatives[index]].globalParamIndex;
+const string& SlicedNonbondedForce::getEnergyParameterDerivativeName(int index) const {
+    ASSERT_VALID("Index", index, energyParameterDerivatives.size());
+    int globalParamIndex = scalingParameters[energyParameterDerivatives[index]].globalParamIndex;
     return getGlobalParameterName(globalParamIndex);
-}
-
-void SlicedNonbondedForce::setScalingParameterDerivative(int index, const string& parameter) {
-    ASSERT_VALID("Index", index, scalingParameterDerivatives.size());
-    int scalingParameterIndex = getScalingParameterIndex(parameter);
-    if (scalingParameterDerivatives[index] != scalingParameterIndex) {
-        auto begin = scalingParameterDerivatives.begin();
-        auto end = scalingParameterDerivatives.end();
-        if (find(begin, end, scalingParameterIndex) != end)
-            throwException(__FILE__, __LINE__, "This scaling parameter derivative has already been requested");
-        scalingParameterDerivatives[index] = scalingParameterIndex;
-    }
 }
 
 ForceImpl* SlicedNonbondedForce::createImpl() const {
