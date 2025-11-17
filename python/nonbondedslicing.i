@@ -98,7 +98,7 @@ namespace NonbondedSlicing {
  * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
  * multiply the Coulomb and Lennard-Jones parts of that slice separately.
  *
- * With :func:`setEnergyParameterDerivative`, you can request the derivative with respect to a scaling
+ * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
  * its getEnergyParameterDerivatives_ method.  For this, such State must have been generated from an
  * :OpenMM:`Context` by passing ``True`` to the keyword ``getParameterDerivatives`` of the Context's
@@ -380,18 +380,6 @@ public:
      *         :func:`getNumEnergyParameterDerivatives`
      */
     const std::string& getEnergyParameterDerivativeName(int index) const;
-    /**
-     * Set the name of the global parameter to associate with a requested scaling parameter
-     * derivative.
-     *
-     * Parameters
-     * ----------
-     *     index : int
-     *         the index of the parameter derivative, between 0 and getNumEnergyParameterDerivatives`
-     *     parameter : str
-     *         the name of the parameter
-     */
-    void setEnergyParameterDerivative(int index, const std::string& parameter);
 	/**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * The default value is `True`.
