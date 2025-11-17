@@ -41,7 +41,7 @@ public:
         return scalingParameters.size();
     }
     int getNumEnergyParameterDerivatives() const {
-        return EnergyParameterDerivatives.size();
+        return energyParameterDerivatives.size();
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
@@ -66,7 +66,7 @@ private:
     int numSubsets;
     map<int, int> subsets;
     vector<ScalingParameterInfo> scalingParameters;
-    vector<int> EnergyParameterDerivatives;
+    vector<int> energyParameterDerivatives;
     bool useCuFFT;
 };
 
