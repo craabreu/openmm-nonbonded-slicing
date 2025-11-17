@@ -95,9 +95,9 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
         force.getScalingParameter(i, parameter, subset1, subset2, includeCoulomb, includeLJ);
         scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ);
     }
-    SerializationNode& scalingParameterDerivatives = node.createChildNode("scalingParameterDerivatives");
-    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
-        scalingParameterDerivatives.createChildNode("scalingParameterDerivative").setStringProperty("parameter", force.getScalingParameterDerivativeName(i));
+    SerializationNode& energyParameterDerivatives = node.createChildNode("energyParameterDerivatives");
+    for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
+        energyParameterDerivatives.createChildNode("energyParameterDerivative").setStringProperty("parameter", force.getEnergyParameterDerivativeName(i));
 }
 
 void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) const {
@@ -150,9 +150,9 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         const SerializationNode& scalingParameters = node.getChildNode("scalingParameters");
         for (auto& param : scalingParameters.getChildren())
             force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"));
-        const SerializationNode& scalingParameterDerivatives = node.getChildNode("scalingParameterDerivatives");
-        for (auto& param : scalingParameterDerivatives.getChildren())
-            force->addScalingParameterDerivative(param.getStringProperty("parameter"));
+        const SerializationNode& energyParameterDerivatives = node.getChildNode("energyParameterDerivatives");
+        for (auto& param : energyParameterDerivatives.getChildren())
+            force->addEnergyParameterDerivative(param.getStringProperty("parameter"));
     }
     catch (...) {
         delete force;

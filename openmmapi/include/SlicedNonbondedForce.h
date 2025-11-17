@@ -7,7 +7,7 @@
  *                                                                            *
  * An OpenMM plugin for slicing nonbonded potential energy calculations.      *
  *                                                                            *
- * Copyright (c) 2022 Charlles Abreu                                          *
+ * Copyright (c) 2022-2025 Charlles Abreu                                     *
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
@@ -40,17 +40,17 @@ public:
     int getNumScalingParameters() const {
         return scalingParameters.size();
     }
-    int getNumScalingParameterDerivatives() const {
-        return scalingParameterDerivatives.size();
+    int getNumEnergyParameterDerivatives() const {
+        return EnergyParameterDerivatives.size();
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
     int addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     void getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
     void setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
-    int addScalingParameterDerivative(const string& parameter);
-    const string& getScalingParameterDerivativeName(int index) const;
-    void setScalingParameterDerivative(int index, const string& parameter);
+    int addEnergyParameterDerivative(const string& parameter);
+    const string& getEnergyParameterDerivativeName(int index) const;
+    void setEnergyParameterDerivative(int index, const string& parameter);
     bool getUseCuFFT() const {
         return useCuFFT;
     };
@@ -66,7 +66,7 @@ private:
     int numSubsets;
     map<int, int> subsets;
     vector<ScalingParameterInfo> scalingParameters;
-    vector<int> scalingParameterDerivatives;
+    vector<int> EnergyParameterDerivatives;
     bool useCuFFT;
 };
 

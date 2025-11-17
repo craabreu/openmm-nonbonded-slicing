@@ -68,8 +68,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         subsets[i] = force.getParticleSubset(i);
 
     set<string> requestedDerivatives;
-    for (int i = 0; i < force.getNumScalingParameterDerivatives(); i++)
-        requestedDerivatives.insert(force.getScalingParameterDerivativeName(i));
+    for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
+        requestedDerivatives.insert(force.getEnergyParameterDerivativeName(i));
 
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;

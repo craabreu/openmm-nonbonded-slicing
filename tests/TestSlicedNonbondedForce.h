@@ -1278,8 +1278,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     // Derivatives
 
-    sliced->addScalingParameterDerivative(param01);
-    sliced->addScalingParameterDerivative(param11);
+    sliced->addEnergyParameterDerivative(param01);
+    sliced->addEnergyParameterDerivative(param11);
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     map<string, double> derivatives = state2.getEnergyParameterDerivatives();
@@ -1309,7 +1309,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     sliced->addGlobalParameter("remainder", 1.0);
     sliced->addScalingParameter("remainder", 0, 0, includeCoulomb, includeLJ);
-    sliced->addScalingParameterDerivative("remainder");
+    sliced->addEnergyParameterDerivative("remainder");
     context2.reinitialize(true);
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     derivatives = state2.getEnergyParameterDerivatives();
@@ -1374,27 +1374,27 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     double lambda = 0.5;
     sliced1->addGlobalParameter("lambda", lambda);
     sliced1->addScalingParameter("lambda", 0, 1, true, true);
-    sliced1->addScalingParameterDerivative("lambda");
+    sliced1->addEnergyParameterDerivative("lambda");
     sliced2->addGlobalParameter("lambdaCoulomb", lambda);
     sliced2->addGlobalParameter("lambdaLJ", lambda);
     sliced2->addScalingParameter("lambdaCoulomb", 0, 1, true, false);
     sliced2->addScalingParameter("lambdaLJ", 0, 1, false, true);
-    sliced2->addScalingParameterDerivative("lambdaCoulomb");
-    sliced2->addScalingParameterDerivative("lambdaLJ");
+    sliced2->addEnergyParameterDerivative("lambdaCoulomb");
+    sliced2->addEnergyParameterDerivative("lambdaLJ");
 
     double value = 0.3;
     sliced1->addGlobalParameter("alpha", value);
     sliced1->addScalingParameter("alpha", 0, 0, true, true);
-    sliced1->addScalingParameterDerivative("alpha");
+    sliced1->addEnergyParameterDerivative("alpha");
 
     sliced1->addGlobalParameter("beta", value);
     sliced1->addScalingParameter("beta", 1, 1, true, true);
-    sliced1->addScalingParameterDerivative("beta");
+    sliced1->addEnergyParameterDerivative("beta");
 
     sliced2->addGlobalParameter("gamma", value);
     sliced2->addScalingParameter("gamma", 0, 0, true, true);
     sliced2->addScalingParameter("gamma", 1, 1, true, true);
-    sliced2->addScalingParameterDerivative("gamma");
+    sliced2->addEnergyParameterDerivative("gamma");
 
     system1.addForce(sliced1);
     system2.addForce(sliced2);
