@@ -177,18 +177,6 @@ const string& SlicedNonbondedForce::getEnergyParameterDerivativeName(int index) 
     return getGlobalParameterName(globalParamIndex);
 }
 
-void SlicedNonbondedForce::setEnergyParameterDerivative(int index, const string& parameter) {
-    ASSERT_VALID("Index", index, energyParameterDerivatives.size());
-    int scalingParameterIndex = getScalingParameterIndex(parameter);
-    if (energyParameterDerivatives[index] != scalingParameterIndex) {
-        auto begin = energyParameterDerivatives.begin();
-        auto end = energyParameterDerivatives.end();
-        if (find(begin, end, scalingParameterIndex) != end)
-            throwException(__FILE__, __LINE__, "This scaling parameter derivative has already been requested");
-        energyParameterDerivatives[index] = scalingParameterIndex;
-    }
-}
-
 ForceImpl* SlicedNonbondedForce::createImpl() const {
     return new SlicedNonbondedForceImpl(*this);
 }

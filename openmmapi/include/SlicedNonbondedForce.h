@@ -50,7 +50,6 @@ public:
     void setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     int addEnergyParameterDerivative(const string& parameter);
     const string& getEnergyParameterDerivativeName(int index) const;
-    void setEnergyParameterDerivative(int index, const string& parameter);
     bool getUseCuFFT() const {
         return useCuFFT;
     };
