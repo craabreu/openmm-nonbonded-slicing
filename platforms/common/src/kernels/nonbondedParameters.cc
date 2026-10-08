@@ -148,7 +148,7 @@ KERNEL void computePlasmaCorrection(GLOBAL real* RESTRICT chargeBuffer, GLOBAL m
 ) {
     LOCAL real subsetCharge[WORK_GROUP_SIZE][NUM_SUBSETS];
     real sum[NUM_SUBSETS] = {0};
-    for (unsigned int index = LOCAL_ID; index < NUM_GROUPS; index += LOCAL_SIZE)
+    for (unsigned int index = LOCAL_ID; index < CHARGE_BUFFER_SIZE; index += LOCAL_SIZE)
         for (int subset = 0; subset < NUM_SUBSETS; subset++)
             sum[subset] += chargeBuffer[index*NUM_SUBSETS + subset];
     for (int subset = 0; subset < NUM_SUBSETS; subset++)
