@@ -211,14 +211,12 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
             if (ljpme)
                 sliceEnergies[slice][vdW] += pow(alphaDispersionEwald, 6.0)*64.0*pow(atomParameters[atomID][SigIndex], 6.0)*pow(atomParameters[atomID][EpsIndex], 2.0)/12.0;
         }
-#if (OPENMM_VERSION_MAJOR > 8 || (OPENMM_VERSION_MAJOR == 8 && OPENMM_VERSION_MINOR >= 3))
         double factor = factorEwald/(2*EPSILON0*volume);
         for (int i = 0; i < numberOfSubsets; i++)
             for (int j = i; j < numberOfSubsets; j++) {
                 int slice = j*(j+1)/2+i;
                 sliceEnergies[slice][Coul] += (i == j ? 1 : 2)*subsetCharges[i]*subsetCharges[j]*factor;
             }
-#endif
     }
 
     // **************************************************************************************
