@@ -16,18 +16,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15
             cuda-version: ""
-            compiler-version: "19.1"
-            python-version: "3.12"
-            openmm-version: "8.3"
+            compiler-version: "19"
+            python-version: "3.13"
+            openmm-version: "8.6"
+            swig-version: "4.5"
 
     steps:
       - name: "Check out"
         uses: actions/checkout@v5
 
-      - name: "Install SDK on MacOS"
-        run: source devtools/scripts/install_macos_sdk.sh
+      - name: "Use the Xcode SDK"
+        run: echo "SDKROOT=$(xcrun --show-sdk-path)" >> ${GITHUB_ENV}
 
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
@@ -39,6 +40,7 @@ jobs:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           COMPILER_VERSION: ${{ matrix.compiler-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
+          SWIG_VERSION: ${{ matrix.swig-version }}
 
       - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"
@@ -82,7 +84,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd build
-          ctest --output-on-failure --exclude-regex 'Test[Cuda|OpenCL]'
+          ctest --output-on-failure --exclude-regex 'TestCuda|TestOpenCL'
 
       - name: "Run Python test"
         shell: bash -l {0}
