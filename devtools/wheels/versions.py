@@ -35,6 +35,9 @@ def load_versions(path=VERSIONS_FILE):
     for minor, entry in entries.items():
         if not entry["openmm"].startswith(minor + "."):
             raise ValueError(f"OpenMM {entry['openmm']} does not belong to minor version {minor}")
+        unknown = set(entry.get("macos_x86_64_pythons", PYTHONS)) - set(PYTHONS)
+        if unknown:
+            raise ValueError(f"unsupported Pythons {sorted(unknown)} in macos_x86_64_pythons of {minor}")
     return entries
 
 
@@ -59,13 +62,29 @@ def requirement(minor, entry, package="openmm"):
     return f"{package}>={entry['openmm']},<{next_minor(minor)}"
 
 
+def _pythons(available, full):
+    # Reduced builds use one Python, the preferred one when available
+    if full:
+        return available
+    return [REDUCED_PYTHON] if REDUCED_PYTHON in available else available[:1]
+
+
 def build_matrix(entries, full):
-    pythons = PYTHONS if full else [REDUCED_PYTHON]
+    macos = []
+    for minor, entry in entries.items():
+        for mac in MACOS:
+            # Some OpenMM releases ship broken Intel macOS wheels for some Pythons
+            available = entry.get("macos_x86_64_pythons", PYTHONS) if mac["arch"] == "x86_64" else PYTHONS
+            macos += [{"openmm": minor, "python": p, **mac} for p in _pythons(available, full)]
     return {
-        "linux": [{"openmm": m, "python": p} for m in entries for p in pythons],
+        "linux": [{"openmm": m, "python": p} for m in entries for p in _pythons(PYTHONS, full)],
         "cuda": [{"openmm": m, "cuda": c} for m in entries for c in CUDAS],
-        "macos": [{"openmm": m, "python": p, **mac} for m in entries for p in pythons for mac in MACOS],
+        "macos": macos,
     }
+
+
+def wheel_count(entries):
+    return sum(len(jobs) for jobs in build_matrix(entries, full=True).values())
 
 
 def main(argv=None):
@@ -81,6 +100,7 @@ def main(argv=None):
     command.add_argument("name", choices=["post", "openmm", "swig"])
     command = commands.add_parser("pins", help="print '<openmm pin> <expected release>' lines")
     command.add_argument("source_dir")
+    commands.add_parser("count", help="print the number of wheels in a full build")
     args = parser.parse_args(argv)
 
     entries = load_versions()
@@ -90,6 +110,8 @@ def main(argv=None):
         print(json.dumps(build_matrix(entries, args.full)))
     elif args.command == "field":
         print(entries[args.minor][args.name])
+    elif args.command == "count":
+        print(wheel_count(entries))
     elif args.command == "pins":
         base = source_version(args.source_dir)
         for entry in entries.values():

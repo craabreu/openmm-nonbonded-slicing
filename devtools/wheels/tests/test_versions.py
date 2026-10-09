@@ -11,7 +11,7 @@ import versions  # noqa: E402
 def test_shipped_versions_load():
     entries = versions.load_versions()
     assert list(entries) == ["8.4", "8.5", "8.6"]
-    assert entries["8.6"] == {"post": 2, "openmm": "8.6.1", "swig": "4.5.0"}
+    assert entries["8.6"] == {"post": 2, "openmm": "8.6.1", "swig": "4.5.0", "macos_x86_64_pythons": ["3.10"]}
 
 
 def test_posts_increase_with_openmm(tmp_path):
@@ -66,11 +66,30 @@ def test_full_matrix_sizes():
     matrix = versions.build_matrix(versions.load_versions(), full=True)
     assert len(matrix["linux"]) == 3 * 5
     assert len(matrix["cuda"]) == 3 * 2
-    assert len(matrix["macos"]) == 3 * 5 * 2
+    # OpenMM 8.6.1's PyPI wheels only run on Intel macOS with Python 3.10
+    assert len(matrix["macos"]) == 3 * 5 + 2 * 5 + 1
     assert {m["runner"] for m in matrix["macos"]} == {"macos-15", "macos-15-intel"}
 
 
-def test_reduced_matrix_has_one_python():
+def test_reduced_matrix_has_one_python_per_platform():
     matrix = versions.build_matrix(versions.load_versions(), full=False)
-    assert {m["python"] for m in matrix["linux"] + matrix["macos"]} == {"3.12"}
+    assert {m["python"] for m in matrix["linux"]} == {"3.12"}
     assert len(matrix["cuda"]) == 3 * 2
+    assert len(matrix["macos"]) == 3 * 2
+    intel_86 = [m for m in matrix["macos"] if m["openmm"] == "8.6" and m["arch"] == "x86_64"]
+    assert [m["python"] for m in intel_86] == ["3.10"]
+
+
+def test_macos_x86_64_restriction_is_validated(tmp_path):
+    path = tmp_path / "v.json"
+    path.write_text(json.dumps({
+        "8.6": {"post": 0, "openmm": "8.6.1", "swig": "4.5.0", "macos_x86_64_pythons": ["3.9"]},
+    }))
+    with pytest.raises(ValueError, match="3.9"):
+        versions.load_versions(path)
+
+
+def test_wheel_count_matches_matrix():
+    entries = versions.load_versions()
+    matrix = versions.build_matrix(entries, full=True)
+    assert versions.wheel_count(entries) == sum(len(jobs) for jobs in matrix.values())
