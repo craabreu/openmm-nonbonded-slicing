@@ -80,7 +80,7 @@ namespace NonbondedSlicing {
  * Then, call :func:`addParticle` once for every single particle in the System to define its force field
  * parameters.  Alternatively, you can pass an existing :OpenMM:`NonbondedForce` object when creating a
  * SlicedNonbondedForce object, so that the latter inherits all properties of the former.  After a particle has
- * been added, you can modify its subset index from 0, the default value, to any positive integer lower than
+ * been added, you can modify its subset index from 0, the default value, to any integer lower than
  * :math:`n` by calling :func:`setParticleSubset`.  You can also modify the force field parameters of an added
  * particle by calling :func:`setParticleParameters`.  These two methods will have no effect on Contexts that
  * already exist unless you call :func:`updateParametersInContext`.
@@ -268,10 +268,10 @@ public:
      *         the subset to which this particle belongs
      */
     void setParticleSubset(int index, int subset);
-  	/**
-     * Add a scaling parameter to multiply a particular Coulomb slice. Its value will scale the
-     * Coulomb interactions between particles of a subset 1 with those of another (or the same)
-     * subset 2. The order of subset definition is irrelevant.
+    /**
+     * Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
+     * particular slice. Its value will scale the interactions between particles of a subset 1
+     * with those of another (or the same) subset 2. The order of subset definition is irrelevant.
      *
      * Parameters
      * ----------
@@ -281,14 +281,15 @@ public:
      *         calling `setParameter()` on the :OpenMM:`Context`
      *     subset1 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
+     *         :func:`getNumSubsets` minus 1
      *     subset2 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
+     *         :func:`getNumSubsets` minus 1
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
+     *         whether this scaling parameter applies to Lennard-Jones interactions.  At least one
+     *         of includeCoulomb and includeLJ must be true
      *
      * Returns
      * -------
@@ -300,7 +301,7 @@ public:
      * Get the number of scaling parameters.
      */
     int getNumScalingParameters() const;
-  	/**
+    /**
      * Get the scaling parameter applied to a particular nonbonded slice.
      *
      * Parameters
@@ -313,33 +314,33 @@ public:
      *     parameter : str
      *         the name of the global parameter
      *     subset1 : int
-     *         the smallest index of the two particle subsets
+     *         the index of the first particle subset
      *     subset2 : int
-     *         the largest index of the two particle subsets
+     *         the index of the second particle subset
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions
      */
     void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeCoulomb, bool& includeLJ) const;
- 	/**
+    /**
      * Modify an added scaling parameter.
      *
      * Parameters
      * ----------
      *     index : int
      *         the index of the scaling parameter to modify, as returned by
-     *         :func:`addExceptionChargeOffset`
+     *         :func:`addScalingParameter`
      *     parameter : str
      *         the name of the global parameter.  It must have already been added
      *         with :func:`addGlobalParameter`. Its value can be modified at any time by
      *         calling `setParameter()` on the :OpenMM:`Context`
      *     subset1 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
+     *         :func:`getNumSubsets` minus 1
      *     subset2 : int
      *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets`
+     *         :func:`getNumSubsets` minus 1
      *     includeCoulomb : bool
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
@@ -380,15 +381,14 @@ public:
      *         :func:`getNumEnergyParameterDerivatives`
      */
     const std::string& getEnergyParameterDerivativeName(int index) const;
-	/**
+    /**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * The default value is `True`.
      */
     bool getUseCuFFT() const;
- 	/**
-     * Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
-     * This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0
-     * or older.
+    /**
+     * Set whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
+     * Otherwise, VkFFT is used.  This choice has no effect on other platforms.
      *
      * Parameters
      * ----------

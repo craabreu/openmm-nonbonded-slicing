@@ -19,39 +19,68 @@ with respect to these variables can be requested and used, for instance, to repo
 slice contributions or sums thereof via :OpenMM:`Context`'s ``getState`` method with option
 ``getParameterDerivatives=True``.
 
-Building the Plugin
-===================
+Installation
+============
 
-This project uses CMake_ for its build system.  To build it, follow these steps:
+The plugin is distributed on conda-forge_:
 
-#. Create a directory in which to build the plugin.
-#. Run the CMake GUI or ccmake, specifying your new directory as the build directory and the top level directory of this project as the source directory.
-#. Press "Configure".
-#. Set OPENMM_DIR to point to the directory where OpenMM is installed.  This is needed to locate the OpenMM header files and libraries.
-#. Set CMAKE_INSTALL_PREFIX to the directory where the plugin should be installed.  Usually, this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
-#. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and OPENCL_LIBRARY are set correctly, and that PLUGIN_BUILD_OPENCL_LIB is selected.
-#. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly and that PLUGIN_BUILD_CUDA_LIB is selected.
-#. Press "Configure" again if necessary, then press "Generate".
-#. Use the build system you selected to build and install the plugin.  For example, if you selected Unix Makefiles, type `make install`.
+.. code-block:: bash
 
-Python Wrapper
-==============
+    mamba install -c conda-forge openmm-nonbonded-slicing
 
-As OpenMM_, this project uses SWIG_ to generate its Python API.  SWIG takes an "interface
-file", which is essentially a C++ header file with some extra annotations added, as its input.
-It then generates a Python extension module exposing the C++ API in Python.
+Building from Source
+====================
 
-To build and install the Python API, build the `PythonInstall` target, for example by typing
-`make PythonInstall` (if you are installing into the system Python, you may need to use sudo).
+Requirements:
+
+* OpenMM_ 8.4 or later
+* CMake_ 3.17 or later and a C++ compiler
+* SWIG_, the same version that built your OpenMM (OpenMM's conda-forge builds 8.4 and 8.5/8.6 used SWIG 4.4 and 4.5, respectively)
+* Optional: OpenCL headers for the OpenCL platform, and a CUDA toolkit with NVRTC and cuFFT for the CUDA platform
+
+In a conda environment where OpenMM is installed:
+
+.. code-block:: bash
+
+    mkdir build && cd build
+    cmake ..
+    make install
+    make PythonInstall
+
+Useful CMake options:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Default
+     - Meaning
+   * - ``OPENMM_DIR``
+     - ``$CONDA_PREFIX``
+     - Where OpenMM is installed
+   * - ``OPENMM_VERSION``
+     - detected with ``python -c "import openmm"``
+     - OpenMM version, if Python cannot import it
+   * - ``CMAKE_INSTALL_PREFIX``
+     - ``OPENMM_DIR``
+     - Where to install the plugin
+   * - ``PLUGIN_BUILD_OPENCL_LIB``
+     - ``ON`` if OpenCL headers are found
+     - Build the OpenCL platform
+   * - ``PLUGIN_BUILD_CUDA_LIB``
+     - ``ON`` if a CUDA toolkit is found
+     - Build the CUDA platform (set ``CUDAToolkit_ROOT`` to pick a toolkit)
+   * - ``VKFFT_INCLUDE_DIR``
+     - downloaded at configure time
+     - Directory containing ``vkFFT.h``
 
 Test Cases
 ==========
 
-To run the C++ test cases, build the "test" target, for example by typing `make test`.
-
-To run the Python test cases, build the "PythonTest" target by typing `make PythonTest`.
+From the build directory, run the C++ tests with ``make test`` (or ``ctest``) and the Python tests with ``make PythonTest``.
 
 
 .. _CMake:                http://www.cmake.org
 .. _OpenMM:               https://openmm.org
 .. _SWIG:                 http://www.swig.org
+.. _conda-forge:          https://anaconda.org/conda-forge/openmm-nonbonded-slicing

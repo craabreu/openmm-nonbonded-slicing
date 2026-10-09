@@ -59,13 +59,13 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 project = 'Nonbonded Slicing'
-copyright = ('2022, Charlles Abreu. Project based on OpenMM')
+copyright = ('2022-2026, Charlles Abreu. Project based on OpenMM')
 author = 'Charlles Abreu'
 
 # The short X.Y version
-version = ''
+version = '.'.join(nonbondedslicing.__version__.split('.')[:2])
 # The full version, including alpha/beta/rc tags
-release = ''
+release = nonbondedslicing.__version__
 
 pygments_style = 'trac'
 templates_path = ['.']
