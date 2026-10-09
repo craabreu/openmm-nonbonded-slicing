@@ -144,11 +144,9 @@ void SlicedNonbondedForce::setScalingParameter(int index, const string& paramete
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
     ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ);
-    ScalingParameterInfo old = scalingParameters[index];
-    if (!old.clashesWith(info))
-        for (auto param : scalingParameters)
-            if (param.clashesWith(info))
-                throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
+    for (int i = 0; i < scalingParameters.size(); i++)
+        if (i != index && scalingParameters[i].clashesWith(info))
+            throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters[index] = info;
 }
 

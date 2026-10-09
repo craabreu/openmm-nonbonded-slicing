@@ -1,6 +1,10 @@
+#ifndef NONBONDED_SLICING_TESTS_ASSERTION_UTILITIES_H_
+#define NONBONDED_SLICING_TESTS_ASSERTION_UTILITIES_H_
+
 #include "openmm/OpenMMException.h"
 #include "openmm/Vec3.h"
 #include <math.h>
+#include <sstream>
 #include <vector>
 #include <iostream>
 
@@ -43,11 +47,4 @@
     assertForces(state0, state1, tol); \
 }
 
-#define assertEqualTo(expected, found, tol) {\
-    double _scale_ = std::abs(expected) > 1.0 ? std::abs(expected) : 1.0; \
-    if (!(std::abs((expected)-(found))/_scale_ <= (tol))) {\
-        std::stringstream details; \
-        details<<__FILE__<<":"<< __LINE__<<": Expected "<<(expected)<<", found "<<(found); \
-        throw OpenMMException(details.str()); \
-    } \
-};
+#endif

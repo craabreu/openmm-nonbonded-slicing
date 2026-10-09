@@ -15,22 +15,21 @@
 #include "openmm/NonbondedForce.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include <map>
-
-using namespace OpenMM;
-using namespace std;
+#include <string>
+#include <vector>
 
 #define sliceIndex(i, j) (i>j ? i*(i+1)/2+j : j*(j+1)/2+i)
 
 namespace NonbondedSlicing {
 
-class OPENMM_EXPORT_NONBONDED_SLICING SlicedNonbondedForce : public NonbondedForce {
+class OPENMM_EXPORT_NONBONDED_SLICING SlicedNonbondedForce : public OpenMM::NonbondedForce {
 public:
     SlicedNonbondedForce(int numSubsets);
     SlicedNonbondedForce(const OpenMM::NonbondedForce& force, int numSubsets);
-    void getPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
-    void getLJPMEParametersInContext(const Context& context, double& alpha, int& nx, int& ny, int& nz) const;
-    void updateParametersInContext(Context& context);
-    string getNonbondedMethodName() const;
+    void getPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
+    void getLJPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
+    void updateParametersInContext(OpenMM::Context& context);
+    std::string getNonbondedMethodName() const;
     int getNumSubsets() const {
         return numSubsets;
     }
@@ -45,11 +44,11 @@ public:
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
-    int addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
-    void getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
-    void setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
-    int addEnergyParameterDerivative(const string& parameter);
-    const string& getEnergyParameterDerivativeName(int index) const;
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    int addEnergyParameterDerivative(const std::string& parameter);
+    const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
         return useCuFFT;
     };
@@ -57,15 +56,15 @@ public:
         useCuFFT = use;
     };
 protected:
-    ForceImpl* createImpl() const;
+    OpenMM::ForceImpl* createImpl() const;
 private:
-    int getGlobalParameterIndex(const string& parameter) const;
-    int getScalingParameterIndex(const string& parameter) const;
+    int getGlobalParameterIndex(const std::string& parameter) const;
+    int getScalingParameterIndex(const std::string& parameter) const;
     class ScalingParameterInfo;
     int numSubsets;
-    map<int, int> subsets;
-    vector<ScalingParameterInfo> scalingParameters;
-    vector<int> energyParameterDerivatives;
+    std::map<int, int> subsets;
+    std::vector<ScalingParameterInfo> scalingParameters;
+    std::vector<int> energyParameterDerivatives;
     bool useCuFFT;
 };
 
@@ -85,7 +84,7 @@ public:
             globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
             includeCoulomb(includeCoulomb), includeLJ(includeLJ) {
         if (!(includeCoulomb || includeLJ))
-            throwException(__FILE__, __LINE__, "Keywords 'includeCoulomb' and 'includeLJ' cannot be both false");
+            OpenMM::throwException(__FILE__, __LINE__, "Keywords 'includeCoulomb' and 'includeLJ' cannot be both false");
     }
     int getSlice() const {
         return sliceIndex(subset1, subset2);

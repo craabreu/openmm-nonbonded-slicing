@@ -34,6 +34,8 @@ void testSerialization() {
     force.setUseDispersionCorrection(false);
     force.setExceptionsUsePeriodicBoundaryConditions(true);
     force.setIncludeDirectSpace(false);
+    force.setReciprocalSpaceForceGroup(2);
+    force.setUseCuFFT(false);
     double alpha = 0.5;
     int nx = 3, ny = 5, nz = 7;
     force.setPMEParameters(alpha, nx, ny, nz);
@@ -81,6 +83,9 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumParticleParameterOffsets(), force2.getNumParticleParameterOffsets());
     ASSERT_EQUAL(force.getNumExceptionParameterOffsets(), force2.getNumExceptionParameterOffsets());
     ASSERT_EQUAL(force.getIncludeDirectSpace(), force2.getIncludeDirectSpace());
+    ASSERT_EQUAL(force.getNumSubsets(), force2.getNumSubsets());
+    ASSERT_EQUAL(force.getReciprocalSpaceForceGroup(), force2.getReciprocalSpaceForceGroup());
+    ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -106,7 +111,7 @@ void testSerialization() {
         double charge2, sigma2, epsilon2;
         force.getParticleParameterOffset(i, param1, index1, charge1, sigma1, epsilon1);
         force2.getParticleParameterOffset(i, param2, index2, charge2, sigma2, epsilon2);
-        ASSERT_EQUAL(index1, index1);
+        ASSERT_EQUAL(index1, index2);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);
         ASSERT_EQUAL(sigma1, sigma2);
@@ -119,7 +124,7 @@ void testSerialization() {
         double charge2, sigma2, epsilon2;
         force.getExceptionParameterOffset(i, param1, index1, charge1, sigma1, epsilon1);
         force2.getExceptionParameterOffset(i, param2, index2, charge2, sigma2, epsilon2);
-        ASSERT_EQUAL(index1, index1);
+        ASSERT_EQUAL(index1, index2);
         ASSERT_EQUAL(param1, param2);
         ASSERT_EQUAL(charge1, charge2);
         ASSERT_EQUAL(sigma1, sigma2);
@@ -168,9 +173,26 @@ void testSerialization() {
         ASSERT_EQUAL(force.getEnergyParameterDerivativeName(i), force2.getEnergyParameterDerivativeName(i))
 }
 
+void testMissingUseCuFFT() {
+    SlicedNonbondedForce force(2);
+    force.setUseCuFFT(false);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t start = xml.find(" useCuFFT=\"");
+    ASSERT(start != string::npos);
+    size_t end = xml.find('"', start+11);
+    xml.erase(start, end-start+1);
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT(copy->getUseCuFFT());
+    delete copy;
+}
+
 int main() {
     try {
         testSerialization();
+        testMissingUseCuFFT();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;

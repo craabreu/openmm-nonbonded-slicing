@@ -11,28 +11,14 @@
 #include "OpenMMDrude.h"
 #include "openmm/RPMDIntegrator.h"
 #include "openmm/RPMDMonteCarloBarostat.h"
+#include "openmm/serialization/XmlSerializer.h"
+#include <sstream>
 
 #define SWIG_PYTHON_CAST_MODE
 %}
 
 %pythoncode %{
-from openmm import unit
-
 __version__ = "@CMAKE_PROJECT_VERSION@"
-%}
-
-/*
- * Add units to function outputs.
-*/
-
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getPMEParametersInContext(
-        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
-    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
-%}
-
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getLJPMEParametersInContext(
-        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
-    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
 %}
 
 /*
@@ -54,11 +40,6 @@ namespace NonbondedSlicing {
 %apply int& OUTPUT {int& nx};
 %apply int& OUTPUT {int& ny};
 %apply int& OUTPUT {int& nz};
-%apply const std::string& OUTPUT {const std::string& parameter};
-%apply int& OUTPUT {int& subset1};
-%apply int& OUTPUT {int& subset2};
-%apply bool& OUTPUT {bool& includeLJ};
-%apply bool& OUTPUT {bool& includeCoulomb};
 
 /**
  * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
@@ -301,28 +282,37 @@ public:
      * Get the number of scaling parameters.
      */
     int getNumScalingParameters() const;
-    /**
-     * Get the scaling parameter applied to a particular nonbonded slice.
-     *
-     * Parameters
-     * ----------
-     *     index : int
-     *         the index of the scaling parameter to query, as returned by :func:`addScalingParameter`
-     *
-     * Returns
-     * -------
-     *     parameter : str
-     *         the name of the global parameter
-     *     subset1 : int
-     *         the index of the first particle subset
-     *     subset2 : int
-     *         the index of the second particle subset
-     *     includeCoulomb : bool
-     *         whether this scaling parameter applies to Coulomb interactions
-     *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
-     */
-    void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeCoulomb, bool& includeLJ) const;
+    %extend {
+        /**
+         * Get the scaling parameter applied to a particular nonbonded slice.
+         *
+         * Parameters
+         * ----------
+         *     index : int
+         *         the index of the scaling parameter to query, as returned by :func:`addScalingParameter`
+         *
+         * Returns
+         * -------
+         *     parameter : str
+         *         the name of the global parameter
+         *     subset1 : int
+         *         the index of the first particle subset
+         *     subset2 : int
+         *         the index of the second particle subset
+         *     includeCoulomb : bool
+         *         whether this scaling parameter applies to Coulomb interactions
+         *     includeLJ : bool
+         *         whether this scaling parameter applies to Lennard-Jones interactions
+         */
+        PyObject* getScalingParameter(int index) const {
+            std::string parameter;
+            int subset1, subset2;
+            bool includeCoulomb, includeLJ;
+            self->getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
+            return Py_BuildValue("[siiOO]", parameter.c_str(), subset1, subset2,
+                                 includeCoulomb ? Py_True : Py_False, includeLJ ? Py_True : Py_False);
+        }
+    }
     /**
      * Modify an added scaling parameter.
      *
@@ -397,11 +387,37 @@ public:
      */
     void setUseCuFFT(bool use);
 
-    /*
-     * Add methods for casting a Force to a SlicedNonbondedForce.
-    */
-
+    %newobject _deserialize;
     %extend {
+        static NonbondedSlicing::SlicedNonbondedForce* _deserialize(const std::string& xml) {
+            std::stringstream buffer(xml);
+            return OpenMM::XmlSerializer::deserialize<NonbondedSlicing::SlicedNonbondedForce>(buffer);
+        }
+
+        %pythoncode %{
+            def __getstate__(self):
+                from openmm import XmlSerializer
+                return XmlSerializer.serialize(self)
+
+            def __setstate__(self, state):
+                self.this = SlicedNonbondedForce._deserialize(state).this
+
+            def __copy__(self):
+                from copy import deepcopy
+                from openmm import XmlSerializer
+                duplicate = SlicedNonbondedForce._deserialize(XmlSerializer.serialize(self))
+                attributes = {key: value for key, value in self.__dict__.items() if key != 'this'}
+                duplicate.__dict__.update(deepcopy(attributes))
+                return duplicate
+
+            def __deepcopy__(self, memo):
+                return self.__copy__()
+        %}
+
+        /*
+         * Add methods for casting a Force to a SlicedNonbondedForce.
+        */
+
         static NonbondedSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
             return dynamic_cast<NonbondedSlicing::SlicedNonbondedForce&>(force);
         }
@@ -416,10 +432,5 @@ public:
 %clear int& nx;
 %clear int& ny;
 %clear int& nz;
-%clear std::string& parameter;
-%clear int& subset1;
-%clear int& subset2;
-%clear bool& includeLJ;
-%clear bool& includeCoulomb;
 
 }
