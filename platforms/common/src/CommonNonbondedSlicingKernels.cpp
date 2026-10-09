@@ -892,6 +892,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
 
         computeParamsKernel->addArg(cc.getEnergyBuffer());
         computeParamsKernel->addArg();
+        computeParamsKernel->addArg();
         if (hasOffsets && hasDerivatives)
             computeParamsKernel->addArg(cc.getEnergyParamDerivBuffer());
         computeParamsKernel->addArg(globalParams);
@@ -1171,6 +1172,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     }
     if (recomputeParams || hasOffsets) {
         computeParamsKernel->setArg(1, (int) (includeEnergy && includeReciprocal));
+        computeParamsKernel->setArg(2, (int) includeReciprocal);
         computeParamsKernel->execute(cc.getNumAtoms());
         if (exclusionParams.isInitialized())
             computeExclusionParamsKernel->execute(exclusionParams.getSize());
