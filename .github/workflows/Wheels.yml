@@ -105,6 +105,7 @@ jobs:
             -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
             -DPYTHON_EXECUTABLE=$(which python) \
             -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCMAKE_PREFIX_PATH=/opt/opencl \
+            -DCMAKE_CXX_FLAGS=-I/opt/opencl/include \
             -DPLUGIN_BUILD_CUDA_LIB=OFF
           grep -q "PLUGIN_BUILD_OPENCL_LIB:BOOL=ON" build/CMakeCache.txt
           cmake --build build -j4 --target install
@@ -283,6 +284,7 @@ jobs:
             -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
             -DPYTHON_EXECUTABLE=$(which python) \
             -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCMAKE_PREFIX_PATH=$RUNNER_TEMP/opencl \
+            -DCMAKE_CXX_FLAGS=-I$RUNNER_TEMP/opencl/include \
             -DPLUGIN_BUILD_CUDA_LIB=OFF
           grep -q "PLUGIN_BUILD_OPENCL_LIB:BOOL=ON" build/CMakeCache.txt
           cmake --build build -j3 --target install
@@ -339,7 +341,7 @@ jobs:
         run: |
           N=$(python3 -c "import json; print(len(json.load(open('devtools/wheels/openmm-versions.json'))))")
           if [ "$N" -gt 4 ]; then echo "Add publish slots for post numbers >= 4"; exit 1; fi
-          python3 devtools/wheels/package.py arrange downloaded out --expected $((N * (5 + 2 + 10)))
+          python3 devtools/wheels/package.py arrange downloaded out --expected $(python3 devtools/wheels/versions.py count)
           ls -R out
       # Releases in increasing post order; within each, the CUDA add-ons before the base wheels
       - if: hashFiles('out/0-cuda/*.whl') != ''
