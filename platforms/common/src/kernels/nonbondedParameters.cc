@@ -1,7 +1,7 @@
 /**
  * Compute the nonbonded parameters for particles and exceptions.
  */
-KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy
+KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSelfEnergy, int includeReciprocal
 #ifdef HAS_DERIVATIVES
     , GLOBAL mixed* RESTRICT energyParamDerivBuffer
 #endif
@@ -79,12 +79,14 @@ KERNEL void computeParameters(GLOBAL mixed* RESTRICT energyBuffer, int includeSe
     }
 
 #if defined(HAS_DERIVATIVES)
+    if (includeReciprocal) {
 #ifdef INCLUDE_EWALD
-    ADD_COULOMB_DERIVATIVES
+        ADD_COULOMB_DERIVATIVES
 #endif
 #ifdef INCLUDE_LJPME
-    ADD_LJ_DERIVATIVES
+        ADD_LJ_DERIVATIVES
 #endif
+    }
 #endif
 
     // Record the total charge from particles processed by this block.
