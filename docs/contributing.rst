@@ -53,10 +53,9 @@ To set up `openmm-nonbonded-slicing` for local development:
 4. When you're done making changes, run all the unit tests and the doc builder::
 
     cd build
-    make
-    make test
     make install
     make PythonInstall
+    make test
     make PythonTest
     make doc
 
@@ -75,10 +74,10 @@ If you need some code review or feedback while you're developing the code just m
 
 For merging, you should:
 
-1. Include passing tests (run ``devtools/run_tests.sh``) [1]_.
+1. Include passing tests (``make test`` and ``make PythonTest``) [1]_.
 2. Update documentation when there's new API, functionality etc.
 3. Add a note to ``docs/changelog.rst`` about the changes.
 4. Add yourself to ``docs/authors.rst``.
 
-.. [1] If you don't have all the necessary python versions available locally you can rely on Github Actions - it will
-       `run the tests <https://travis-ci.org/craabreu/openmm-nonbonded-slicing/pull_requests>`_ for each change you add in the pull request.
+.. [1] If you cannot run the GPU tests locally, GitHub Actions runs the Reference and OpenCL tests for each pull request;
+       GPU tests still need to be run by a maintainer.
