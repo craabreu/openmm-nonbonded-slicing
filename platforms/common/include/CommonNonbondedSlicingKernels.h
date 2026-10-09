@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+using namespace std;
+
 namespace NonbondedSlicing {
 
 /**

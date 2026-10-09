@@ -9,7 +9,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "SlicedNonbondedForce.h"
-#include "internal/AssertionUtilities.h"
+#include "AssertionUtilities.h"
 #include "openmm/NonbondedForce.h"
 #include "openmm/Context.h"
 #include "openmm/reference/ReferencePlatform.h"

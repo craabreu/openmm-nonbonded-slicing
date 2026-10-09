@@ -13,7 +13,6 @@
 #define CL_HPP_MINIMUM_OPENCL_VERSION 120
 #include "OpenCLNonbondedSlicingTests.h"
 #include "TestSlicedNonbondedForce.h"
-// #include <openmm/opencl/opencl.hpp>
 #include <string>
 
 void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {

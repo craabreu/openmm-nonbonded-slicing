@@ -18,8 +18,6 @@
 %}
 
 %pythoncode %{
-from openmm import unit
-
 __version__ = "@CMAKE_PROJECT_VERSION@"
 %}
 
