@@ -4,7 +4,7 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-PROJECT(OpenMMNonbondedSlicing VERSION 0.2.2)
+PROJECT(OpenMMNonbondedSlicing VERSION 0.3.0)
 
 # Set CMake policies
 CMAKE_POLICY(SET CMP0146 NEW)  # Modern CUDA handling
