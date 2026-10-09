@@ -19,6 +19,7 @@
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "sfmt/SFMT.h"
+#include <functional>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -1456,6 +1457,57 @@ void testScalingParameterSeparation(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::Non
     assertEqualTo(derivatives1["alpha"]+derivatives1["beta"], derivatives2["gamma"], tol);
 }
 
+bool throwsException(const function<void()>& call) {
+    try {
+        call();
+    }
+    catch (const OpenMMException&) {
+        return true;
+    }
+    return false;
+}
+
+void testErrors() {
+    SlicedNonbondedForce force(3);
+    force.addParticle(0.0, 1.0, 0.0);
+    force.addGlobalParameter("a", 1.0);
+    force.addGlobalParameter("b", 1.0);
+    force.addGlobalParameter("c", 1.0);
+
+    ASSERT(throwsException([&]() { force.setParticleSubset(0, 3); }));
+    ASSERT(throwsException([&]() { force.setParticleSubset(1, 0); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("a", 0, 3, true, false); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("a", 0, 1, false, false); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("unknown", 0, 1, true, false); }));
+
+    force.addScalingParameter("a", 0, 1, true, false);
+    force.addScalingParameter("b", 0, 1, false, true);
+    ASSERT(throwsException([&]() { force.addScalingParameter("c", 1, 0, true, false); }));
+    ASSERT(throwsException([&]() { force.setScalingParameter(0, "a", 0, 1, true, true); }));
+    ASSERT(throwsException([&]() { force.setScalingParameter(1, "b", 1, 0, true, true); }));
+    ASSERT(throwsException([&]() { force.setScalingParameter(2, "a", 0, 1, true, false); }));
+    force.setScalingParameter(0, "a", 1, 0, true, false);
+    force.setScalingParameter(0, "a", 2, 2, true, true);
+    force.addScalingParameter("c", 0, 1, true, false);
+
+    ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("unknown"); }));
+    force.addGlobalParameter("d", 1.0);
+    ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("d"); }));
+    force.addEnergyParameterDerivative("a");
+    ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("a"); }));
+
+    System system;
+    system.addParticle(1.0);
+    SlicedNonbondedForce* clash = new SlicedNonbondedForce(1);
+    clash->addParticle(1.0, 1.0, 0.0);
+    clash->addGlobalParameter("p", 1.0);
+    clash->addScalingParameter("p", 0, 0, true, true);
+    clash->addParticleParameterOffset("p", 0, 1.0, 0.0, 0.0);
+    system.addForce(clash);
+    VerletIntegrator integrator(0.01);
+    ASSERT(throwsException([&]() { Context context(system, integrator, platform); }));
+}
+
 void runPlatformTests();
 
 int main(int argc, char* argv[]) {
@@ -1471,6 +1523,7 @@ int main(int argc, char* argv[]) {
     init_gen_rand(0, sfmt);
     try {
         initializeTests(argc, argv);
+        testErrors();
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();

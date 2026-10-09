@@ -50,23 +50,42 @@ def assert_forces_and_energy(context, tol):
     ASSERT_EQUAL_TOL(state0.getPotentialEnergy(), state1.getPotentialEnergy(), tol)
 
 
-@pytest.mark.parametrize('platformName', ['Reference', 'CUDA', 'OpenCL'])
-def testParameterClash(platformName):
+def testErrors():
+    force = plugin.SlicedNonbondedForce(3)
+    force.addParticle(0.0, 1.0, 0.0)
+    for name in "abcd":
+        force.addGlobalParameter(name, 1.0)
+    with pytest.raises(Exception, match="out of range"):
+        force.setParticleSubset(0, 3)
+    with pytest.raises(Exception, match="cannot be both false"):
+        force.addScalingParameter("a", 0, 1, False, False)
+    with pytest.raises(Exception, match="There is no global parameter called"):
+        force.addScalingParameter("unknown", 0, 1, True, False)
+    force.addScalingParameter("a", 0, 1, True, False)
+    force.addScalingParameter("b", 0, 1, False, True)
+    with pytest.raises(Exception, match="Clash detected between scaling parameters"):
+        force.addScalingParameter("c", 1, 0, True, False)
+    with pytest.raises(Exception, match="has already been defined for this slice"):
+        force.setScalingParameter(0, "a", 0, 1, True, True)
+    with pytest.raises(Exception, match="There is no scaling parameter called"):
+        force.addEnergyParameterDerivative("d")
+    force.addEnergyParameterDerivative("a")
+    with pytest.raises(Exception, match="has already been requested"):
+        force.addEnergyParameterDerivative("a")
+
+
+def testParameterClash():
     system = mm.System()
-    system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
-    system.addParticle(1.0)
     system.addParticle(1.0)
     force = plugin.SlicedNonbondedForce(1)
     force.addParticle(1.5, 1, 0)
-    force.addParticle(-1.5, 1, 0)
     force.addGlobalParameter("param", 1)
     force.addScalingParameter("param", 0, 0, True, True)
     force.addParticleParameterOffset("param", 0, 1, 1, 0)
     system.addForce(force)
-    integrator = mm.VerletIntegrator(0.01)
-    platform = mm.Platform.getPlatformByName(platformName)
-    with pytest.raises(Exception):
-        context = mm.Context(system, integrator, platform)
+    platform = mm.Platform.getPlatformByName("Reference")
+    with pytest.raises(Exception, match="Cannot use a global parameter for both"):
+        mm.Context(system, mm.VerletIntegrator(0.01), platform)
 
 
 @pytest.mark.parametrize('platformName, precision', cases, ids=ids)
