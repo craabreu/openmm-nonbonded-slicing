@@ -12,11 +12,11 @@
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
     <script src="../_static/documentation_options.js?v=5929fcd5"></script>
-    <script src="../_static/doctools.js?v=9bcbadda"></script>
-    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=ccdb6887"></script>
-    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Contributing" href="../contributing.html" />
@@ -42,7 +42,7 @@
 <h1>SlicedNonbondedForce<a class="headerlink" href="#slicednonbondedforce" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SlicedNonbondedForce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce" title="Link to this definition">¶</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SlicedNonbondedForce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NonbondedForce</span></code></p>
 <p>This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
 electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
@@ -414,9 +414,9 @@ parameters will raise an exception.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
 <li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
-<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>chargeProd</strong> (<em>float</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 <li><p><strong>replace</strong> (<em>bool</em>) – determines the behavior if there is already an exception for the same two particles. If true, the existing one is replaced. If false, an exception is thrown.</p></li>
 </ul>
 </dd>
@@ -433,11 +433,11 @@ parameters will raise an exception.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
 <li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
-<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -463,8 +463,8 @@ rMin = 2^1/6 * sigma.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> (<em>string</em>) – the name of the parameter</p></li>
-<li><p><strong>defaultValue</strong> (<em>double</em>) – the default value of the parameter</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – the name of the parameter</p></li>
+<li><p><strong>defaultValue</strong> (<em>float</em>) – the default value of the parameter</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -480,9 +480,9 @@ rMin = 2^1/6 * sigma.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>charge</strong> (<em>float</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -498,11 +498,11 @@ rMin = 2^1/6 * sigma.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
 <li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
-<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+<li><p><strong>chargeScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -555,9 +555,9 @@ calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference ex
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>bonds</strong> (<em>vector&lt; std::pair&lt; int, int &gt; &gt;</em>) – the set of bonds based on which to construct exceptions. Each element specifies the indices of two particles that are bonded to each other.</p></li>
-<li><p><strong>coulomb14Scale</strong> (<em>double</em>) – pairs of particles separated by three bonds will have the strength of their Coulomb interaction multiplied by this factor</p></li>
-<li><p><strong>lj14Scale</strong> (<em>double</em>) – pairs of particles separated by three bonds will have the strength of their Lennard-Jones interaction multiplied by this factor</p></li>
+<li><p><strong>bonds</strong> (<em>Sequence[tuple[int, int]]</em>) – the set of bonds based on which to construct exceptions. Each element specifies the indices of two particles that are bonded to each other.</p></li>
+<li><p><strong>coulomb14Scale</strong> (<em>float</em>) – pairs of particles separated by three bonds will have the strength of their Coulomb interaction multiplied by this factor</p></li>
+<li><p><strong>lj14Scale</strong> (<em>float</em>) – pairs of particles separated by three bonds will have the strength of their Lennard-Jones interaction multiplied by this factor</p></li>
 </ul>
 </dd>
 </dl>
@@ -569,7 +569,7 @@ calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference ex
 <dd><p>Get the cutoff distance (in nm) being used for nonbonded interactions. If the NonbondedMethod in use is NoCutoff, this value will have no effect.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><em>double</em> – the cutoff distance, measured in nm</p>
+<dd class="field-odd"><p><em>float</em> – the cutoff distance, measured in nm</p>
 </dd>
 </dl>
 </dd></dl>
@@ -602,11 +602,11 @@ derivative.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the offset to query, as returned by addExceptionParameterOffset()</p></li>
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter</p></li>
 <li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
-<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
 </ul>
 </dd>
 </dl>
@@ -624,9 +624,9 @@ derivative.</p>
 <dd class="field-even"><p><ul class="simple">
 <li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
 <li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
-<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>chargeProd</strong> (<em>float</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 </ul>
 </p>
 </dd>
@@ -655,7 +655,7 @@ derivative.</p>
 <dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to get the default value</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>double</em> – the parameter default value</p>
+<dd class="field-even"><p><em>float</em> – the parameter default value</p>
 </dd>
 </dl>
 </dd></dl>
@@ -669,7 +669,7 @@ derivative.</p>
 <dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to get the name</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>string</em> – the parameter name</p>
+<dd class="field-even"><p><em>str</em> – the parameter name</p>
 </dd>
 </dl>
 </dd></dl>
@@ -687,7 +687,7 @@ derivative.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
-<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>alpha</strong> (<em>float</em>) – the separation parameter</p></li>
 <li><p><strong>nx</strong> (<em>int</em>) – the number of dispersion grid points along the X axis</p></li>
 <li><p><strong>ny</strong> (<em>int</em>) – the number of dispersion grid points along the Y axis</p></li>
 <li><p><strong>nz</strong> (<em>int</em>) – the number of dispersion grid points along the Z axis</p></li>
@@ -799,7 +799,7 @@ See the manual for details.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
-<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>alpha</strong> (<em>float</em>) – the separation parameter</p></li>
 <li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
 <li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
 <li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
@@ -840,11 +840,11 @@ See the manual for details.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the offset to query, as returned by addParticleParameterOffset()</p></li>
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter</p></li>
 <li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
-<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+<li><p><strong>chargeScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
 </ul>
 </dd>
 </dl>
@@ -860,9 +860,9 @@ See the manual for details.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>charge</strong> (<em>float</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 </ul>
 </p>
 </dd>
@@ -944,7 +944,7 @@ The default value is <cite>True</cite>.</p>
 <dd><p>Set the cutoff distance (in nm) being used for nonbonded interactions. If the NonbondedMethod in use is NoCutoff, this value will have no effect.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>distance</strong> (<em>double</em>) – the cutoff distance, measured in nm</p>
+<dd class="field-odd"><p><strong>distance</strong> (<em>float</em>) – the cutoff distance, measured in nm</p>
 </dd>
 </dl>
 </dd></dl>
@@ -964,11 +964,11 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the offset to modify, as returned by addExceptionParameterOffset()</p></li>
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
 <li><p><strong>exceptionIndex</strong> (<em>int</em>) – the index of the exception whose parameters are affected</p></li>
-<li><p><strong>chargeProdScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
+<li><p><strong>chargeProdScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s charge product</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the exception’s epsilon</p></li>
 </ul>
 </dd>
 </dl>
@@ -985,9 +985,9 @@ The default value is <cite>True</cite>.</p>
 <li><p><strong>index</strong> (<em>int</em>) – the index of the interaction for which to get parameters</p></li>
 <li><p><strong>particle1</strong> (<em>int</em>) – the index of the first particle involved in the interaction</p></li>
 <li><p><strong>particle2</strong> (<em>int</em>) – the index of the second particle involved in the interaction</p></li>
-<li><p><strong>chargeProd</strong> (<em>double</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>chargeProd</strong> (<em>float</em>) – the scaled product of the atomic charges (i.e. the strength of the Coulomb interaction), measured in units of the proton charge squared</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 </ul>
 </dd>
 </dl>
@@ -1019,7 +1019,7 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to set the default value</p></li>
-<li><p><strong>defaultValue</strong> (<em>double</em>) – the default value of the parameter</p></li>
+<li><p><strong>defaultValue</strong> (<em>float</em>) – the default value of the parameter</p></li>
 </ul>
 </dd>
 </dl>
@@ -1033,7 +1033,7 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the parameter for which to set the name</p></li>
-<li><p><strong>name</strong> (<em>string</em>) – the name of the parameter</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – the name of the parameter</p></li>
 </ul>
 </dd>
 </dl>
@@ -1052,7 +1052,7 @@ The default value is <cite>True</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>alpha</strong> (<em>float</em>) – the separation parameter</p></li>
 <li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
 <li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
 <li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
@@ -1080,7 +1080,7 @@ The default value is <cite>True</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>alpha</strong> (<em>double</em>) – the separation parameter</p></li>
+<li><p><strong>alpha</strong> (<em>float</em>) – the separation parameter</p></li>
 <li><p><strong>nx</strong> (<em>int</em>) – the number of grid points along the X axis</p></li>
 <li><p><strong>ny</strong> (<em>int</em>) – the number of grid points along the Y axis</p></li>
 <li><p><strong>nz</strong> (<em>int</em>) – the number of grid points along the Z axis</p></li>
@@ -1097,11 +1097,11 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the offset to modify, as returned by addParticleParameterOffset()</p></li>
-<li><p><strong>parameter</strong> (<em>string</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
+<li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter. It must have already been added with addGlobalParameter(). Its value can be modified at any time by calling Context::setParameter().</p></li>
 <li><p><strong>particleIndex</strong> (<em>int</em>) – the index of the particle whose parameters are affected</p></li>
-<li><p><strong>chargeScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
-<li><p><strong>sigmaScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
-<li><p><strong>epsilonScale</strong> (<em>double</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
+<li><p><strong>chargeScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s charge</p></li>
+<li><p><strong>sigmaScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s sigma</p></li>
+<li><p><strong>epsilonScale</strong> (<em>float</em>) – this value multiplied by the parameter value is added to the particle’s epsilon</p></li>
 </ul>
 </dd>
 </dl>
@@ -1115,9 +1115,9 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the particle for which to set parameters</p></li>
-<li><p><strong>charge</strong> (<em>double</em>) – the charge of the particle, measured in units of the proton charge</p></li>
-<li><p><strong>sigma</strong> (<em>double</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
-<li><p><strong>epsilon</strong> (<em>double</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
+<li><p><strong>charge</strong> (<em>float</em>) – the charge of the particle, measured in units of the proton charge</p></li>
+<li><p><strong>sigma</strong> (<em>float</em>) – the sigma parameter of the Lennard-Jones potential (corresponding to the van der Waals radius of the particle), measured in nm</p></li>
+<li><p><strong>epsilon</strong> (<em>float</em>) – the epsilon parameter of the Lennard-Jones potential (corresponding to the well depth of the van der Waals interaction), measured in kJ/mol</p></li>
 </ul>
 </dd>
 </dl>
@@ -1300,7 +1300,7 @@ to add new particles or exceptions, only to change the parameters of existing on
       &#169;2022, Charlles Abreu. Project based on OpenMM.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |

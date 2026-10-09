@@ -12,11 +12,11 @@
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=d72ef124" />
     <script src="_static/documentation_options.js?v=5929fcd5"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=ccdb6887"></script>
-    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Python API" href="pythonapi/index.html" />
@@ -63,7 +63,7 @@ focuses on the reciprocal-space and background energy parts.</p>
 <h2>Sliced Background Energy<a class="headerlink" href="#sliced-background-energy" title="Link to this heading">¶</a></h2>
 <p>In the case of systems with non-zero net charge, it is necessary to add the energy of
 interaction with a neutralizing background charge. The background energy is given by
-<span id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">1</a>]</span></p>
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">1</a>]</span></p>
 <div class="math notranslate nohighlight">
 \[E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.\]</div>
 <p>where <span class="math notranslate nohighlight">\(Q = \sum_{i=1}^N q_i\)</span> is the total charge of the system.
@@ -139,7 +139,7 @@ S_I(\mathbf k) \cdot S_J(\mathbf k).\]</div>
 <section id="sliced-pme-implementation">
 <h2>Sliced PME Implementation<a class="headerlink" href="#sliced-pme-implementation" title="Link to this heading">¶</a></h2>
 <p>Each subset-specific structure factor <span class="math notranslate nohighlight">\(S(\mathbf k)\)</span> can be calculated using the smooth
-Particle Mesh Ewald method <span id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">2</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
+Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">2</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
 all slices. In the case of forces, <em>n</em> additional inverse FFT calculations are necessary.
 Therefore, in a single processor and for a fixed number of particles, the computational effort
 scales approximately linearly with the number of subsets (not the number of slices). In a GPU, as
@@ -209,7 +209,7 @@ package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFF
       &#169;2022, Charlles Abreu. Project based on OpenMM.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |
