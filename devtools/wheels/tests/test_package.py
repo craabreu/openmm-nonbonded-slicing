@@ -101,6 +101,20 @@ def test_inject_adds_staged_files(tmp_path):
     assert "OpenMM.libs/lib/libNonbondedSlicing.so,sha256=" in record
 
 
+def test_inject_skips_build_metadata(tmp_path):
+    # setuptools writes its egg-info into the staging tree, which is the base wheel's package dir
+    stage = tmp_path / "stage"
+    (stage / "pkg.egg-info").mkdir(parents=True)
+    (stage / "pkg.egg-info/PKG-INFO").write_text("")
+    (stage / "nonbondedslicing.py").write_text("")
+    wheel = tmp_path / "x-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("x-1.0.dist-info/RECORD", "x-1.0.dist-info/RECORD,,\n")
+    package.inject(wheel, stage)
+    with zipfile.ZipFile(wheel) as archive:
+        assert not [n for n in archive.namelist() if ".egg-info" in n]
+
+
 def test_arrange_orders_by_post_and_kind(tmp_path):
     source, destination = tmp_path / "in", tmp_path / "out"
     (source / "a").mkdir(parents=True)

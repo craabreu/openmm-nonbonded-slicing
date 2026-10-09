@@ -74,7 +74,12 @@ def inject(wheel, stage):
     from delocate.wheeltools import InWheel
 
     wheel = Path(wheel).resolve()
-    files = [p for p in sorted(Path(stage).rglob("*")) if p.is_file() and p.name != "nonbondedslicing.py"]
+    # The module is already in the wheel, and setuptools leaves its egg-info in the staging tree
+    files = [
+        p for p in sorted(Path(stage).rglob("*"))
+        if p.is_file() and p.name != "nonbondedslicing.py"
+        and not any(part.endswith(".egg-info") for part in p.relative_to(stage).parts)
+    ]
     with InWheel(str(wheel), str(wheel)) as unpacked:
         for path in files:
             target = Path(unpacked) / path.relative_to(stage)
