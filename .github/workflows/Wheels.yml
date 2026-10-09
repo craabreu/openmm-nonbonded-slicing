@@ -49,6 +49,18 @@ jobs:
             echo "ref=${{ github.sha }}" >> $GITHUB_OUTPUT
             echo "target=none" >> $GITHUB_OUTPUT
           fi
+      - name: "Require approval for PyPI uploads"
+        # GitHub creates a missing environment on first use, without protection rules
+        if: steps.target.outputs.target == 'pypi'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REVIEWERS=$(gh api repos/${{ github.repository }}/environments/pypi \
+            --jq '[.protection_rules[]? | select(.type == "required_reviewers")] | length' || echo 0)
+          if [ "$REVIEWERS" = "0" ]; then
+            echo "::error::Create the 'pypi' environment with a required reviewer before publishing to PyPI"
+            exit 1
+          fi
       - id: matrix
         name: "Build matrix"
         run: |
@@ -345,31 +357,32 @@ jobs:
           if [ "$N" -gt 4 ]; then echo "Add publish slots for post numbers >= 4"; exit 1; fi
           python3 devtools/wheels/package.py arrange downloaded out --expected $(python3 devtools/wheels/versions.py count)
           ls -R out
-      # Releases in increasing post order; within each, the CUDA add-ons before the base wheels
+      # Releases in increasing post order; within each, the CUDA add-ons before the base wheels.
+      # skip-existing lets a failed publish be re-run: PyPI never accepts a file name twice.
       - if: hashFiles('out/0-cuda/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/0-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/0-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/0-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/0-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/0-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/1-cuda/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/1-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/1-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/1-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/1-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/1-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/2-cuda/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/2-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/2-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/2-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/2-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/2-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/3-cuda/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/3-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/3-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/3-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/3-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+        with: {packages-dir: out/3-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
 
   resolution:
     needs: [setup, publish]
@@ -399,3 +412,11 @@ jobs:
             echo "$PIN -> $GOT (expected $EXPECTED)"
             test "$GOT" = "$EXPECTED"
           done
+          # Without an OpenMM constraint, pip takes the newest post-release (and upgrades OpenMM)
+          LATEST=$(python tools/devtools/wheels/versions.py pins src | tail -1 | cut -d' ' -f2)
+          python -m venv /tmp/env-latest
+          /tmp/env-latest/bin/pip install -q --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ "openmm-nonbonded-slicing==${LATEST%%.post*}.*"
+          GOT=$(/tmp/env-latest/bin/python -c "from importlib.metadata import version; print(version('openmm-nonbonded-slicing'))")
+          echo "unconstrained -> $GOT (expected $LATEST)"
+          test "$GOT" = "$LATEST"

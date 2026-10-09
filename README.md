@@ -46,8 +46,9 @@ pip install openmm-nonbonded-slicing[cuda12]    # plus the CUDA platform (Linux,
 pip install openmm-nonbonded-slicing[cuda13]    # plus the CUDA platform (Linux, CUDA 13)
 ```
 
-Each PyPI release is published once per supported OpenMM version, and pip picks the one that
-matches the installed OpenMM:
+Each PyPI release is published once per supported OpenMM version. pip installs the newest one,
+upgrading OpenMM if needed; to keep an older OpenMM, pin it in the same command, for example
+`pip install "openmm==8.5.*" openmm-nonbonded-slicing`:
 
 | PyPI release  | OpenMM |
 |---------------|--------|
