@@ -91,6 +91,8 @@ jobs:
             "swig==$($PY $TOOLS/versions.py field ${{ matrix.openmm }} swig)" \
             cmake setuptools wheel delocate auditwheel patchelf pytest
           dnf -y install ocl-icd
+          # The OpenCL tests link with -lOpenCL, which needs the development symlink
+          ln -sf libOpenCL.so.1 /usr/lib64/libOpenCL.so
         env:
           MATRIX_PYTHON: ${{ matrix.python }}
       - name: "OpenCL headers"
