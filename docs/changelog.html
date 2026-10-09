@@ -5,13 +5,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Changelog &#8212; Nonbonded Slicing 0.2.2 documentation</title>
+    <title>Changelog &#8212; Nonbonded Slicing 0.3.0 documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=d72ef124" />
-    <script src="_static/documentation_options.js?v=000c92bf"></script>
+    <script src="_static/documentation_options.js?v=e259d695"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -39,6 +39,49 @@
             
   <section id="changelog">
 <h1>Changelog<a class="headerlink" href="#changelog" title="Link to this heading">¶</a></h1>
+<section id="id1">
+<h2>0.3.0<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<p>Requires OpenMM 8.4 or later. The Python wrapper must be built with the same SWIG version as OpenMM.</p>
+<p><strong>Breaking changes</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">addScalingParameterDerivative</span></code>, <code class="docutils literal notranslate"><span class="pre">getNumScalingParameterDerivatives</span></code> and
+<code class="docutils literal notranslate"><span class="pre">getScalingParameterDerivativeName</span></code> were renamed to <code class="docutils literal notranslate"><span class="pre">addEnergyParameterDerivative</span></code>,
+<code class="docutils literal notranslate"><span class="pre">getNumEnergyParameterDerivatives</span></code> and <code class="docutils literal notranslate"><span class="pre">getEnergyParameterDerivativeName</span></code>, as in OpenMM.
+<code class="docutils literal notranslate"><span class="pre">setScalingParameterDerivative</span></code> was removed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce.h</span></code> no longer brings the <code class="docutils literal notranslate"><span class="pre">std</span></code> and <code class="docutils literal notranslate"><span class="pre">OpenMM</span></code> namespaces into code
+that includes it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nonbondedslicing.unit</span></code>, an unused re-export of <code class="docutils literal notranslate"><span class="pre">openmm.unit</span></code>, was removed.</p></li>
+</ul>
+<p><strong>New features</strong></p>
+<ul class="simple">
+<li><p>CUDA and OpenCL platforms rebuilt on OpenMM’s common compute architecture.</p></li>
+<li><p>The CUDA platform can use either cuFFT or VkFFT (<code class="docutils literal notranslate"><span class="pre">setUseCuFFT</span></code>).</p></li>
+<li><p>Background (neutralizing plasma) energy of Ewald and PME, sliced among subsets.</p></li>
+</ul>
+<p><strong>Bug fixes</strong></p>
+<ul class="simple">
+<li><p>Wrong energies and derivatives for systems with particle or exception parameter offsets.</p></li>
+<li><p>GPU platforms: ported OpenMM 8.4’s fixes to the plasma correction with parameter offsets.</p></li>
+<li><p>GPU platforms: with parameter offsets and Ewald, PME or LJPME, derivatives of diagonal slices
+included the self energy when the direct-space force group was evaluated alone.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">setScalingParameter</span></code> did not detect some clashes with other scaling parameters.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">useCuFFT</span></code> was not serialized.</p></li>
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">getScalingParameter</span></code> could not be called, and <code class="docutils literal notranslate"><span class="pre">copy</span></code>, <code class="docutils literal notranslate"><span class="pre">deepcopy</span></code> and <code class="docutils literal notranslate"><span class="pre">pickle</span></code>
+returned unusable objects.</p></li>
+</ul>
+<p><strong>Build and packaging</strong></p>
+<ul class="simple">
+<li><p>CMake honors <code class="docutils literal notranslate"><span class="pre">OPENMM_DIR</span></code>, <code class="docutils literal notranslate"><span class="pre">OPENMM_VERSION</span></code> and <code class="docutils literal notranslate"><span class="pre">VKFFT_INCLUDE_DIR</span></code>, and finds CUDA
+with <code class="docutils literal notranslate"><span class="pre">FindCUDAToolkit</span></code>.</p></li>
+<li><p>The Python extension is built with setuptools.</p></li>
+</ul>
+<p><strong>Tests</strong></p>
+<ul class="simple">
+<li><p>Every slice energy and derivative is checked against <code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code> on all platforms.</p></li>
+<li><p>Tests for 3 subsets, parameter offsets, net charge, API errors, serialization and the Python
+wrapper; platform-specific CUDA and OpenCL tests run again.</p></li>
+</ul>
+</section>
 </section>
 
 
@@ -74,7 +117,10 @@
 <li class="toctree-l1"><a class="reference internal" href="pythonapi/index.html">Python API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Changelog</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Changelog</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id1">0.3.0</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
