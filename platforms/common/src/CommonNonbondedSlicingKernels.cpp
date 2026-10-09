@@ -393,6 +393,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     paramsDefines["ONE_4PI_EPS0"] = cc.doubleToString(ONE_4PI_EPS0);
     paramsDefines["EPSILON0"] = cc.doubleToString(EPSILON0);
     paramsDefines["WORK_GROUP_SIZE"] = cc.intToString(cc.ThreadBlockSize);
+    paramsDefines["CHARGE_BUFFER_SIZE"] = cc.intToString(cc.getNumThreadBlocks());
     hasOffsets = (force.getNumParticleParameterOffsets() > 0 || force.getNumExceptionParameterOffsets() > 0);
     if (hasOffsets)
         paramsDefines["HAS_OFFSETS"] = "1";
@@ -1181,7 +1182,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
             // The Ewald self energy was computed in the kernel.
 
             energy = 0.0;
-            if (pmeGrid1.isInitialized() || cosSinSums.isInitialized()) {
+            if ((pmeGrid1.isInitialized() || cosSinSums.isInitialized()) && includeReciprocal) {
                 // Invoke a kernel to compute the correction for the neutralizing plasma.
 
                 Vec3 a, b, c;

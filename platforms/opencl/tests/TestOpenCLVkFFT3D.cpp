@@ -38,7 +38,7 @@ void testTransform(bool realToComplex, int xsize, int ysize, int zsize, int numB
     System system;
     system.addParticle(0.0);
 
-    OpenCLPlatform::PlatformData platformData(system, "", "", platform.getPropertyDefaultValue("OpenCLPrecision"), "false", "false", 1, NULL);
+    OpenCLPlatform::PlatformData platformData(system, NULL, "", "", platform.getPropertyDefaultValue("OpenCLPrecision"), "false", "false", 1, NULL);
     OpenCLContext& context = *platformData.contexts[0];
     context.initialize();
     context.setAsCurrent();

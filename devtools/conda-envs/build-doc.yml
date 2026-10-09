@@ -3,14 +3,15 @@ channels:
   - conda-forge
 dependencies:
   - cmake
-  - gxx_linux-64 @COMPILER_VERSION@
+  - gxx_linux-64 =@COMPILER_VERSION@
   - make
-  - openmm @OPENMM_VERSION@
+  - openmm =@OPENMM_VERSION@
   - pip >=22.2
   - pytest
   - python
   - doxygen
-  - swig =4.0
+  - setuptools
+  - swig =@SWIG_VERSION@
   - numpy
 
   # Docs depends

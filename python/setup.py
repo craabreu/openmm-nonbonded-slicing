@@ -1,20 +1,18 @@
-from distutils.core import setup
-from distutils.extension import Extension
 import os
-import sys
 import platform
+
+from setuptools import Extension, setup
 
 openmm_dir = '@OPENMM_DIR@'
 nonbondedslicing_header_dir = '@PLUGIN_HEADER_DIR@'
 nonbondedslicing_library_dir = '@PLUGIN_LIBRARY_DIR@'
 
-# setup extra compile and link arguments on Mac
 extra_compile_args = ['-std=c++11']
 extra_link_args = []
 
 if platform.system() == 'Darwin':
-    extra_compile_args += ['-stdlib=libc++', '-mmacosx-version-min=10.7']
-    extra_link_args += ['-stdlib=libc++', '-mmacosx-version-min=10.7', '-Wl', '-rpath', openmm_dir+'/lib']
+    extra_compile_args += ['-stdlib=libc++']
+    extra_link_args += ['-stdlib=libc++', '-Wl,-rpath,' + os.path.join(openmm_dir, 'lib')]
 
 os.environ['CC'] = '@CMAKE_C_COMPILER@'
 os.environ['CXX'] = '@CMAKE_CXX_COMPILER@'

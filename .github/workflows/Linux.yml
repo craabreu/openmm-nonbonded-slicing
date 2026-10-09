@@ -13,25 +13,22 @@ on:
 
 jobs:
   unix:
-    runs-on: ubuntu-22.04
-    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, GCC ${{ matrix.compiler-version }}, CUDA ${{ matrix.cuda-version }})
+    runs-on: ubuntu-24.04
+    name: Linux (Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm-version }}, SWIG ${{ matrix.swig-version }}, GCC ${{ matrix.compiler-version }}, CUDA ${{ matrix.cuda-version }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - python-version: "3.12"
-            openmm-version: "8.3"
+          - python-version: "3.13"
+            openmm-version: "8.6"
+            swig-version: "4.5"
             cuda-version: "12.9"
-            compiler-version: "14.3"
-          # Temporarily disabled OpenMM 8.2 and 8.1 workflows
-          # - python-version: "3.12"
-          #   openmm-version: "8.2"
-          #   cuda-version: "12.4"
-          #   compiler-version: "12.2"
-          # - python-version: "3.11"
-          #   openmm-version: "8.1"
-          #   cuda-version: "12.9"
-          #   compiler-version: "13.3"
+            compiler-version: "14"
+          - python-version: "3.12"
+            openmm-version: "8.4"
+            swig-version: "4.4"
+            cuda-version: "12.9"
+            compiler-version: "13"
 
     steps:
       - name: "Check out"
@@ -45,17 +42,18 @@ jobs:
         with:
           tokenPrefix: '@'
           tokenSuffix: '@'
-          files: devtools/conda-envs/build-ubuntu-22.04.yml
+          files: devtools/conda-envs/build-ubuntu-24.04.yml
         env:
           CUDA_VERSION: ${{ matrix.cuda-version }}
           COMPILER_VERSION: ${{ matrix.compiler-version }}
           OPENMM_VERSION: ${{ matrix.openmm-version }}
+          SWIG_VERSION: ${{ matrix.swig-version }}
 
       - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"
         with:
           activate-environment: build
-          environment-file: devtools/conda-envs/build-ubuntu-22.04.yml
+          environment-file: devtools/conda-envs/build-ubuntu-24.04.yml
           python-version: ${{ matrix.python-version }}
 
       - name: "List conda packages"

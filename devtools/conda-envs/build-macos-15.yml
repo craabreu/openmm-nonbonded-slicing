@@ -1,0 +1,21 @@
+name: build
+channels:
+  - conda-forge
+dependencies:
+  - cmake
+  - clang =@COMPILER_VERSION@
+  - clang-tools =@COMPILER_VERSION@
+  - compiler-rt =@COMPILER_VERSION@
+  - llvm-openmp =@COMPILER_VERSION@
+  - khronos-opencl-icd-loader
+  - opencl-headers
+  - make
+  - openmm =@OPENMM_VERSION@
+  - pip >=22.2
+  - pocl
+  - pytest
+  - python
+  - doxygen
+  - setuptools
+  - swig =@SWIG_VERSION@
+  - numpy

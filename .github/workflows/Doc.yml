@@ -10,7 +10,7 @@ on:
 
 jobs:
   unix:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     name: Doc
 
     steps:
@@ -26,7 +26,8 @@ jobs:
         env:
           PYTHON_VERSION: "3.12"
           COMPILER_VERSION: "14.3"
-          OPENMM_VERSION: "8.3"
+          OPENMM_VERSION: "8.6"
+          SWIG_VERSION: "4.5"
 
       - uses: conda-incubator/setup-miniconda@v3
         name: "Install dependencies with conda"

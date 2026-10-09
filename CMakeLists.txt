@@ -10,32 +10,31 @@ PROJECT(OpenMMNonbondedSlicing VERSION 0.2.2)
 CMAKE_POLICY(SET CMP0146 NEW)  # Modern CUDA handling
 CMAKE_POLICY(SET CMP0175 NEW)  # Enforce valid add_custom_command() arguments
 
-IF(DEFINED ENV{CONDA_PREFIX})
-    SET(OPENMM_DIR $ENV{CONDA_PREFIX} CACHE PATH "Where OpenMM is installed")
-    EXECUTE_PROCESS(
-        COMMAND conda list ^openmm\\b
-        OUTPUT_VARIABLE CONDA_OPENMM_VERSION
-    )
-    IF (NOT CONDA_OPENMM_VERSION)
-        MESSAGE(FATAL_ERROR "OpenMM conda package not found. Please install OpenMM with conda.")
-    ENDIF(NOT CONDA_OPENMM_VERSION)
-    STRING(REGEX REPLACE "[^\\.]+([0-9]+\\.[0-9]+).*" "\\1" CONDA_OPENMM_VERSION "${CONDA_OPENMM_VERSION}")
-    SET(OPENMM_VERSION ${CONDA_OPENMM_VERSION} CACHE STRING "OpenMM version")
-ELSE(DEFINED ENV{CONDA_PREFIX})
-    MESSAGE(FATAL_ERROR "CONDA_PREFIX is not set. Please set it to the conda environment where OpenMM is installed.")
-ENDIF(DEFINED ENV{CONDA_PREFIX})
-
-MESSAGE(STATUS "OpenMM version: ${OPENMM_VERSION}")
-STRING(REGEX REPLACE "^([0-9]+)\\.[0-9]+.*" "\\1" OPENMM_VERSION_MAJOR "${OPENMM_VERSION}")
-STRING(REGEX REPLACE "^[0-9]+\\.([0-9]+).*" "\\1" OPENMM_VERSION_MINOR "${OPENMM_VERSION}")
-MESSAGE(STATUS "OpenMM major version: ${OPENMM_VERSION_MAJOR}")
-MESSAGE(STATUS "OpenMM minor version: ${OPENMM_VERSION_MINOR}")
-IF(OPENMM_VERSION_MAJOR LESS 8)
-    MESSAGE(FATAL_ERROR "OpenMM version must be at least 8.0")
+IF(NOT DEFINED OPENMM_DIR)
+    IF(DEFINED ENV{CONDA_PREFIX})
+        SET(OPENMM_DIR $ENV{CONDA_PREFIX} CACHE PATH "Where OpenMM is installed")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Set OPENMM_DIR to the directory where OpenMM is installed.")
+    ENDIF()
 ENDIF()
 
-ADD_COMPILE_DEFINITIONS(OPENMM_VERSION_MAJOR=${OPENMM_VERSION_MAJOR})
-ADD_COMPILE_DEFINITIONS(OPENMM_VERSION_MINOR=${OPENMM_VERSION_MINOR})
+FIND_PROGRAM(PYTHON_EXECUTABLE python REQUIRED)
+IF(NOT DEFINED OPENMM_VERSION)
+    EXECUTE_PROCESS(
+        COMMAND ${PYTHON_EXECUTABLE} -c "import openmm; print(openmm.__version__)"
+        OUTPUT_VARIABLE DETECTED_OPENMM_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE OPENMM_IMPORT_RESULT
+    )
+    IF(NOT OPENMM_IMPORT_RESULT EQUAL 0)
+        MESSAGE(FATAL_ERROR "Could not import openmm with ${PYTHON_EXECUTABLE}. Set OPENMM_VERSION explicitly.")
+    ENDIF()
+    SET(OPENMM_VERSION ${DETECTED_OPENMM_VERSION} CACHE STRING "OpenMM version")
+ENDIF()
+MESSAGE(STATUS "OpenMM version: ${OPENMM_VERSION}")
+IF(OPENMM_VERSION VERSION_LESS 8.4)
+    MESSAGE(FATAL_ERROR "OpenMM version must be at least 8.4")
+ENDIF()
 
 INCLUDE_DIRECTORIES("${OPENMM_DIR}/include")
 LINK_DIRECTORIES("${OPENMM_DIR}/lib" "${OPENMM_DIR}/lib/plugins")
@@ -46,13 +45,7 @@ SET (CMAKE_CXX_STANDARD 11)
 # Set flags for linking on mac
 IF(APPLE)
     SET(CMAKE_INSTALL_NAME_DIR "@rpath")
-    # Check if we're on Apple Silicon (ARM64) or Intel
-    EXECUTE_PROCESS(COMMAND uname -m OUTPUT_VARIABLE ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
-    IF(ARCH STREQUAL "arm64")
-        SET(EXTRA_COMPILE_FLAGS "-stdlib=libc++")
-    ELSE()
-        SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
-    ENDIF()
+    SET(EXTRA_COMPILE_FLAGS "-stdlib=libc++")
 ENDIF(APPLE)
 
 # Select where to install
@@ -60,7 +53,7 @@ IF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
     IF(WIN32)
         SET(CMAKE_INSTALL_PREFIX "$ENV{ProgramFiles}/OpenMM" CACHE PATH "Where to install the plugin" FORCE)
     ELSE(WIN32)
-        SET(CMAKE_INSTALL_PREFIX $ENV{CONDA_PREFIX} CACHE PATH "Where to install the plugin" FORCE)
+        SET(CMAKE_INSTALL_PREFIX ${OPENMM_DIR} CACHE PATH "Where to install the plugin" FORCE)
     ENDIF(WIN32)
 ENDIF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
 
@@ -132,90 +125,24 @@ ELSE()
     SET(PLUGIN_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
 ENDIF()
 
-# Set CUDA architectures early to avoid CMake test failures
-IF(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    # Default to conservative architectures that work with most CUDA versions
-    SET(CMAKE_CUDA_ARCHITECTURES "50;52;60;61;70;75;80;86" CACHE STRING "CUDA architectures to compile for" FORCE)
-ENDIF()
-
-# Help CMake find CUDA compiler automatically in conda environment
-IF(DEFINED ENV{CONDA_PREFIX})
-    SET(CMAKE_CUDA_COMPILER_HINTS
-        $ENV{CONDA_PREFIX}/bin
-        $ENV{CONDA_PREFIX}/bin/nvcc
-    )
-    # Set CUDA compiler search hints
-    SET(CMAKE_CUDA_COMPILER_LAUNCHER $ENV{CONDA_PREFIX}/bin/nvcc)
-ENDIF()
-
-# Try to find CUDA compiler automatically
-IF(DEFINED ENV{CONDA_PREFIX})
-    FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc
-        PATHS $ENV{CONDA_PREFIX}/bin
-        NO_DEFAULT_PATH
-        DOC "CUDA compiler"
-    )
-    IF(NOT CMAKE_CUDA_COMPILER)
-        # Fallback to system search
-        FIND_PROGRAM(CMAKE_CUDA_COMPILER nvcc)
-    ENDIF()
-ENDIF()
-
-INCLUDE(CheckLanguage)
-CHECK_LANGUAGE(CUDA)
-
-IF(CMAKE_CUDA_COMPILER)
-    ENABLE_LANGUAGE(CUDA)
-    MESSAGE("Found CUDA: TRUE")
+FIND_PACKAGE(CUDAToolkit QUIET)
+IF(CUDAToolkit_FOUND)
+    MESSAGE("Found CUDA: TRUE (${CUDAToolkit_VERSION})")
     SET(PLUGIN_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
-    
-    # Find CUDA toolkit directory from compiler path
-    GET_FILENAME_COMPONENT(CUDA_COMPILER_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
-    GET_FILENAME_COMPONENT(CUDA_TOOLKIT_ROOT "${CUDA_COMPILER_DIR}/.." ABSOLUTE)
-    
-    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib64")
-        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib64")
-    ELSEIF(EXISTS "${CUDA_TOOLKIT_ROOT}/lib")
-        SET(CUDA_LIB_DIR "${CUDA_TOOLKIT_ROOT}/lib")
-    ELSE()
-        MESSAGE(FATAL_ERROR "Could not find CUDA library directory")
-    ENDIF()
-    
-    IF(EXISTS "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
-        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/targets/x86_64-linux/include")
-    ELSE()
-        SET(CUDA_TOOLKIT_INCLUDE "${CUDA_TOOLKIT_ROOT}/include")
-    ENDIF()
-    MESSAGE(STATUS "CUDA_TOOLKIT_INCLUDE: ${CUDA_TOOLKIT_INCLUDE}")
-
-    MESSAGE(STATUS "CUDA_LIB_DIR: ${CUDA_LIB_DIR}")
-    SET(CUDA_nvrtc_LIBRARY "${CUDA_LIB_DIR}/libnvrtc.so")
-    
-    # Set CUDA runtime libraries
-    SET(CUDA_LIBRARIES "${CUDA_LIB_DIR}/libcudart.so")
-    
-     # Log CUDA configuration
-     MESSAGE(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-    
-ELSE(CMAKE_CUDA_COMPILER)
+ELSE()
     MESSAGE("Found CUDA: FALSE")
     SET(PLUGIN_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
-ENDIF(CMAKE_CUDA_COMPILER)
+ENDIF()
 
 # Download and configure VkFFT first
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
 
-IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
-    include(ExternalProject)
+IF(PLUGIN_BUILD_OPENCL_LIB OR PLUGIN_BUILD_CUDA_LIB)
     SET(VKFFT_VERSION "v1.3.4")
-    SET(VKFFT_SOURCE_DIR "${CMAKE_BINARY_DIR}/vkfft-src")
-    SET(VKFFT_INCLUDE_DIR "${VKFFT_SOURCE_DIR}/vkFFT")
-    MESSAGE(STATUS "VKFFT_SOURCE_DIR: ${VKFFT_SOURCE_DIR}")
-    MESSAGE(STATUS "VKFFT_INCLUDE_DIR: ${VKFFT_INCLUDE_DIR}")
-
-    # Download VkFFT
-    IF(NOT EXISTS "${VKFFT_SOURCE_DIR}")
+    SET(VKFFT_INCLUDE_DIR "${CMAKE_BINARY_DIR}/vkfft-src/vkFFT" CACHE PATH "Directory containing vkFFT.h")
+    IF(NOT EXISTS "${VKFFT_INCLUDE_DIR}/vkFFT.h")
         MESSAGE(STATUS "Downloading VkFFT ${VKFFT_VERSION}")
+        GET_FILENAME_COMPONENT(VKFFT_SOURCE_DIR "${VKFFT_INCLUDE_DIR}" DIRECTORY)
         EXECUTE_PROCESS(
             COMMAND git -c advice.detachedHead=false clone --branch ${VKFFT_VERSION} --depth 1 https://github.com/DTolm/VkFFT.git ${VKFFT_SOURCE_DIR}
             RESULT_VARIABLE GIT_RESULT
@@ -224,10 +151,9 @@ IF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
             MESSAGE(FATAL_ERROR "Failed to clone VkFFT repository")
         ENDIF()
     ENDIF()
-
-    # Add VkFFT include directory globally
+    MESSAGE(STATUS "VKFFT_INCLUDE_DIR: ${VKFFT_INCLUDE_DIR}")
     INCLUDE_DIRECTORIES(${VKFFT_INCLUDE_DIR})
-ENDIF(OPENCL_FOUND OR CMAKE_CUDA_COMPILER)
+ENDIF()
 
 # Build the implementations for different platforms
 ADD_SUBDIRECTORY(platforms/reference)
@@ -242,7 +168,6 @@ ENDIF(PLUGIN_BUILD_CUDA_LIB)
 # Build the Python API
 
 FIND_PROGRAM(DOXYGEN_EXECUTABLE doxygen)
-FIND_PROGRAM(PYTHON_EXECUTABLE python REQUIRED)
 FIND_PROGRAM(SWIG_EXECUTABLE swig REQUIRED)
 SET(PLUGIN_BUILD_PYTHON_WRAPPERS ON CACHE BOOL "Build wrappers for Python")
 IF(PLUGIN_BUILD_PYTHON_WRAPPERS)
