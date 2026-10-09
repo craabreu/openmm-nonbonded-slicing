@@ -293,8 +293,11 @@ def testCastAndIsinstance():
 
 
 def testVersion():
-    from importlib.metadata import version
-    assert plugin.__version__ == version("nonbondedslicing")
+    from importlib.metadata import packages_distributions, version
+    # conda installs the distribution "nonbondedslicing"; PyPI installs "openmm-nonbonded-slicing",
+    # whose versions may carry a ".postN" suffix that selects the OpenMM version
+    distribution = packages_distributions()["nonbondedslicing"][0]
+    assert version(distribution).split(".post")[0] == plugin.__version__
 
 
 SLICE_SUBSETS = 3
