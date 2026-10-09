@@ -178,3 +178,14 @@ def testLargeSystem(platformName, precision):
         ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
         ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
     ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
+
+
+def testScalingParameterAccessors():
+    force = plugin.SlicedNonbondedForce(3)
+    force.addGlobalParameter("a", 1.0)
+    force.addGlobalParameter("b", 1.0)
+    index = force.addScalingParameter("a", 2, 1, True, False)
+    assert force.getNumScalingParameters() == 1
+    assert list(force.getScalingParameter(index)) == ["a", 2, 1, True, False]
+    force.setScalingParameter(index, "b", 0, 2, False, True)
+    assert list(force.getScalingParameter(index)) == ["b", 0, 2, False, True]

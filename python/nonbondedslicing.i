@@ -55,10 +55,6 @@ namespace NonbondedSlicing {
 %apply int& OUTPUT {int& ny};
 %apply int& OUTPUT {int& nz};
 %apply const std::string& OUTPUT {const std::string& parameter};
-%apply int& OUTPUT {int& subset1};
-%apply int& OUTPUT {int& subset2};
-%apply bool& OUTPUT {bool& includeLJ};
-%apply bool& OUTPUT {bool& includeCoulomb};
 
 /**
  * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
@@ -301,28 +297,37 @@ public:
      * Get the number of scaling parameters.
      */
     int getNumScalingParameters() const;
-    /**
-     * Get the scaling parameter applied to a particular nonbonded slice.
-     *
-     * Parameters
-     * ----------
-     *     index : int
-     *         the index of the scaling parameter to query, as returned by :func:`addScalingParameter`
-     *
-     * Returns
-     * -------
-     *     parameter : str
-     *         the name of the global parameter
-     *     subset1 : int
-     *         the index of the first particle subset
-     *     subset2 : int
-     *         the index of the second particle subset
-     *     includeCoulomb : bool
-     *         whether this scaling parameter applies to Coulomb interactions
-     *     includeLJ : bool
-     *         whether this scaling parameter applies to Lennard-Jones interactions
-     */
-    void getScalingParameter(int index, std::string& parameter, int& subset1, int& , bool& includeCoulomb, bool& includeLJ) const;
+    %extend {
+        /**
+         * Get the scaling parameter applied to a particular nonbonded slice.
+         *
+         * Parameters
+         * ----------
+         *     index : int
+         *         the index of the scaling parameter to query, as returned by :func:`addScalingParameter`
+         *
+         * Returns
+         * -------
+         *     parameter : str
+         *         the name of the global parameter
+         *     subset1 : int
+         *         the index of the first particle subset
+         *     subset2 : int
+         *         the index of the second particle subset
+         *     includeCoulomb : bool
+         *         whether this scaling parameter applies to Coulomb interactions
+         *     includeLJ : bool
+         *         whether this scaling parameter applies to Lennard-Jones interactions
+         */
+        PyObject* getScalingParameter(int index) const {
+            std::string parameter;
+            int subset1, subset2;
+            bool includeCoulomb, includeLJ;
+            self->getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
+            return Py_BuildValue("[siiOO]", parameter.c_str(), subset1, subset2,
+                                 includeCoulomb ? Py_True : Py_False, includeLJ ? Py_True : Py_False);
+        }
+    }
     /**
      * Modify an added scaling parameter.
      *
@@ -417,9 +422,5 @@ public:
 %clear int& ny;
 %clear int& nz;
 %clear std::string& parameter;
-%clear int& subset1;
-%clear int& subset2;
-%clear bool& includeLJ;
-%clear bool& includeCoulomb;
 
 }
