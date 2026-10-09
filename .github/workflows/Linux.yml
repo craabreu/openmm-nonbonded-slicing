@@ -32,6 +32,9 @@ jobs:
       - name: "Check out"
         uses: actions/checkout@v5
 
+      - name: "Install AMD OpenCL on Linux"
+        run: source devtools/scripts/install_amd_opencl.sh
+
       - name: "Update the conda enviroment file"
         uses: cschleiden/replace-tokens@v1
         with:
