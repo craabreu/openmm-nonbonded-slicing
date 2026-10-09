@@ -20,6 +20,8 @@ CUDA_LIBRARY_DIRS = {
     13: ["cu13/lib"],
 }
 ORIGIN = {"Linux": "$ORIGIN", "Darwin": "@loader_path"}
+# Dependencies a macOS binary may have: rpath-relative (OpenMM, our libraries) or system ones
+ALLOWED_MACOS_PREFIXES = ("@rpath/", "@loader_path/", "/usr/lib/", "/System/")
 WHEEL_NAME = re.compile(r"^(?P<dist>openmm_nonbonded_slicing(?:_cuda_\d+)?)-(?P<version>[^-]+)-")
 
 
@@ -87,10 +89,29 @@ def inject(wheel, stage):
             shutil.copy2(path, target)
 
 
+def foreign_dependencies(otool_output):
+    lines = otool_output.splitlines()[1:]  # the first line names the binary
+    dependencies = [line.split(" (")[0].strip() for line in lines if line.strip()]
+    return [d for d in dependencies if not d.startswith(ALLOWED_MACOS_PREFIXES)]
+
+
+def _macos_problems(wheel):
+    import tempfile
+
+    problems = []
+    with tempfile.TemporaryDirectory() as unpacked:
+        zipfile.ZipFile(wheel).extractall(unpacked)
+        for binary in _binaries(Path(unpacked)):
+            output = subprocess.run(["otool", "-L", str(binary)], check=True, capture_output=True, text=True).stdout
+            problems += [f"absolute dependency in {binary.relative_to(unpacked)}: {d}"
+                         for d in foreign_dependencies(output)]
+    return problems
+
+
 def check_wheel(wheel, required):
     with zipfile.ZipFile(wheel) as archive:
         names = [n for n in archive.namelist() if not n.endswith("/")]
-    problems = []
+    problems = _macos_problems(wheel) if platform.system() == "Darwin" else []
     for name in names:
         top = name.split("/")[0]
         if top.endswith(".dylibs") or (top.endswith(".libs") and top != "OpenMM.libs"):

@@ -136,3 +136,21 @@ def test_arrange_checks_count(tmp_path):
     (tmp_path / "in" / "openmm_nonbonded_slicing-0.3.0-cp312-cp312-manylinux_2_34_x86_64.whl").write_bytes(b"")
     with pytest.raises(SystemExit, match="expected 2"):
         package.arrange(tmp_path / "in", tmp_path / "out", expected=2)
+
+
+OTOOL = """/tmp/x/OpenMM.libs/lib/plugins/libNonbondedSlicingOpenCL.dylib:
+\t@rpath/libNonbondedSlicingOpenCL.dylib (compatibility version 0.0.0, current version 0.0.0)
+\t@rpath/libOpenMM.dylib (compatibility version 0.0.0, current version 0.0.0)
+\t/System/Library/Frameworks/OpenCL.framework/Versions/A/OpenCL (compatibility version 1.0.0)
+\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1800.101.0)
+\t/Users/runner/work/_temp/build-env/lib/python3.12/site-packages/OpenMM.libs/lib/libOpenMMOpenCL.dylib (x)
+\t/opt/homebrew/lib/libfoo.dylib (compatibility version 1.0.0)
+"""
+
+
+def test_foreign_macos_dependencies():
+    # Anything not resolved through rpaths or the system would break on users' machines
+    assert package.foreign_dependencies(OTOOL) == [
+        "/Users/runner/work/_temp/build-env/lib/python3.12/site-packages/OpenMM.libs/lib/libOpenMMOpenCL.dylib",
+        "/opt/homebrew/lib/libfoo.dylib",
+    ]
