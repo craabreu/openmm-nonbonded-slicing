@@ -5,13 +5,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>SlicedNonbondedForce &#8212; Nonbonded Slicing  documentation</title>
+    <title>SlicedNonbondedForce &#8212; Nonbonded Slicing 0.2.2 documentation</title>
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
-    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/documentation_options.js?v=000c92bf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -59,7 +59,7 @@ a SlicedNonbondedForce.  Derivatives with respect to scaling parameters can also
 Then, call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addParticle" title="nonbondedslicing.SlicedNonbondedForce.addParticle"><code class="xref py py-func docutils literal notranslate"><span class="pre">addParticle()</span></code></a> once for every single particle in the System to define its force field
 parameters.  Alternatively, you can pass an existing <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> object when creating a
 SlicedNonbondedForce object, so that the latter inherits all properties of the former.  After a particle has
-been added, you can modify its subset index from 0, the default value, to any positive integer lower than
+been added, you can modify its subset index from 0, the default value, to any integer lower than
 <span class="math notranslate nohighlight">\(n\)</span> by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.setParticleSubset"><code class="xref py py-func docutils literal notranslate"><span class="pre">setParticleSubset()</span></code></a>.  You can also modify the force field parameters of an added
 particle by calling <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.setParticleParameters"><code class="xref py py-func docutils literal notranslate"><span class="pre">setParticleParameters()</span></code></a>.  These two methods will have no effect on Contexts that
 already exist unless you call <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.updateParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.updateParametersInContext"><code class="xref py py-func docutils literal notranslate"><span class="pre">updateParametersInContext()</span></code></a>.</p>
@@ -168,7 +168,7 @@ parameter cannot be used simultaneously to apply offsets and scale energy terms.
 <td><p>Add particle using elemetrary charge.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addScalingParameter</span></code></a>(parameter, subset1, ...)</p></td>
-<td><p>Add a scaling parameter to multiply a particular Coulomb slice.</p></td>
+<td><p>Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a particular slice.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds" title="nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createExceptionsFromBonds</span></code></a>(self, bonds, ...)</p></td>
 <td><p>Identify exceptions based on the molecular topology.</p></td>
@@ -342,7 +342,7 @@ parameter cannot be used simultaneously to apply offsets and scale energy terms.
 <td><p>Set the distance at which the switching function begins to reduce the Lennard-Jones interaction.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseCuFFT" title="nonbondedslicing.SlicedNonbondedForce.setUseCuFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setUseCuFFT</span></code></a>(use)</p></td>
-<td><p>Set whether whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
+<td><p>Set whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.setUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setUseDispersionCorrection</span></code></a>(self, useCorrection)</p></td>
 <td><p>Set whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance.</p></td>
@@ -525,9 +525,9 @@ rVDW = 2^1/6 * sigma/2</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.addScalingParameter">
 <span class="sig-name descname"><span class="pre">addScalingParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeCoulomb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">includeLJ</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="Link to this definition">¶</a></dt>
-<dd><p>Add a scaling parameter to multiply a particular Coulomb slice. Its value will scale the
-Coulomb interactions between particles of a subset 1 with those of another (or the same)
-subset 2. The order of subset definition is irrelevant.</p>
+<dd><p>Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
+particular slice. Its value will scale the interactions between particles of a subset 1
+with those of another (or the same) subset 2. The order of subset definition is irrelevant.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -535,11 +535,12 @@ subset 2. The order of subset definition is irrelevant.</p>
 with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
 calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
 <li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
-<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a> minus 1</p></li>
 <li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
-<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a> minus 1</p></li>
 <li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
-<li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
+<li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions.  At least one
+of includeCoulomb and includeLJ must be true</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -903,8 +904,8 @@ See the manual for details.</p>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
 <li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter</p></li>
-<li><p><strong>subset1</strong> (<em>int</em>) – the smallest index of the two particle subsets</p></li>
-<li><p><strong>subset2</strong> (<em>int</em>) – the largest index of the two particle subsets</p></li>
+<li><p><strong>subset1</strong> (<em>int</em>) – the index of the first particle subset</p></li>
+<li><p><strong>subset2</strong> (<em>int</em>) – the index of the second particle subset</p></li>
 <li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
 <li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
 </ul>
@@ -1162,14 +1163,14 @@ The default value is <cite>True</cite>.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>index</strong> (<em>int</em>) – the index of the scaling parameter to modify, as returned by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">addExceptionChargeOffset()</span></code></p></li>
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a></p></li>
 <li><p><strong>parameter</strong> (<em>str</em>) – the name of the global parameter.  It must have already been added
 with <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addGlobalParameter" title="nonbondedslicing.SlicedNonbondedForce.addGlobalParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addGlobalParameter()</span></code></a>. Its value can be modified at any time by
 calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a></p></li>
 <li><p><strong>subset1</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
-<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a> minus 1</p></li>
 <li><p><strong>subset2</strong> (<em>int</em>) – the index of a particle subset.  Legal values are between 0 and the result of
-<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a></p></li>
+<a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumSubsets()</span></code></a> minus 1</p></li>
 <li><p><strong>includeCoulomb</strong> (<em>bool</em>) – whether this scaling parameter applies to Coulomb interactions</p></li>
 <li><p><strong>includeLJ</strong> (<em>bool</em>) – whether this scaling parameter applies to Lennard-Jones interactions</p></li>
 </ul>
@@ -1186,9 +1187,8 @@ calling <cite>setParameter()</cite> on the <a class="extlink-OpenMM reference ex
 <dl class="py method">
 <dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setUseCuFFT">
 <span class="sig-name descname"><span class="pre">setUseCuFFT</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setUseCuFFT" title="Link to this definition">¶</a></dt>
-<dd><p>Set whether whether to use CUDA Toolkit’s cuFFT library when executing in the CUDA platform.
-This choice has no effect when using other platforms or when the CUDA Toolkit is version 7.0
-or older.</p>
+<dd><p>Set whether to use CUDA Toolkit’s cuFFT library when executing in the CUDA platform.
+Otherwise, VkFFT is used.  This choice has no effect on other platforms.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>use</strong> (<em>bool</em>) – whether to use the cuFFT library</p>
@@ -1297,7 +1297,7 @@ to add new particles or exceptions, only to change the parameters of existing on
       <div class="clearer"></div>
     </div>
     <div class="footer">
-      &#169;2022, Charlles Abreu. Project based on OpenMM.
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
       
       |
       Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>

@@ -5,13 +5,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Contributing &#8212; Nonbonded Slicing  documentation</title>
+    <title>Contributing &#8212; Nonbonded Slicing 0.2.2 documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=d72ef124" />
-    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/documentation_options.js?v=000c92bf"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -87,10 +87,9 @@ articles, and such.</p>
 </li>
 <li><p>When you’re done making changes, run all the unit tests and the doc builder:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="n">build</span>
-<span class="n">make</span>
-<span class="n">make</span> <span class="n">test</span>
 <span class="n">make</span> <span class="n">install</span>
 <span class="n">make</span> <span class="n">PythonInstall</span>
+<span class="n">make</span> <span class="n">test</span>
 <span class="n">make</span> <span class="n">PythonTest</span>
 <span class="n">make</span> <span class="n">doc</span>
 </pre></div>
@@ -110,7 +109,7 @@ articles, and such.</p>
 <p>If you need some code review or feedback while you’re developing the code just make the pull request.</p>
 <p>For merging, you should:</p>
 <ol class="arabic simple">
-<li><p>Include passing tests (run <code class="docutils literal notranslate"><span class="pre">devtools/run_tests.sh</span></code>) <a class="footnote-reference brackets" href="#id2" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>.</p></li>
+<li><p>Include passing tests (<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">PythonTest</span></code>) <a class="footnote-reference brackets" href="#id2" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>.</p></li>
 <li><p>Update documentation when there’s new API, functionality etc.</p></li>
 <li><p>Add a note to <code class="docutils literal notranslate"><span class="pre">docs/changelog.rst</span></code> about the changes.</p></li>
 <li><p>Add yourself to <code class="docutils literal notranslate"><span class="pre">docs/authors.rst</span></code>.</p></li>
@@ -118,8 +117,8 @@ articles, and such.</p>
 <aside class="footnote-list brackets">
 <aside class="footnote brackets" id="id2" role="doc-footnote">
 <span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
-<p>If you don’t have all the necessary python versions available locally you can rely on Github Actions - it will
-<a class="reference external" href="https://travis-ci.org/craabreu/openmm-nonbonded-slicing/pull_requests">run the tests</a> for each change you add in the pull request.</p>
+<p>If you cannot run the GPU tests locally, GitHub Actions runs the Reference and OpenCL tests for each pull request;
+GPU tests still need to be run by a maintainer.</p>
 </aside>
 </aside>
 </section>
@@ -184,7 +183,7 @@ articles, and such.</p>
       <div class="clearer"></div>
     </div>
     <div class="footer">
-      &#169;2022, Charlles Abreu. Project based on OpenMM.
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
       
       |
       Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
