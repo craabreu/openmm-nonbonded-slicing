@@ -13,6 +13,7 @@ dependencies:
   - ocl-icd-system
   - opencl-headers
   - openmm =@OPENMM_VERSION@
+  - pocl
   - pip >=22.2
   - pytest
   - python
