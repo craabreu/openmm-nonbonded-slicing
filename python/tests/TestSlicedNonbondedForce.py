@@ -1,4 +1,6 @@
+import copy
 import math
+import pickle
 
 import nonbondedslicing as plugin
 import numpy as np
@@ -189,3 +191,46 @@ def testScalingParameterAccessors():
     assert list(force.getScalingParameter(index)) == ["a", 2, 1, True, False]
     force.setScalingParameter(index, "b", 0, 2, False, True)
     assert list(force.getScalingParameter(index)) == ["b", 0, 2, False, True]
+
+
+def _sampleForce():
+    force = plugin.SlicedNonbondedForce(3)
+    force.addParticle(1.0, 0.3, 0.5)
+    force.addParticle(-1.0, 0.3, 0.5)
+    force.setParticleSubset(1, 2)
+    force.addGlobalParameter("a", 0.5)
+    force.addScalingParameter("a", 2, 1, True, False)
+    force.addEnergyParameterDerivative("a")
+    force.setUseCuFFT(False)
+    return force
+
+
+@pytest.mark.parametrize(
+    "duplicate",
+    [copy.copy, copy.deepcopy, lambda force: pickle.loads(pickle.dumps(force))],
+    ids=["copy", "deepcopy", "pickle"],
+)
+def testCopyAndPickle(duplicate):
+    force = _sampleForce()
+    other = duplicate(force)
+    assert other is not force
+    assert isinstance(other, plugin.SlicedNonbondedForce)
+    assert other.getNumSubsets() == 3
+    assert other.getParticleSubset(1) == 2
+    assert list(other.getScalingParameter(0)) == ["a", 2, 1, True, False]
+    assert other.getEnergyParameterDerivativeName(0) == "a"
+    assert other.getUseCuFFT() is False
+    other.setParticleSubset(0, 1)
+    assert force.getParticleSubset(0) == 0
+
+
+def testSystemSerialization():
+    system = mm.System()
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    system.addForce(_sampleForce())
+    clone = mm.XmlSerializer.deserialize(mm.XmlSerializer.serialize(system))
+    force = plugin.SlicedNonbondedForce.cast(clone.getForce(0))
+    assert force.getNumSubsets() == 3
+    assert force.getParticleSubset(1) == 2
+    assert force.getUseCuFFT() is False

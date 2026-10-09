@@ -11,6 +11,8 @@
 #include "OpenMMDrude.h"
 #include "openmm/RPMDIntegrator.h"
 #include "openmm/RPMDMonteCarloBarostat.h"
+#include "openmm/serialization/XmlSerializer.h"
+#include <sstream>
 
 #define SWIG_PYTHON_CAST_MODE
 %}
@@ -406,7 +408,33 @@ public:
      * Add methods for casting a Force to a SlicedNonbondedForce.
     */
 
+    %newobject _deserialize;
     %extend {
+        static NonbondedSlicing::SlicedNonbondedForce* _deserialize(const std::string& xml) {
+            std::stringstream buffer(xml);
+            return OpenMM::XmlSerializer::deserialize<NonbondedSlicing::SlicedNonbondedForce>(buffer);
+        }
+
+        %pythoncode %{
+            def __getstate__(self):
+                from openmm import XmlSerializer
+                return XmlSerializer.serialize(self)
+
+            def __setstate__(self, state):
+                self.this = SlicedNonbondedForce._deserialize(state).this
+
+            def __copy__(self):
+                from copy import deepcopy
+                from openmm import XmlSerializer
+                duplicate = SlicedNonbondedForce._deserialize(XmlSerializer.serialize(self))
+                attributes = {key: value for key, value in self.__dict__.items() if key != 'this'}
+                duplicate.__dict__.update(deepcopy(attributes))
+                return duplicate
+
+            def __deepcopy__(self, memo):
+                return self.__copy__()
+        %}
+
         static NonbondedSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
             return dynamic_cast<NonbondedSlicing::SlicedNonbondedForce&>(force);
         }
