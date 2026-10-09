@@ -38,6 +38,23 @@ The plugin is distributed on [conda-forge]:
 mamba install -c conda-forge openmm-nonbonded-slicing
 ```
 
+and on [PyPI], for Linux x86_64 and macOS (Apple Silicon and Intel) with Python 3.10–3.14:
+
+```bash
+pip install openmm-nonbonded-slicing            # Reference and OpenCL platforms
+pip install openmm-nonbonded-slicing[cuda12]    # plus the CUDA platform (Linux, CUDA 12)
+pip install openmm-nonbonded-slicing[cuda13]    # plus the CUDA platform (Linux, CUDA 13)
+```
+
+Each PyPI release is published once per supported OpenMM version, and pip picks the one that
+matches the installed OpenMM:
+
+| PyPI release  | OpenMM |
+|---------------|--------|
+| `X.Y.Z`       | 8.4    |
+| `X.Y.Z.post1` | 8.5    |
+| `X.Y.Z.post2` | 8.6    |
+
 Instructions for building from source are in the [documentation](https://craabreu.github.io/openmm-nonbonded-slicing/).
 
 Usage
@@ -57,3 +74,4 @@ system.addForce(force)
 [getState]:             http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState
 [OpenMM]:               https://openmm.org
 [conda-forge]:          https://anaconda.org/conda-forge/openmm-nonbonded-slicing
+[PyPI]:                 https://pypi.org/project/openmm-nonbonded-slicing

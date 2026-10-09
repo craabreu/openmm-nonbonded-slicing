@@ -67,6 +67,20 @@ To set up `openmm-nonbonded-slicing` for local development:
 
 6. Submit a pull request through the GitHub website.
 
+Releasing on PyPI
+-----------------
+
+Pushing a ``vX.Y.Z`` tag builds and tests wheels for every OpenMM version listed in
+``devtools/wheels/openmm-versions.json`` and, after approval of the ``pypi`` environment,
+publishes them as ``X.Y.Z``, ``X.Y.Z.post1``, ... (one release per OpenMM minor version).
+
+To publish an existing tag, or to try a release on TestPyPI first, run the *Wheels* workflow
+manually with ``ref`` set to the tag and ``target`` set to ``testpypi`` or ``pypi``.
+
+To support a new OpenMM minor version, add an entry to ``openmm-versions.json`` with the next
+post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
+(the header of ``openmm/openmm.py``), then publish that post-release for the current version.
+
 Pull Request Guidelines
 -----------------------
 
