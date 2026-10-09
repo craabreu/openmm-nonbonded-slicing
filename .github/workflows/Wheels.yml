@@ -1,0 +1,320 @@
+name: Wheels
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or commit of the source to build"
+        required: true
+      target:
+        description: "Where to publish"
+        required: true
+        type: choice
+        options: ["testpypi", "pypi"]
+
+env:
+  OPENCL_HEADERS_TAG: v2025.07.22
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      ref: ${{ steps.target.outputs.ref }}
+      target: ${{ steps.target.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: "Unit tests of the packaging tools"
+        run: |
+          pip install pytest setuptools wheel delocate
+          python -m pytest -q devtools/wheels/tests
+      - id: target
+        name: "Source ref and publishing target"
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "ref=${{ inputs.ref }}" >> $GITHUB_OUTPUT
+            echo "target=${{ inputs.target }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "ref=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "target=pypi" >> $GITHUB_OUTPUT
+          else
+            echo "ref=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "target=none" >> $GITHUB_OUTPUT
+          fi
+      - id: matrix
+        name: "Build matrix"
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "matrix=$(python devtools/wheels/versions.py matrix)" >> $GITHUB_OUTPUT
+          else
+            echo "matrix=$(python devtools/wheels/versions.py matrix --full)" >> $GITHUB_OUTPUT
+          fi
+
+  linux:
+    needs: setup
+    name: "Linux OpenMM ${{ matrix.openmm }} Python ${{ matrix.python }}"
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_34_x86_64
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix).linux }}
+    steps:
+      - name: "Paths"
+        # Inside a container, ${{ github.workspace }} is the host path; $GITHUB_WORKSPACE is the container's
+        run: |
+          echo "TOOLS=$GITHUB_WORKSPACE/tools/devtools/wheels" >> $GITHUB_ENV
+          echo "SRC=$GITHUB_WORKSPACE/src" >> $GITHUB_ENV
+          echo "STAGE=$GITHUB_WORKSPACE/stage" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
+          path: src
+      - name: "Python and dependencies"
+        run: |
+          PY=/opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python
+          $PY -m venv /opt/build-env
+          echo "/opt/build-env/bin" >> $GITHUB_PATH
+          /opt/build-env/bin/pip install \
+            "openmm==$($PY $TOOLS/versions.py field ${{ matrix.openmm }} openmm)" \
+            "swig==$($PY $TOOLS/versions.py field ${{ matrix.openmm }} swig)" \
+            cmake setuptools wheel delocate auditwheel patchelf pytest
+          dnf -y install ocl-icd
+        env:
+          MATRIX_PYTHON: ${{ matrix.python }}
+      - name: "OpenCL headers"
+        run: |
+          git clone --depth 1 --branch $OPENCL_HEADERS_TAG https://github.com/KhronosGroup/OpenCL-Headers.git /tmp/ocl
+          cmake -S /tmp/ocl -B /tmp/ocl/build -DCMAKE_INSTALL_PREFIX=/opt/opencl -DBUILD_TESTING=OFF
+          cmake --install /tmp/ocl/build
+      - name: "Build"
+        run: |
+          OMM=$(python -c "import openmm.version as v, os; print(os.path.dirname(v.openmm_library_path))")
+          cmake -S $SRC -B build -DCMAKE_BUILD_TYPE=Release \
+            -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
+            -DPYTHON_EXECUTABLE=$(which python) \
+            -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCMAKE_PREFIX_PATH=/opt/opencl \
+            -DPLUGIN_BUILD_CUDA_LIB=OFF
+          grep -q "PLUGIN_BUILD_OPENCL_LIB:BOOL=ON" build/CMakeCache.txt
+          cmake --build build -j4 --target install
+          cmake --build build -j4 --target PythonInstall
+      - name: "C++ tests"
+        run: |
+          export LD_LIBRARY_PATH=$(python -c "import openmm.version as v; print(v.openmm_library_path)")
+          cd build && ctest --output-on-failure -R "TestReference|TestSerialize"
+      - name: "Package"
+        run: |
+          python $TOOLS/package.py stage-module $STAGE
+          python $TOOLS/package.py fix-runtime-paths $STAGE
+          NBS_SOURCE_DIR=$SRC NBS_OPENMM_MINOR=${{ matrix.openmm }} NBS_STAGE_DIR=$STAGE \
+            pip wheel --no-deps --no-build-isolation -w raw $TOOLS
+          python $TOOLS/package.py inject raw/*.whl $STAGE
+          auditwheel repair -w dist --plat manylinux_2_34_x86_64 raw/*.whl \
+            --exclude 'libOpenMM*.so' --exclude 'libOpenCL.so*' --exclude 'libNonbondedSlicing*.so'
+          python $TOOLS/package.py check dist/*.whl --require '_nonbondedslicing*' \
+            --require 'OpenMM.libs/lib/libNonbondedSlicing.*' \
+            --require 'OpenMM.libs/lib/plugins/libNonbondedSlicingReference.*' \
+            --require 'OpenMM.libs/lib/plugins/libNonbondedSlicingOpenCL.*' \
+            --require 'OpenMM.libs/include/SlicedNonbondedForce.h'
+      - name: "Test in a clean venv"
+        run: |
+          VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
+          /opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python -m venv /tmp/test-env
+          /tmp/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
+          /tmp/test-env/bin/pip check
+          cd /tmp && /tmp/test-env/bin/python $TOOLS/smoke.py base $VERSION
+          DESELECT=$(grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || echo "-k not testVersion")
+          cd $SRC/python/tests && /tmp/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py $DESELECT
+        env:
+          MATRIX_PYTHON: ${{ matrix.python }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-linux-${{ matrix.openmm }}-${{ matrix.python }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  cuda:
+    needs: setup
+    name: "Linux OpenMM ${{ matrix.openmm }} CUDA ${{ matrix.cuda }}"
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_34_x86_64
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix).cuda }}
+    env:
+      CUDA_VERSION: ${{ matrix.cuda == 12 && '12-9' || '13-0' }}
+    steps:
+      - name: "Paths"
+        # Inside a container, ${{ github.workspace }} is the host path; $GITHUB_WORKSPACE is the container's
+        run: |
+          echo "TOOLS=$GITHUB_WORKSPACE/tools/devtools/wheels" >> $GITHUB_ENV
+          echo "SRC=$GITHUB_WORKSPACE/src" >> $GITHUB_ENV
+          echo "STAGE=$GITHUB_WORKSPACE/stage" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
+          path: src
+      - name: "Python, CUDA and dependencies"
+        run: |
+          PY=/opt/python/cp312-cp312/bin/python
+          $PY -m venv /opt/build-env
+          echo "/opt/build-env/bin" >> $GITHUB_PATH
+          OPENMM=$($PY $TOOLS/versions.py field ${{ matrix.openmm }} openmm)
+          /opt/build-env/bin/pip install "openmm==$OPENMM" "openmm-cuda-${{ matrix.cuda }}==$OPENMM" \
+            "swig==$($PY $TOOLS/versions.py field ${{ matrix.openmm }} swig)" \
+            cmake setuptools wheel delocate patchelf
+          dnf -y install dnf-plugins-core
+          dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+          dnf -y install cuda-nvcc-$CUDA_VERSION cuda-cudart-devel-$CUDA_VERSION cuda-nvrtc-devel-$CUDA_VERSION \
+            cuda-driver-devel-$CUDA_VERSION libcufft-devel-$CUDA_VERSION
+      - name: "Build"
+        run: |
+          OMM=$(python -c "import openmm.version as v, os; print(os.path.dirname(v.openmm_library_path))")
+          cmake -S $SRC -B build -DCMAKE_BUILD_TYPE=Release \
+            -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
+            -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCUDAToolkit_ROOT=/usr/local/cuda-${CUDA_VERSION/-/.} \
+            -DPLUGIN_BUILD_OPENCL_LIB=OFF -DPLUGIN_BUILD_PYTHON_WRAPPERS=OFF
+          grep -q "PLUGIN_BUILD_CUDA_LIB:BOOL=ON" build/CMakeCache.txt
+          cmake --build build -j4 --target install
+      - name: "Package"
+        run: |
+          # The add-on carries only the CUDA plugin; everything else comes from the base wheel
+          find $STAGE -type f ! -name 'libNonbondedSlicingCUDA*' -delete
+          python $TOOLS/package.py fix-runtime-paths $STAGE --cuda ${{ matrix.cuda }}
+          NBS_SOURCE_DIR=$SRC NBS_OPENMM_MINOR=${{ matrix.openmm }} NBS_CUDA=${{ matrix.cuda }} \
+            NBS_PLATFORM=manylinux_2_34_x86_64 pip wheel --no-deps --no-build-isolation -w dist $TOOLS/cuda
+          python $TOOLS/package.py inject dist/*.whl $STAGE
+          python $TOOLS/package.py check dist/*.whl --require 'OpenMM.libs/lib/plugins/libNonbondedSlicingCUDA.so'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cuda-${{ matrix.openmm }}-${{ matrix.cuda }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  cuda-check:
+    needs: [setup, linux, cuda]
+    name: "Install check OpenMM ${{ matrix.openmm }} CUDA ${{ matrix.cuda }}"
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_34_x86_64
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix).cuda }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
+          path: src
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*-${{ matrix.openmm }}-*
+          path: wheels
+          merge-multiple: true
+      - name: "Install with the extra and check the plugin's libraries"
+        run: |
+          PY=/opt/python/cp312-cp312/bin/python
+          VERSION=$($PY tools/devtools/wheels/versions.py version src ${{ matrix.openmm }})
+          $PY -m venv /tmp/test-env
+          /tmp/test-env/bin/pip install --find-links wheels "openmm-nonbonded-slicing[cuda${{ matrix.cuda }}]==$VERSION"
+          /tmp/test-env/bin/pip check
+          cd /tmp && /tmp/test-env/bin/python $GITHUB_WORKSPACE/tools/devtools/wheels/smoke.py cuda $VERSION ${{ matrix.cuda }}
+
+  macos:
+    needs: setup
+    name: "macOS ${{ matrix.arch }} OpenMM ${{ matrix.openmm }} Python ${{ matrix.python }}"
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix).macos }}
+    env:
+      TOOLS: ${{ github.workspace }}/tools/devtools/wheels
+      SRC: ${{ github.workspace }}/src
+      STAGE: ${{ github.workspace }}/stage
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.target }}
+      ARCHFLAGS: -arch ${{ matrix.arch }}
+      _PYTHON_HOST_PLATFORM: macosx-${{ matrix.target }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
+          path: src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: "Dependencies"
+        run: |
+          python -m venv $RUNNER_TEMP/build-env
+          echo "$RUNNER_TEMP/build-env/bin" >> $GITHUB_PATH
+          $RUNNER_TEMP/build-env/bin/pip install \
+            "openmm==$(python $TOOLS/versions.py field ${{ matrix.openmm }} openmm)" \
+            "swig==$(python $TOOLS/versions.py field ${{ matrix.openmm }} swig)" \
+            cmake setuptools wheel delocate pytest
+      - name: "OpenCL headers"
+        run: |
+          git clone --depth 1 --branch $OPENCL_HEADERS_TAG https://github.com/KhronosGroup/OpenCL-Headers.git $RUNNER_TEMP/ocl
+          cmake -S $RUNNER_TEMP/ocl -B $RUNNER_TEMP/ocl/build -DCMAKE_INSTALL_PREFIX=$RUNNER_TEMP/opencl -DBUILD_TESTING=OFF
+          cmake --install $RUNNER_TEMP/ocl/build
+      - name: "Build"
+        run: |
+          OMM=$(python -c "import openmm.version as v, os; print(os.path.dirname(v.openmm_library_path))")
+          cmake -S $SRC -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
+            -DPYTHON_EXECUTABLE=$(which python) \
+            -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCMAKE_PREFIX_PATH=$RUNNER_TEMP/opencl \
+            -DPLUGIN_BUILD_CUDA_LIB=OFF
+          grep -q "PLUGIN_BUILD_OPENCL_LIB:BOOL=ON" build/CMakeCache.txt
+          cmake --build build -j3 --target install
+          cmake --build build -j3 --target PythonInstall
+      - name: "C++ tests"
+        run: |
+          export DYLD_LIBRARY_PATH=$(python -c "import openmm.version as v; print(v.openmm_library_path)")
+          cd build && ctest --output-on-failure -R "TestReference|TestSerialize"
+      - name: "Package"
+        run: |
+          python $TOOLS/package.py stage-module $STAGE
+          python $TOOLS/package.py fix-runtime-paths $STAGE
+          NBS_SOURCE_DIR=$SRC NBS_OPENMM_MINOR=${{ matrix.openmm }} NBS_STAGE_DIR=$STAGE \
+            pip wheel --no-deps --no-build-isolation -w dist $TOOLS
+          python $TOOLS/package.py inject dist/*.whl $STAGE
+          delocate-listdeps --all dist/*.whl
+          python $TOOLS/package.py check dist/*.whl --require '_nonbondedslicing*' \
+            --require 'OpenMM.libs/lib/libNonbondedSlicing.*' \
+            --require 'OpenMM.libs/lib/plugins/libNonbondedSlicingReference.*' \
+            --require 'OpenMM.libs/lib/plugins/libNonbondedSlicingOpenCL.*' \
+            --require 'OpenMM.libs/include/SlicedNonbondedForce.h'
+      - name: "Test in a clean venv"
+        run: |
+          VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
+          python -m venv $RUNNER_TEMP/test-env
+          $RUNNER_TEMP/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
+          $RUNNER_TEMP/test-env/bin/pip check
+          cd $RUNNER_TEMP && $RUNNER_TEMP/test-env/bin/python $TOOLS/smoke.py base $VERSION
+          DESELECT=$(grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || echo "-k not testVersion")
+          cd $SRC/python/tests && $RUNNER_TEMP/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py $DESELECT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-macos-${{ matrix.arch }}-${{ matrix.openmm }}-${{ matrix.python }}
+          path: dist/*.whl
+          if-no-files-found: error
