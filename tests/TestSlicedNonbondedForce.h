@@ -1498,6 +1498,7 @@ int main(int argc, char* argv[]) {
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
                 testScalingParameterSeparation(sfmt, method, exceptions);
+        runPlatformTests();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;
