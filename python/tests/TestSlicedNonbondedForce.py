@@ -1,26 +1,36 @@
 import copy
-import math
 import pickle
 
 import nonbondedslicing as plugin
-import numpy as np
 import openmm as mm
 import pytest
 from openmm import unit
 
 ONE_4PI_EPS0 = 138.935456
 
-cases = [
-    ('Reference', ''),
-    ('CUDA', 'single'),
-    ('CUDA', 'mixed'),
-    ('CUDA', 'double'),
-    ('OpenCL', 'single'),
-    ('OpenCL', 'mixed'),
-    ('OpenCL', 'double'),
-]
 
-ids = [''.join(case) for case in cases]
+def _isAvailable(platformName):
+    try:
+        platform = mm.Platform.getPlatformByName(platformName)
+        system = mm.System()
+        system.addParticle(1.0)
+        mm.Context(system, mm.VerletIntegrator(1.0), platform)
+        return True
+    except Exception:
+        return False
+
+
+available = {name: _isAvailable(name) for name in ["Reference", "CUDA", "OpenCL"]}
+
+cases = [
+    pytest.param(name, precision, id=name+precision,
+                 marks=pytest.mark.skipif(not available[name], reason=f"{name} platform not available"))
+    for name, precision in [
+        ("Reference", ""),
+        ("CUDA", "single"), ("CUDA", "mixed"), ("CUDA", "double"),
+        ("OpenCL", "single"), ("OpenCL", "mixed"), ("OpenCL", "double"),
+    ]
+]
 
 
 def value(x):
@@ -88,7 +98,7 @@ def testParameterClash():
         mm.Context(system, mm.VerletIntegrator(0.01), platform)
 
 
-@pytest.mark.parametrize('platformName, precision', cases, ids=ids)
+@pytest.mark.parametrize("platformName, precision", cases)
 def testCoulomb(platformName, precision):
     system = mm.System()
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
@@ -130,75 +140,60 @@ def testCoulomb(platformName, precision):
     assert_forces_and_energy(context, tol)
 
 
-@pytest.mark.parametrize('platformName, precision', cases, ids=ids)
+@pytest.mark.parametrize("platformName, precision", cases)
 def testLargeSystem(platformName, precision):
     numMolecules = 600
     numParticles = numMolecules*2
-    cutoff = 2.0
     boxSize = 20.0
-    tol = 1e-4 if platformName == 'Reference' or precision == 'double' else 1e-3
-    reference = mm.Platform.getPlatformByName("Reference")
-    platform = mm.Platform.getPlatformByName(platformName)
-    system = mm.System()
-    for i in range(numParticles):
-        system.addParticle(1.0)
-    system.setDefaultPeriodicBoxVectors(
-        mm.Vec3(boxSize, 0, 0),
-        mm.Vec3(0, boxSize, 0),
-        mm.Vec3(0, 0, boxSize),
-    )
-
-    nonbonded = plugin.SlicedNonbondedForce(2)
-    nonbonded.setCutoffDistance(cutoff)
-    positions = np.empty(numParticles, mm.Vec3)
-
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(2.0)
+    positions = []
     M = int(numMolecules**(1.0/3.0))
-    if (M*M*M < numMolecules):
+    if M*M*M < numMolecules:
         M += 1
-    sqrt3 = math.sqrt(3)
     for k in range(numMolecules):
         iz = k//(M*M)
         iy = (k - iz*M*M)//M
         ix = k - M*(iy + iz*M)
-        x = (ix + 0.5)*boxSize/M
-        y = (iy + 0.5)*boxSize/M
-        z = (iz + 0.5)*boxSize/M
-        dx = (0.5 - ix%2)/2
-        dy = (0.5 - iy%2)/2
-        dz = (0.5 - iz%2)/2
-        nonbonded.addParticle(1.0, 1, 0)
-        nonbonded.addParticle(-1.0, 1, 0)
-        nonbonded.addException(2*k, 2*k+1, 0, 1, 0)
-        positions[2*k] = mm.Vec3(x+dx, y+dy, z+dz)
-        positions[2*k+1] = mm.Vec3(x-dx, y-dy, z-dz)
+        center = mm.Vec3(ix + 0.5, iy + 0.5, iz + 0.5)*(boxSize/M)
+        delta = mm.Vec3(0.5 - ix%2, 0.5 - iy%2, 0.5 - iz%2)/2
+        positions += [center + delta, center - delta]
+        nonbonded.addParticle(1.0, 0.5, 0.2)
+        nonbonded.addParticle(-1.0, 0.5, 0.2)
+        nonbonded.addException(2*k, 2*k+1, 0.0, 0.5, 0.0)
 
-    nonbonded.setParticleSubset(0, 0)
-    nonbonded.setParticleSubset(1, 1)
-
-    assert nonbonded.getParticleSubset(0) == 0
-    assert nonbonded.getParticleSubset(1) == 1
-
-    system.addForce(nonbonded)
-    integrator1 = mm.VerletIntegrator(0.01)
-    integrator2 = mm.VerletIntegrator(0.01)
-    properties = {} if platformName == 'Reference' else {'Precision': precision}
-    context = mm.Context(system, integrator1, platform, properties)
-    referenceContext = mm.Context(system, integrator2, reference)
-    context.setPositions(positions)
-    referenceContext.setPositions(positions)
-    kwargs = dict(
-        getPositions=True,
-        getVelocities=True,
-        getForces=True,
-        getEnergy=True,
-    )
-    state = context.getState(**kwargs)
-    referenceState = referenceContext.getState(**kwargs)
+    force = plugin.SlicedNonbondedForce(nonbonded, 3)
     for i in range(numParticles):
-        ASSERT_EQUAL_VEC(state.getPositions()[i], referenceState.getPositions()[i], tol)
-        ASSERT_EQUAL_VEC(state.getVelocities()[i], referenceState.getVelocities()[i], tol)
-        ASSERT_EQUAL_VEC(state.getForces()[i], referenceState.getForces()[i], tol)
-    ASSERT_EQUAL_TOL(state.getPotentialEnergy(), referenceState.getPotentialEnergy(), tol)
+        force.setParticleSubset(i, i % 3)
+    force.addGlobalParameter("lambda", 0.5)
+    force.addScalingParameter("lambda", 0, 1, True, True)
+    force.addScalingParameter("lambda", 1, 2, True, False)
+    force.addEnergyParameterDerivative("lambda")
+
+    system = mm.System()
+    for i in range(numParticles):
+        system.addParticle(1.0)
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
+    system.addForce(force)
+
+    def compute(platform, properties):
+        context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+        context.setPositions(positions)
+        return context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    state = compute(mm.Platform.getPlatformByName(platformName), properties)
+    reference = compute(mm.Platform.getPlatformByName("Reference"), {})
+    ASSERT_EQUAL_TOL(reference.getPotentialEnergy(), state.getPotentialEnergy(), tol)
+    ASSERT_EQUAL_TOL(
+        reference.getEnergyParameterDerivatives()["lambda"],
+        state.getEnergyParameterDerivatives()["lambda"],
+        tol,
+    )
+    for f0, f1 in zip(reference.getForces(), state.getForces()):
+        ASSERT_EQUAL_VEC(f0, f1, tol)
 
 
 def testScalingParameterAccessors():
@@ -253,3 +248,52 @@ def testSystemSerialization():
     assert force.getNumSubsets() == 3
     assert force.getParticleSubset(1) == 2
     assert force.getUseCuFFT() is False
+
+
+def testDerivatives():
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(1.0)
+    positions = []
+    for i in range(4):
+        for j in range(4):
+            for k in range(2):
+                positions.append(mm.Vec3(0.8*i + 0.1*k, 0.8*j + 0.05*k, 0.4*k))
+                nonbonded.addParticle(0.5 if (i + j + k) % 2 else -0.5, 0.3, 0.5)
+    force = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(len(positions)):
+        force.setParticleSubset(i, i % 2)
+    force.addGlobalParameter("lambda", 0.5)
+    force.addScalingParameter("lambda", 0, 1, True, True)
+    force.addEnergyParameterDerivative("lambda")
+    system = mm.System()
+    for _ in positions:
+        system.addParticle(1.0)
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(3.2, 0, 0), mm.Vec3(0, 3.2, 0), mm.Vec3(0, 0, 3.2))
+    system.addForce(force)
+    context = mm.Context(system, mm.VerletIntegrator(0.01), mm.Platform.getPlatformByName("Reference"))
+    context.setPositions(positions)
+    derivative = context.getState(getParameterDerivatives=True).getEnergyParameterDerivatives()["lambda"]
+    energy = {}
+    for scale in (0.0, 1.0):
+        context.setParameter("lambda", scale)
+        energy[scale] = value(context.getState(getEnergy=True).getPotentialEnergy())
+    ASSERT_EQUAL_TOL(energy[1.0] - energy[0.0], derivative, 1e-6)
+    assert abs(derivative) > 1.0
+
+
+def testCastAndIsinstance():
+    system = mm.System()
+    system.addParticle(1.0)
+    system.addForce(mm.HarmonicBondForce())
+    force = plugin.SlicedNonbondedForce(2)
+    force.addParticle(0.0, 1.0, 0.0)
+    system.addForce(force)
+    assert not plugin.SlicedNonbondedForce.isinstance(system.getForce(0))
+    assert plugin.SlicedNonbondedForce.isinstance(system.getForce(1))
+    assert plugin.SlicedNonbondedForce.cast(system.getForce(1)).getNumSubsets() == 2
+
+
+def testVersion():
+    from importlib.metadata import version
+    assert plugin.__version__ == version("nonbondedslicing")
