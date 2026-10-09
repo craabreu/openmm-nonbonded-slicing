@@ -1,5 +1,6 @@
 import copy
 import pickle
+import random
 
 import nonbondedslicing as plugin
 import openmm as mm
@@ -29,6 +30,10 @@ cases = [
         ("OpenCL", "single"), ("OpenCL", "mixed"), ("OpenCL", "double"),
     ]
 ]
+
+
+TOL_SLICE_DOUBLE = 1e-5
+TOL_SLICE_SINGLE = 1e-4
 
 
 def value(x):
@@ -290,3 +295,141 @@ def testCastAndIsinstance():
 def testVersion():
     from importlib.metadata import version
     assert plugin.__version__ == version("nonbondedslicing")
+
+
+SLICE_SUBSETS = 3
+SLICE_KINDS = ("coulomb", "lj")
+SLICE_METHODS = {
+    "NoCutoff": mm.NonbondedForce.NoCutoff,
+    "CutoffNonPeriodic": mm.NonbondedForce.CutoffNonPeriodic,
+    "CutoffPeriodic": mm.NonbondedForce.CutoffPeriodic,
+    "Ewald": mm.NonbondedForce.Ewald,
+    "PME": mm.NonbondedForce.PME,
+    "LJPME": mm.NonbondedForce.LJPME,
+}
+SLICE_COMBOS = [(name, "plain") for name in SLICE_METHODS] + [
+    ("CutoffPeriodic", "switching"),
+    ("PME", "switching"),
+    ("CutoffPeriodic", "triclinic"),
+    ("PME", "triclinic"),
+    ("LJPME", "triclinic"),
+]
+
+
+def _sliceData(variant):
+    rng = random.Random(7)
+    numParticles, length = 48, 3.0
+    if variant == "triclinic":
+        box = [mm.Vec3(length, 0, 0), mm.Vec3(0.6, length, 0), mm.Vec3(-0.4, 0.5, length)]
+    else:
+        box = [mm.Vec3(length, 0, 0), mm.Vec3(0, length, 0), mm.Vec3(0, 0, length)]
+    data = dict(
+        box=box,
+        positions=[box[0]*rng.random() + box[1]*rng.random() + box[2]*rng.random() for _ in range(numParticles)],
+        subsets=[i % SLICE_SUBSETS for i in range(numParticles)],
+        charges=[rng.uniform(-1, 1) for _ in range(numParticles)],
+        sigmas=[rng.uniform(0.2, 0.35) for _ in range(numParticles)],
+        epsilons=[rng.uniform(0.1, 0.8) for _ in range(numParticles)],
+        exceptions=[(i, i+1, rng.uniform(-0.3, 0.3), 0.3, rng.uniform(0.0, 0.5)) for i in range(0, numParticles, 6)],
+        particleOffsets=[(0, 0.7, 0.0, 0.2), (7, -0.4, 0.0, 0.1)],
+        exceptionOffsets=[(1, 0.2, 0.0, 0.1)],
+        offsetValue=0.6,
+        scales={},
+    )
+    for i in range(SLICE_SUBSETS):
+        for j in range(i, SLICE_SUBSETS):
+            for kind in SLICE_KINDS:
+                data["scales"][(i, j, kind)] = rng.uniform(-0.5, 2.0)
+    return data
+
+
+def _sliceNonbonded(data, method, variant, active, kind):
+    force = mm.NonbondedForce()
+    force.setNonbondedMethod(method)
+    force.setCutoffDistance(1.0)
+    force.setUseDispersionCorrection(True)
+    force.setReciprocalSpaceForceGroup(1)
+    if variant == "switching":
+        force.setUseSwitchingFunction(True)
+        force.setSwitchingDistance(0.8)
+    isActive = lambda i: data["subsets"][i] in active
+    keepCoulomb = kind in ("coulomb", "all")
+    keepLJ = kind in ("lj", "all")
+    for i, (q, sigma, epsilon) in enumerate(zip(data["charges"], data["sigmas"], data["epsilons"])):
+        force.addParticle(q if isActive(i) and keepCoulomb else 0.0, sigma, epsilon if isActive(i) and keepLJ else 0.0)
+    for i, j, chargeProd, sigma, epsilon in data["exceptions"]:
+        both = isActive(i) and isActive(j)
+        force.addException(i, j, chargeProd if both and keepCoulomb else 0.0, sigma, epsilon if both and keepLJ else 0.0)
+    force.addGlobalParameter("offset", data["offsetValue"])
+    for i, dq, dsigma, depsilon in data["particleOffsets"]:
+        force.addParticleParameterOffset(
+            "offset", i, dq if isActive(i) and keepCoulomb else 0.0, dsigma, depsilon if isActive(i) and keepLJ else 0.0
+        )
+    for k, dq, dsigma, depsilon in data["exceptionOffsets"]:
+        i, j = data["exceptions"][k][:2]
+        both = isActive(i) and isActive(j)
+        force.addExceptionParameterOffset(
+            "offset", k, dq if both and keepCoulomb else 0.0, dsigma, depsilon if both and keepLJ else 0.0
+        )
+    return force
+
+
+def _sliceContext(data, force, platform, properties):
+    system = mm.System()
+    system.setDefaultPeriodicBoxVectors(*data["box"])
+    for _ in data["positions"]:
+        system.addParticle(1.0)
+    system.addForce(force)
+    context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+    context.setPositions(data["positions"])
+    return system, context
+
+
+def _groupEnergies(data, force, platform, properties):
+    system, context = _sliceContext(data, force, platform, properties)
+    return {group: value(context.getState(getEnergy=True, groups={group}).getPotentialEnergy()) for group in (0, 1)}
+
+
+@pytest.mark.parametrize("methodName, variant", SLICE_COMBOS, ids=[f"{m}-{v}" for m, v in SLICE_COMBOS])
+@pytest.mark.parametrize("platformName, precision", cases)
+def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant):
+    method = SLICE_METHODS[methodName]
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    tol = TOL_SLICE_DOUBLE if platformName == "Reference" or precision == "double" else TOL_SLICE_SINGLE
+    data = _sliceData(variant)
+
+    oracle = {}
+    for kind in SLICE_KINDS:
+        single = {i: _groupEnergies(data, _sliceNonbonded(data, method, variant, {i}, kind), platform, properties)
+                  for i in range(SLICE_SUBSETS)}
+        for i in range(SLICE_SUBSETS):
+            for j in range(i, SLICE_SUBSETS):
+                if i == j:
+                    oracle[(i, j, kind)] = single[i]
+                else:
+                    pair = _groupEnergies(data, _sliceNonbonded(data, method, variant, {i, j}, kind), platform, properties)
+                    oracle[(i, j, kind)] = {g: pair[g] - single[i][g] - single[j][g] for g in (0, 1)}
+    assert max(abs(e[g]) for e in oracle.values() for g in (0, 1)) > 1.0
+
+    sliced = plugin.SlicedNonbondedForce(_sliceNonbonded(data, method, variant, set(range(SLICE_SUBSETS)), "all"), SLICE_SUBSETS)
+    for i, subset in enumerate(data["subsets"]):
+        sliced.setParticleSubset(i, subset)
+    names = {}
+    for (i, j, kind), scale in data["scales"].items():
+        names[(i, j, kind)] = name = f"lambda{i}{j}{kind}"
+        sliced.addGlobalParameter(name, scale)
+        sliced.addScalingParameter(name, i, j, kind == "coulomb", kind == "lj")
+        sliced.addEnergyParameterDerivative(name)
+    system, context = _sliceContext(data, sliced, platform, properties)
+
+    for groups in ({0}, {1}, {0, 1}):
+        expected = {key: sum(oracle[key][g] for g in groups) for key in oracle}
+        withEnergy = context.getState(getEnergy=True, getParameterDerivatives=True, groups=groups)
+        derivativesOnly = context.getState(getParameterDerivatives=True, groups=groups)
+        for state in (withEnergy, derivativesOnly):
+            derivatives = state.getEnergyParameterDerivatives()
+            for key, name in names.items():
+                ASSERT_EQUAL_TOL(expected[key], derivatives[name], tol)
+        total = sum(data["scales"][key]*expected[key] for key in expected)
+        ASSERT_EQUAL_TOL(total, withEnergy.getPotentialEnergy(), tol)
