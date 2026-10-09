@@ -25,8 +25,6 @@
 #include <utility>
 #include <vector>
 
-using namespace std;
-
 namespace NonbondedSlicing {
 
 /**
@@ -174,14 +172,14 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
 
         int numSubsets, numSlices;
         bool hasDerivatives;
-        vector<int> subsetsVec;
-        vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
-        vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
-        vector<ScalingParameterInfo> sliceScalingParams;
+        std::vector<int> subsetsVec;
+        std::vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
+        std::vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
+        std::vector<ScalingParameterInfo> sliceScalingParams;
         AddEnergyPostComputation* addEnergy;
 
         std::string getDerivativeExpression(std::string param, bool conditionCoulomb, bool conditionLJ);
-        std::string getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
+        std::string getCoulombDerivativeCode(ComputeContext& cc, std::vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
 
         double totalCharge;
     };
