@@ -12,6 +12,9 @@
  * Shared test body for the CUDA VkFFT and cuFFT implementations.
  */
 
+#ifndef NONBONDED_SLICING_CUDA_FFT3D_TESTS_H_
+#define NONBONDED_SLICING_CUDA_FFT3D_TESTS_H_
+
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/cuda/CudaArray.h"
 #include "openmm/cuda/CudaContext.h"
@@ -162,3 +165,5 @@ int runFFT3DTests(int argc, char* argv[]) {
     cout << "Done" << endl;
     return 0;
 }
+
+#endif

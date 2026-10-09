@@ -387,10 +387,6 @@ public:
      */
     void setUseCuFFT(bool use);
 
-    /*
-     * Add methods for casting a Force to a SlicedNonbondedForce.
-    */
-
     %newobject _deserialize;
     %extend {
         static NonbondedSlicing::SlicedNonbondedForce* _deserialize(const std::string& xml) {
@@ -417,6 +413,10 @@ public:
             def __deepcopy__(self, memo):
                 return self.__copy__()
         %}
+
+        /*
+         * Add methods for casting a Force to a SlicedNonbondedForce.
+        */
 
         static NonbondedSlicing::SlicedNonbondedForce& cast(OpenMM::Force& force) {
             return dynamic_cast<NonbondedSlicing::SlicedNonbondedForce&>(force);

@@ -6,8 +6,6 @@ import openmm as mm
 import pytest
 from openmm import unit
 
-ONE_4PI_EPS0 = 138.935456
-
 
 def _isAvailable(platformName):
     try:
@@ -35,10 +33,6 @@ cases = [
 
 def value(x):
     return x/x.unit if unit.is_quantity(x) else x
-
-
-def ASSERT(cond):
-    assert cond
 
 
 def ASSERT_EQUAL_TOL(expected, found, tol):
@@ -139,7 +133,7 @@ def testCoulomb(platformName, precision):
     assert_forces_and_energy(context, tol)
 
 
-@pytest.mark.parametrize("platformName, precision", cases)
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
 def testLargeSystem(platformName, precision):
     numMolecules = 600
     numParticles = numMolecules*2

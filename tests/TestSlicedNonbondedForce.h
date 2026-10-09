@@ -1057,12 +1057,18 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     string param01 = includeCoulomb ? "lambda" : "sqrtLambda";
     sliced->addGlobalParameter(param01, 1);
     for (int s = 0; s < numSubsets; s++)
-        if (s != 1)
+        if (s != 1 && !(numSubsets == 3 && s == 2))
             sliced->addScalingParameter(param01, s, 1, includeCoulomb, includeLJ);
 
     string param11 = includeCoulomb ? "lambdaSq" : "lambda";
     sliced->addGlobalParameter(param11, 1);
     sliced->addScalingParameter(param11, 1, 1, includeCoulomb, includeLJ);
+
+    string param21 = param01 + "2";
+    if (numSubsets == 3) {
+        sliced->addGlobalParameter(param21, 1);
+        sliced->addScalingParameter(param21, 2, 1, includeCoulomb, includeLJ);
+    }
 
     system1.addForce(nonbonded);
     system2.addForce(sliced);
@@ -1081,7 +1087,13 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
         int si = sliced->getParticleSubset(i);
         int sj = sliced->getParticleSubset(j);
         if (si == 1 || sj == 1) {
-            string parameter = si == sj ? param11 : param01;
+            string parameter;
+            if (si == sj)
+                parameter = param11;
+            else if (numSubsets == 3 && (si == 2 || sj == 2))
+                parameter = param21;
+            else
+                parameter = param01;
             exceptionScale[k] = make_pair(includeCoulomb ? parameter : "one", includeLJ ? parameter : "one");
         }
     }
@@ -1122,6 +1134,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     map<string, double> value;
     value["one"] = 1;
     value["lambda"] = value["sqrtLambda"] = value["lambdaSq"] = 0;
+    if (numSubsets == 3)
+        value[param21] = value[param01];
     for (int k = 0; k < numParticles; k++)
         nonbonded->setParticleParameters(
             k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
@@ -1147,6 +1161,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param01, value[param01]);
     context2.setParameter(param11, value[param11]);
+    if (numSubsets == 3)
+        context2.setParameter(param21, value[param21]);
 
     // Direct space
 
@@ -1174,6 +1190,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     value["lambda"] = 0.5;
     value["sqrtLambda"] = sqrt(value["lambda"]);
     value["lambdaSq"] = value["lambda"]*value["lambda"];
+    if (numSubsets == 3)
+        value[param21] = value[param01];
     for (int k = 0; k < numParticles; k++)
         nonbonded->setParticleParameters(
             k, q(k)*value[particleScale[k].first], 1, eps*value[particleScale[k].second]
@@ -1199,6 +1217,8 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     nonbonded->updateParametersInContext(context1);
     context2.setParameter(param01, value[param01]);
     context2.setParameter(param11, value[param11]);
+    if (numSubsets == 3)
+        context2.setParameter(param21, value[param21]);
 
     // Direct space
 
@@ -1225,10 +1245,16 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
 
     sliced->addEnergyParameterDerivative(param01);
     sliced->addEnergyParameterDerivative(param11);
+    if (numSubsets == 3)
+        sliced->addEnergyParameterDerivative(param21);
     context2.reinitialize(true);
     state2 = context2.getState(State::ParameterDerivatives);
     map<string, double> derivatives = state2.getEnergyParameterDerivatives();
-    assertEqualTo(energy_lambda_one - energy_lambda_zero, derivatives[param01]+derivatives[param11], tol);
+    assertEqualTo(
+        energy_lambda_one - energy_lambda_zero,
+        derivatives[param01]+derivatives[param11]+derivatives[param21],
+        tol
+    );
 
     // Sum of derivatives
 
@@ -1261,7 +1287,7 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     context2.reinitialize(true);
     state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     derivatives = state2.getEnergyParameterDerivatives();
-    double sum = derivatives[param01]+derivatives[param11]+derivatives["remainder"];
+    double sum = derivatives[param01]+derivatives[param11]+derivatives[param21]+derivatives["remainder"];
     assertEqualTo(energy, sum, tol);
 }
 

@@ -1,6 +1,10 @@
+#ifndef NONBONDED_SLICING_TESTS_ASSERTION_UTILITIES_H_
+#define NONBONDED_SLICING_TESTS_ASSERTION_UTILITIES_H_
+
 #include "openmm/OpenMMException.h"
 #include "openmm/Vec3.h"
 #include <math.h>
+#include <sstream>
 #include <vector>
 #include <iostream>
 
@@ -42,3 +46,5 @@
     assertEnergy(state0, state1, tol); \
     assertForces(state0, state1, tol); \
 }
+
+#endif
