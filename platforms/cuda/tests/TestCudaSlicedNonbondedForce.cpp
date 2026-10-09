@@ -11,7 +11,6 @@
 #include "CudaNonbondedSlicingTests.h"
 #include "TestSlicedNonbondedForce.h"
 #include "openmm/NonbondedForce.h"
-// #include <cuda.h>
 #include <string>
 
 void testParallelComputation(SlicedNonbondedForce::NonbondedMethod method) {
@@ -140,27 +139,6 @@ void testDeterministicForces() {
     }
 }
 
-// bool canRunHugeTest() {
-//     // Create a minimal context just to see which device is being used.
-
-//     System system;
-//     system.addParticle(1.0);
-//     VerletIntegrator integrator(1.0);
-//     Context context(system, integrator, platform);
-//     int deviceIndex = stoi(platform.getPropertyValue(context, CudaPlatform::CudaDeviceIndex()));
-
-//     // Find out how much memory the device has.
-
-//     CUdevice device;
-//     cuDeviceGet(&device, deviceIndex);
-//     size_t memory;
-//     cuDeviceTotalMem(&memory, device);
-
-//     // Only run the huge test if the device has at least 4 GB of memory.
-
-//     return (memory >= 4L*(1<<30));
-// }
-
 void testUseCuFFT() {
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
@@ -231,6 +209,4 @@ void runPlatformTests() {
     testReordering();
     testDeterministicForces();
     testUseCuFFT();
-    // if (canRunHugeTest())
-    //     testHugeSystem();
 }

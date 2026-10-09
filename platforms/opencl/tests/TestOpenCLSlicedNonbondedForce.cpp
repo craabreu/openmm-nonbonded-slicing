@@ -108,37 +108,10 @@ void testReordering() {
     }
 }
 
-// bool canRunHugeTest() {
-//     // Create a minimal context just to see which platform and device are being used.
-
-//     System system;
-//     system.addParticle(1.0);
-//     VerletIntegrator integrator(1.0);
-//     Context context(system, integrator, platform);
-//     int platformIndex = stoi(platform.getPropertyValue(context, OpenCLPlatform::OpenCLPlatformIndex()));
-//     int deviceIndex = stoi(platform.getPropertyValue(context, OpenCLPlatform::OpenCLDeviceIndex()));
-
-//     // Find out how much memory the device has.
-
-//     vector<cl::Platform> platforms;
-//     cl::Platform::get(&platforms);
-//     vector<cl::Device> devices;
-//     platforms[platformIndex].getDevices(CL_DEVICE_TYPE_ALL, &devices);
-//     long long memory = devices[deviceIndex].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
-
-//     // Only run the huge test if the device has at least 4 GB of memory.
-
-//     return (memory >= 4*(long long)(1<<30));
-// }
-
 void runPlatformTests() {
     testParallelComputation(SlicedNonbondedForce::NoCutoff);
     testParallelComputation(SlicedNonbondedForce::Ewald);
     testParallelComputation(SlicedNonbondedForce::PME);
     testParallelComputation(SlicedNonbondedForce::LJPME);
     testReordering();
-    // if (canRunHugeTest()) {
-    //     double tol = (platform.getPropertyDefaultValue("Precision") == "double" ? 1e-4 : 1e-3);
-    //     testHugeSystem(platform, tol);
-    // }
 }

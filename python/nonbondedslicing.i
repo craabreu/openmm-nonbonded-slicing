@@ -24,20 +24,6 @@ __version__ = "@CMAKE_PROJECT_VERSION@"
 %}
 
 /*
- * Add units to function outputs.
-*/
-
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getPMEParametersInContext(
-        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
-    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
-%}
-
-%pythonappend NonbondedSlicing::SlicedNonbondedForce::getLJPMEParametersInContext(
-        const openMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const %{
-    val[0] = unit.Quantity(val[0], 1/unit.nanometers)
-%}
-
-/*
  * Convert C++ exceptions to Python exceptions.
 */
 
@@ -56,7 +42,6 @@ namespace NonbondedSlicing {
 %apply int& OUTPUT {int& nx};
 %apply int& OUTPUT {int& ny};
 %apply int& OUTPUT {int& nz};
-%apply const std::string& OUTPUT {const std::string& parameter};
 
 /**
  * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
@@ -449,6 +434,5 @@ public:
 %clear int& nx;
 %clear int& ny;
 %clear int& nz;
-%clear std::string& parameter;
 
 }
