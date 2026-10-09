@@ -318,3 +318,80 @@ jobs:
           name: wheel-macos-${{ matrix.arch }}-${{ matrix.openmm }}-${{ matrix.python }}
           path: dist/*.whl
           if-no-files-found: error
+
+  publish:
+    needs: [setup, linux, cuda, cuda-check, macos]
+    if: needs.setup.outputs.target != 'none'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.target }}
+    permissions:
+      id-token: write
+    env:
+      REPOSITORY_URL: ${{ needs.setup.outputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: downloaded
+          merge-multiple: true
+      - name: "Sort wheels by release and kind"
+        run: |
+          N=$(python3 -c "import json; print(len(json.load(open('devtools/wheels/openmm-versions.json'))))")
+          if [ "$N" -gt 4 ]; then echo "Add publish slots for post numbers >= 4"; exit 1; fi
+          python3 devtools/wheels/package.py arrange downloaded out --expected $((N * (5 + 2 + 10)))
+          ls -R out
+      # Releases in increasing post order; within each, the CUDA add-ons before the base wheels
+      - if: hashFiles('out/0-cuda/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/0-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/0-base/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/0-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/1-cuda/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/1-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/1-base/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/1-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/2-cuda/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/2-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/2-base/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/2-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/3-cuda/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/3-cuda, repository-url: "${{ env.REPOSITORY_URL }}"}
+      - if: hashFiles('out/3-base/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: out/3-base, repository-url: "${{ env.REPOSITORY_URL }}"}
+
+  resolution:
+    needs: [setup, publish]
+    if: needs.setup.outputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
+          path: src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: "Each OpenMM pin resolves to its release"
+        run: |
+          python tools/devtools/wheels/versions.py pins src | while read PIN EXPECTED; do
+            python -m venv /tmp/env-$EXPECTED
+            for attempt in 1 2 3 4 5; do
+              /tmp/env-$EXPECTED/bin/pip install -q --index-url https://test.pypi.org/simple/ \
+                --extra-index-url https://pypi.org/simple/ "$PIN" "openmm-nonbonded-slicing==${EXPECTED%%.post*}.*" && break
+              sleep 60
+            done
+            GOT=$(/tmp/env-$EXPECTED/bin/python -c "from importlib.metadata import version; print(version('openmm-nonbonded-slicing'))")
+            echo "$PIN -> $GOT (expected $EXPECTED)"
+            test "$GOT" = "$EXPECTED"
+          done
