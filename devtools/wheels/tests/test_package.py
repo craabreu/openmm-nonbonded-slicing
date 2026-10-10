@@ -148,7 +148,8 @@ def test_arrange_orders_by_post_and_kind(tmp_path):
     package.arrange(source, destination, expected=None)
     assert sorted(p.name for p in (destination / "0-base").iterdir()) == [names[0]]
     assert sorted(p.name for p in (destination / "2-base").iterdir()) == [names[1]]
-    assert sorted(p.name for p in (destination / "2-cuda").iterdir()) == [names[2]]
+    # Each CUDA add-on is its own PyPI project, published from its own environment
+    assert sorted(p.name for p in (destination / "2-cuda-12").iterdir()) == [names[2]]
 
 
 def test_arrange_checks_count(tmp_path):

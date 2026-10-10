@@ -147,7 +147,8 @@ def arrange(source, destination, expected):
         if match is None:
             raise SystemExit(f"unexpected wheel {wheel.name}")
         post = re.search(r"\.post(\d+)$", match["version"])
-        kind = "cuda" if "_cuda_" in match["dist"] else "base"
+        cuda = re.search(r"_cuda_(\d+)$", match["dist"])
+        kind = f"cuda-{cuda.group(1)}" if cuda else "base"
         target = Path(destination) / f"{post.group(1) if post else 0}-{kind}"
         target.mkdir(parents=True, exist_ok=True)
         shutil.copy2(wheel, target / wheel.name)

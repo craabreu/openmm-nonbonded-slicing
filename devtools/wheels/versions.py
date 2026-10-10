@@ -102,6 +102,7 @@ def main(argv=None):
     command = commands.add_parser("pins", help="print '<openmm pin> <expected release>' lines")
     command.add_argument("source_dir")
     commands.add_parser("count", help="print the number of wheels in a full build")
+    commands.add_parser("cudas", help="print the CUDA major versions as JSON")
     args = parser.parse_args(argv)
 
     entries = load_versions()
@@ -113,6 +114,8 @@ def main(argv=None):
         print(entries[args.minor][args.name])
     elif args.command == "count":
         print(wheel_count(entries))
+    elif args.command == "cudas":
+        print(json.dumps(list(CUDAS)))
     elif args.command == "pins":
         base = source_version(args.source_dir)
         for entry in entries.values():

@@ -28,9 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read  # to read the protection rules of the pypi environment
+      actions: read  # to read the protection rules of the pypi environments
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      cudas: ${{ steps.matrix.outputs.cudas }}
       ref: ${{ steps.target.outputs.ref }}
       target: ${{ steps.target.outputs.target }}
     steps:
@@ -70,12 +71,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          REVIEWERS=$(gh api repos/$REPOSITORY/environments/pypi \
-            --jq '[.protection_rules[]? | select(.type == "required_reviewers")] | length' || echo 0)
-          if [ "$REVIEWERS" = "0" ]; then
-            echo "::error::Create the 'pypi' environment with a required reviewer before publishing to PyPI"
-            exit 1
-          fi
+          ENVIRONMENTS="pypi"
+          for CUDA in $(python devtools/wheels/versions.py cudas | tr -d '[],'); do ENVIRONMENTS="$ENVIRONMENTS pypi-cuda-$CUDA"; done
+          for ENVIRONMENT in $ENVIRONMENTS; do
+            REVIEWERS=$(gh api repos/$REPOSITORY/environments/$ENVIRONMENT \
+              --jq '[.protection_rules[]? | select(.type == "required_reviewers")] | length' || echo 0)
+            if [ "$REVIEWERS" = "0" ]; then
+              echo "::error::Create the '$ENVIRONMENT' environment with a required reviewer before publishing to PyPI"
+              exit 1
+            fi
+          done
       - id: matrix
         name: "Build matrix"
         env:
@@ -86,6 +91,7 @@ jobs:
           else
             echo "matrix=$(python devtools/wheels/versions.py matrix --full)" >> $GITHUB_OUTPUT
           fi
+          echo "cudas=$(python devtools/wheels/versions.py cudas)" >> $GITHUB_OUTPUT
 
   linux:
     needs: setup
@@ -365,11 +371,19 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  publish:
+  # Each PyPI project has its own environment: PyPI accepts a pending trusted publisher
+  # (owner, repository, workflow, environment) for only one project.
+  # The CUDA add-ons go first, so that no base release is visible without its extras.
+  publish-cuda:
     needs: [setup, linux, cuda, cuda-check, macos]
     if: needs.setup.outputs.target != 'none'
+    name: "Publish the CUDA ${{ matrix.cuda }} add-on"
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda: ${{ fromJSON(needs.setup.outputs.cudas) }}
+    environment: ${{ needs.setup.outputs.target }}-cuda-${{ matrix.cuda }}
     runs-on: ubuntu-latest
-    environment: ${{ needs.setup.outputs.target }}
     permissions:
       contents: read
       id-token: write
@@ -382,35 +396,58 @@ jobs:
           pattern: wheel-*
           path: downloaded
           merge-multiple: true
-      - name: "Sort wheels by release and kind"
+      - name: "Sort wheels by release and project"
         run: |
           N=$(python3 -c "import json; print(len(json.load(open('devtools/wheels/openmm-versions.json'))))")
           if [ "$N" -gt 4 ]; then echo "Add publish slots for post numbers >= 4"; exit 1; fi
           python3 devtools/wheels/package.py arrange downloaded out --expected $(python3 devtools/wheels/versions.py count)
           ls -R out
-      # Releases in increasing post order; within each, the CUDA add-ons before the base wheels.
-      # skip-existing lets a failed publish be re-run: PyPI never accepts a file name twice.
-      - if: hashFiles('out/0-cuda/*.whl') != ''
+      # Releases in increasing post order; skip-existing lets a failed publish be re-run
+      - if: hashFiles('out/0-cuda-${{ matrix.cuda }}/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/0-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
+        with: {packages-dir: "out/0-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
+      - if: hashFiles('out/1-cuda-${{ matrix.cuda }}/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: "out/1-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
+      - if: hashFiles('out/2-cuda-${{ matrix.cuda }}/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: "out/2-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
+      - if: hashFiles('out/3-cuda-${{ matrix.cuda }}/*.whl') != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: "out/3-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
+
+  publish:
+    needs: [setup, publish-cuda]
+    environment: ${{ needs.setup.outputs.target }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REPOSITORY_URL: ${{ needs.setup.outputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: downloaded
+          merge-multiple: true
+      - name: "Sort wheels by release and project"
+        run: |
+          N=$(python3 -c "import json; print(len(json.load(open('devtools/wheels/openmm-versions.json'))))")
+          if [ "$N" -gt 4 ]; then echo "Add publish slots for post numbers >= 4"; exit 1; fi
+          python3 devtools/wheels/package.py arrange downloaded out --expected $(python3 devtools/wheels/versions.py count)
+          ls -R out
+      # Releases in increasing post order; skip-existing lets a failed publish be re-run
       - if: hashFiles('out/0-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: out/0-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/1-cuda/*.whl') != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/1-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/1-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: out/1-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/2-cuda/*.whl') != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/2-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/2-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: out/2-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/3-cuda/*.whl') != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with: {packages-dir: out/3-cuda, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
       - if: hashFiles('out/3-base/*.whl') != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: out/3-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
