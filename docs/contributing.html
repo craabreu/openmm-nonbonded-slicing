@@ -104,6 +104,23 @@ articles, and such.</p>
 </li>
 <li><p>Submit a pull request through the GitHub website.</p></li>
 </ol>
+<section id="releasing-on-pypi">
+<h3>Releasing on PyPI<a class="headerlink" href="#releasing-on-pypi" title="Link to this heading">¶</a></h3>
+<p>Pushing a <code class="docutils literal notranslate"><span class="pre">vX.Y.Z</span></code> tag builds and tests wheels for every OpenMM version listed in
+<code class="docutils literal notranslate"><span class="pre">devtools/wheels/openmm-versions.json</span></code> and publishes them as <code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code>, <code class="docutils literal notranslate"><span class="pre">X.Y.Z.post1</span></code>, …
+(one release per OpenMM minor version). Each PyPI project is published from its own GitHub
+environment, which needs a required reviewer and a trusted publisher on PyPI: <code class="docutils literal notranslate"><span class="pre">pypi</span></code> for
+<code class="docutils literal notranslate"><span class="pre">openmm-nonbonded-slicing</span></code> and <code class="docutils literal notranslate"><span class="pre">pypi-cuda-12</span></code>/<code class="docutils literal notranslate"><span class="pre">pypi-cuda-13</span></code> for the CUDA add-ons
+(<code class="docutils literal notranslate"><span class="pre">testpypi</span></code>, <code class="docutils literal notranslate"><span class="pre">testpypi-cuda-12</span></code> and <code class="docutils literal notranslate"><span class="pre">testpypi-cuda-13</span></code> on TestPyPI). The add-ons are
+published first, then the base package.</p>
+<p>To publish an existing tag, or to try a release on TestPyPI first, run the <em>Wheels</em> workflow
+manually with <code class="docutils literal notranslate"><span class="pre">ref</span></code> set to the tag and <code class="docutils literal notranslate"><span class="pre">target</span></code> set to <code class="docutils literal notranslate"><span class="pre">testpypi</span></code> or <code class="docutils literal notranslate"><span class="pre">pypi</span></code>.</p>
+<p>To support a new OpenMM minor version, add an entry to <code class="docutils literal notranslate"><span class="pre">openmm-versions.json</span></code> with the next
+post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
+(the header of <code class="docutils literal notranslate"><span class="pre">openmm/openmm.py</span></code>), then publish that post-release for the current version.
+The CUDA toolkits that build the CUDA add-ons are set in <code class="docutils literal notranslate"><span class="pre">CUDAS</span></code> of <code class="docutils literal notranslate"><span class="pre">devtools/wheels/versions.py</span></code>.
+The PyPI project page shows the <code class="docutils literal notranslate"><span class="pre">README.md</span></code> of the published source.</p>
+</section>
 <section id="pull-request-guidelines">
 <h3>Pull Request Guidelines<a class="headerlink" href="#pull-request-guidelines" title="Link to this heading">¶</a></h3>
 <p>If you need some code review or feedback while you’re developing the code just make the pull request.</p>
