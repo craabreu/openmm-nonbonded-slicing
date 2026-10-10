@@ -166,7 +166,9 @@ jobs:
             https://github.com/mamba-org/micromamba-releases/releases/download/2.0.5-0/micromamba-linux-64
           chmod +x /tmp/micromamba
           MAMBA_ROOT_PREFIX=/tmp/mamba /tmp/micromamba create -q -y -p /opt/pocl -c conda-forge pocl-cpu=7.1
-          export OCL_ICD_VENDORS=/opt/pocl/etc/OpenCL/vendors
+          mkdir -p /etc/OpenCL/vendors && cp /opt/pocl/etc/OpenCL/vendors/*.icd /etc/OpenCL/vendors/
+          POCL_DEBUG=err,warning /opt/build-env/bin/python -c "import ctypes; n = ctypes.c_uint(); \
+            r = ctypes.CDLL('libOpenCL.so.1').clGetPlatformIDs(0, None, ctypes.byref(n)); print('OpenCL platforms:', r, n.value)"
           VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
           /opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python -m venv /tmp/test-env
           /tmp/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
