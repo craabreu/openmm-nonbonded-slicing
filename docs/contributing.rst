@@ -80,6 +80,8 @@ manually with ``ref`` set to the tag and ``target`` set to ``testpypi`` or ``pyp
 To support a new OpenMM minor version, add an entry to ``openmm-versions.json`` with the next
 post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
 (the header of ``openmm/openmm.py``), then publish that post-release for the current version.
+The CUDA toolkits that build the CUDA add-ons are set in ``CUDAS`` of ``devtools/wheels/versions.py``.
+The PyPI project page shows the ``README.md`` of the published source.
 
 Pull Request Guidelines
 -----------------------

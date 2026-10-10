@@ -125,8 +125,17 @@ def check_wheel(wheel, required):
         raise SystemExit(f"{wheel}:\n  " + "\n  ".join(problems))
 
 
-def missing_libraries(ldd_output):
-    return set(re.findall(r"^\s*(\S+) => not found", ldd_output, re.MULTILINE))
+def link_problems(ldd_output):
+    """Problems in `ldd -r` output, other than those of a machine without the NVIDIA driver."""
+    problems = [f"missing library {name}"
+                for name in re.findall(r"^\s*(\S+) => not found", ldd_output, re.MULTILINE)
+                if name != "libcuda.so.1"]
+    # The driver API (cuInit, cuMemAlloc_v2, ...) lives in libcuda.so.1
+    problems += [f"undefined symbol {name}"
+                 for name in re.findall(r"^undefined symbol: (\S+)", ldd_output, re.MULTILINE)
+                 if not re.match(r"cu[A-Z]", name)]
+    problems += re.findall(r"^.*version `.*' not found.*$", ldd_output, re.MULTILINE)
+    return problems
 
 
 def arrange(source, destination, expected):

@@ -13,7 +13,8 @@ from pathlib import Path
 VERSIONS_FILE = Path(__file__).with_name("openmm-versions.json")
 PYTHONS = ["3.10", "3.11", "3.12", "3.13", "3.14"]
 REDUCED_PYTHON = "3.12"
-CUDAS = [12, 13]
+# CUDA toolkit used to build each CUDA add-on (any release of that major version runs it)
+CUDAS = {12: "12.9", 13: "13.0"}
 MACOS = [
     {"runner": "macos-15", "arch": "arm64", "target": "11.0"},
     {"runner": "macos-15-intel", "arch": "x86_64", "target": "10.13"},
@@ -78,7 +79,7 @@ def build_matrix(entries, full):
             macos += [{"openmm": minor, "python": p, **mac} for p in _pythons(available, full)]
     return {
         "linux": [{"openmm": m, "python": p} for m in entries for p in _pythons(PYTHONS, full)],
-        "cuda": [{"openmm": m, "cuda": c} for m in entries for c in CUDAS],
+        "cuda": [{"openmm": m, "cuda": c, "toolkit": t} for m in entries for c, t in CUDAS.items()],
         "macos": macos,
     }
 

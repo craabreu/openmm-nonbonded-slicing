@@ -93,3 +93,8 @@ def test_wheel_count_matches_matrix():
     entries = versions.load_versions()
     matrix = versions.build_matrix(entries, full=True)
     assert versions.wheel_count(entries) == sum(len(jobs) for jobs in matrix.values())
+
+
+def test_cuda_jobs_name_their_toolkit():
+    matrix = versions.build_matrix(versions.load_versions(), full=False)
+    assert {(job["cuda"], job["toolkit"]) for job in matrix["cuda"]} == {(12, "12.9"), (13, "13.0")}

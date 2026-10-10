@@ -13,6 +13,7 @@ from versions import load_versions, release_version, requirement, source_version
 minor = os.environ["NBS_OPENMM_MINOR"]
 entry = load_versions()[minor]
 version = release_version(source_version(os.environ["NBS_SOURCE_DIR"]), entry["post"])
+readme = Path(os.environ["NBS_SOURCE_DIR"]) / "README.md"
 
 
 class BinaryDistribution(Distribution):
@@ -25,8 +26,7 @@ setup(
     name="openmm-nonbonded-slicing",
     version=version,
     description="An OpenMM plugin for slicing nonbonded interactions",
-    long_description=(Path(__file__).resolve().parents[2] / "README.md").read_text()
-    if (Path(__file__).resolve().parents[2] / "README.md").exists() else "",
+    long_description=readme.read_text() if readme.exists() else "",
     long_description_content_type="text/markdown",
     author="Charlles Abreu",
     url="https://github.com/craabreu/openmm-nonbonded-slicing",

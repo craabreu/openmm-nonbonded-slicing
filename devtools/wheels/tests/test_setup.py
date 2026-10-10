@@ -59,3 +59,15 @@ def test_cuda_wheel_metadata(tmp_path):
     assert set(meta.get_all("Requires-Dist")) == {
         "openmm-cuda-13<8.5,>=8.4.0.post2", "openmm-nonbonded-slicing==0.3.0"}
     assert wheel.name.endswith("-py3-none-manylinux_2_34_x86_64.whl")
+
+
+def test_description_comes_from_the_built_source(tmp_path):
+    # The project page must describe the release being built, not the tooling checkout
+    source = _source(tmp_path)
+    (source / "README.md").write_text("Release README\n")
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "nonbondedslicing.py").write_text("")
+    _, meta = _build(WHEELS, tmp_path / "out", {
+        "NBS_SOURCE_DIR": str(source), "NBS_OPENMM_MINOR": "8.4", "NBS_STAGE_DIR": str(stage)})
+    assert meta.get_payload().strip() == "Release README"

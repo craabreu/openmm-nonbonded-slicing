@@ -56,6 +56,9 @@ upgrading OpenMM if needed; to keep an older OpenMM, pin it in the same command,
 | `X.Y.Z.post1` | 8.5    |
 | `X.Y.Z.post2` | 8.6    |
 
+On Intel Macs, OpenMM 8.6 from PyPI only works with Python 3.10, so pip installs the OpenMM 8.5
+release there for Python 3.11 and later.
+
 Instructions for building from source are in the [documentation](https://craabreu.github.io/openmm-nonbonded-slicing/).
 
 Usage

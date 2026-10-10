@@ -74,13 +74,33 @@ def test_check_wheel_requires_opencl_plugin(tmp_path):
         package.check_wheel(wheel, REQUIRED)
 
 
-def test_missing_libraries():
-    output = (
-        "\tlibOpenMM.so => /x/OpenMM.libs/lib/libOpenMM.so (0x1)\n"
-        "\tlibcuda.so.1 => not found\n"
-        "\tlibcufft.so.11 => /x/nvidia/cufft/lib/libcufft.so.11 (0x2)\n"
+LDD = (
+    "\tlibOpenMM.so => /x/OpenMM.libs/lib/libOpenMM.so (0x1)\n"
+    "\tlibcuda.so.1 => not found\n"
+    "\tlibcufft.so.11 => /x/nvidia/cufft/lib/libcufft.so.11 (0x2)\n"
+    "undefined symbol: cuInit\t(/x/OpenMM.libs/lib/plugins/libNonbondedSlicingCUDA.so)\n"
+    "undefined symbol: cuMemAlloc_v2\t(/x/OpenMM.libs/lib/plugins/libOpenMMCUDA.so)\n"
+)
+
+
+def test_link_problems_allow_only_the_driver():
+    # Without a GPU, only libcuda.so.1 and the driver API (cuXxx) may be unresolved
+    assert package.link_problems(LDD) == []
+
+
+def test_link_problems_report_runtime_mismatches():
+    output = LDD + (
+        "\tlibnvrtc.so.12 => not found\n"
+        "undefined symbol: cudaGraphInstantiateWithParams\t(/x/libNonbondedSlicingCUDA.so)\n"
+        "undefined symbol: _ZN6OpenMM10CudaContext5fooEv\t(/x/libNonbondedSlicingCUDA.so)\n"
+        "/x/libNonbondedSlicingCUDA.so: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.32' not found\n"
     )
-    assert package.missing_libraries(output) == {"libcuda.so.1"}
+    assert package.link_problems(output) == [
+        "missing library libnvrtc.so.12",
+        "undefined symbol cudaGraphInstantiateWithParams",
+        "undefined symbol _ZN6OpenMM10CudaContext5fooEv",
+        "/x/libNonbondedSlicingCUDA.so: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.32' not found",
+    ]
 
 
 def test_inject_adds_staged_files(tmp_path):

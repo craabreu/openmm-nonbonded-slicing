@@ -17,12 +17,18 @@ on:
         type: choice
         options: ["testpypi", "pypi"]
 
+permissions:
+  contents: read
+
 env:
   OPENCL_HEADERS_TAG: v2025.07.22
 
 jobs:
   setup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # to read the protection rules of the pypi environment
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       ref: ${{ steps.target.outputs.ref }}
@@ -38,15 +44,23 @@ jobs:
           python -m pytest -q devtools/wheels/tests
       - id: target
         name: "Source ref and publishing target"
+        # User-controlled values go through the environment, never into the script text
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_TARGET: ${{ inputs.target }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "ref=${{ inputs.ref }}" >> $GITHUB_OUTPUT
-            echo "target=${{ inputs.target }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "ref=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            echo "ref=$INPUT_REF" >> $GITHUB_OUTPUT
+            echo "target=$INPUT_TARGET" >> $GITHUB_OUTPUT
+          elif [[ "$REF_TYPE" == "tag" ]]; then
+            echo "ref=$REF_NAME" >> $GITHUB_OUTPUT
             echo "target=pypi" >> $GITHUB_OUTPUT
           else
-            echo "ref=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "ref=$SHA" >> $GITHUB_OUTPUT
             echo "target=none" >> $GITHUB_OUTPUT
           fi
       - name: "Require approval for PyPI uploads"
@@ -54,8 +68,9 @@ jobs:
         if: steps.target.outputs.target == 'pypi'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          REVIEWERS=$(gh api repos/${{ github.repository }}/environments/pypi \
+          REVIEWERS=$(gh api repos/$REPOSITORY/environments/pypi \
             --jq '[.protection_rules[]? | select(.type == "required_reviewers")] | length' || echo 0)
           if [ "$REVIEWERS" = "0" ]; then
             echo "::error::Create the 'pypi' environment with a required reviewer before publishing to PyPI"
@@ -63,8 +78,10 @@ jobs:
           fi
       - id: matrix
         name: "Build matrix"
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          if [[ "$EVENT" == "pull_request" ]]; then
             echo "matrix=$(python devtools/wheels/versions.py matrix)" >> $GITHUB_OUTPUT
           else
             echo "matrix=$(python devtools/wheels/versions.py matrix --full)" >> $GITHUB_OUTPUT
@@ -144,11 +161,13 @@ jobs:
             --require 'OpenMM.libs/include/SlicedNonbondedForce.h'
       - name: "Test in a clean venv"
         run: |
+          # pocl gives the OpenCL tests a CPU device
+          dnf -y install epel-release && dnf -y install pocl
           VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
           /opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python -m venv /tmp/test-env
           /tmp/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
           /tmp/test-env/bin/pip check
-          cd /tmp && /tmp/test-env/bin/python $TOOLS/smoke.py base $VERSION
+          cd /tmp && /tmp/test-env/bin/python $TOOLS/smoke.py base $VERSION --opencl
           DESELECT=$(grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || echo "-k not testVersion")
           cd $SRC/python/tests && /tmp/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py $DESELECT
         env:
@@ -169,7 +188,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.setup.outputs.matrix).cuda }}
     env:
-      CUDA_VERSION: ${{ matrix.cuda == 12 && '12-9' || '13-0' }}
+      CUDA_VERSION: ${{ matrix.toolkit }}
     steps:
       - name: "Paths"
         # Inside a container, ${{ github.workspace }} is the host path; $GITHUB_WORKSPACE is the container's
@@ -195,14 +214,14 @@ jobs:
             cmake setuptools wheel delocate patchelf
           dnf -y install dnf-plugins-core
           dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
-          dnf -y install cuda-nvcc-$CUDA_VERSION cuda-cudart-devel-$CUDA_VERSION cuda-nvrtc-devel-$CUDA_VERSION \
-            cuda-driver-devel-$CUDA_VERSION libcufft-devel-$CUDA_VERSION
+          V=${CUDA_VERSION/./-}
+          dnf -y install cuda-nvcc-$V cuda-cudart-devel-$V cuda-nvrtc-devel-$V cuda-driver-devel-$V libcufft-devel-$V
       - name: "Build"
         run: |
           OMM=$(python -c "import openmm.version as v, os; print(os.path.dirname(v.openmm_library_path))")
           cmake -S $SRC -B build -DCMAKE_BUILD_TYPE=Release \
             -DOPENMM_DIR=$OMM -DOPENMM_VERSION=$(python -c "import openmm; print(openmm.__version__)") \
-            -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCUDAToolkit_ROOT=/usr/local/cuda-${CUDA_VERSION/-/.} \
+            -DCMAKE_INSTALL_PREFIX=$STAGE/OpenMM.libs -DCUDAToolkit_ROOT=/usr/local/cuda-$CUDA_VERSION \
             -DPLUGIN_BUILD_OPENCL_LIB=OFF -DPLUGIN_BUILD_PYTHON_WRAPPERS=OFF
           grep -q "PLUGIN_BUILD_CUDA_LIB:BOOL=ON" build/CMakeCache.txt
           cmake --build build -j4 --target install
@@ -240,9 +259,12 @@ jobs:
           path: src
       - uses: actions/download-artifact@v4
         with:
-          pattern: wheel-*-${{ matrix.openmm }}-*
+          name: wheel-linux-${{ matrix.openmm }}-3.12
           path: wheels
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel-cuda-${{ matrix.openmm }}-${{ matrix.cuda }}
+          path: wheels
       - name: "Install with the extra and check the plugin's libraries"
         run: |
           PY=/opt/python/cp312-cp312/bin/python
@@ -341,6 +363,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.setup.outputs.target }}
     permissions:
+      contents: read
       id-token: write
     env:
       REPOSITORY_URL: ${{ needs.setup.outputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
@@ -400,23 +423,28 @@ jobs:
         with:
           python-version: "3.12"
       - name: "Each OpenMM pin resolves to its release"
+        # Our wheels come from TestPyPI as local files; every dependency comes from PyPI only
         run: |
-          python tools/devtools/wheels/versions.py pins src | while read PIN EXPECTED; do
-            python -m venv /tmp/env-$EXPECTED
+          python tools/devtools/wheels/versions.py pins src > pins.txt
+          while read PIN EXPECTED; do
             for attempt in 1 2 3 4 5; do
-              /tmp/env-$EXPECTED/bin/pip install -q --index-url https://test.pypi.org/simple/ \
-                --extra-index-url https://pypi.org/simple/ "$PIN" "openmm-nonbonded-slicing==${EXPECTED%%.post*}.*" && break
+              pip download -q --no-deps -d wheels --index-url https://test.pypi.org/simple/ \
+                "openmm-nonbonded-slicing==$EXPECTED" && break
               sleep 60
             done
+            ls wheels | grep -F -- "-$EXPECTED-"
+          done < pins.txt
+          while read PIN EXPECTED; do
+            python -m venv /tmp/env-$EXPECTED
+            /tmp/env-$EXPECTED/bin/pip install -q --find-links wheels "$PIN" "openmm-nonbonded-slicing==${EXPECTED%%.post*}.*"
             GOT=$(/tmp/env-$EXPECTED/bin/python -c "from importlib.metadata import version; print(version('openmm-nonbonded-slicing'))")
             echo "$PIN -> $GOT (expected $EXPECTED)"
             test "$GOT" = "$EXPECTED"
-          done
+          done < pins.txt
           # Without an OpenMM constraint, pip takes the newest post-release (and upgrades OpenMM)
-          LATEST=$(python tools/devtools/wheels/versions.py pins src | tail -1 | cut -d' ' -f2)
+          LATEST=$(tail -1 pins.txt | cut -d' ' -f2)
           python -m venv /tmp/env-latest
-          /tmp/env-latest/bin/pip install -q --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ "openmm-nonbonded-slicing==${LATEST%%.post*}.*"
+          /tmp/env-latest/bin/pip install -q --find-links wheels "openmm-nonbonded-slicing==${LATEST%%.post*}.*"
           GOT=$(/tmp/env-latest/bin/python -c "from importlib.metadata import version; print(version('openmm-nonbonded-slicing'))")
           echo "unconstrained -> $GOT (expected $LATEST)"
           test "$GOT" = "$LATEST"
