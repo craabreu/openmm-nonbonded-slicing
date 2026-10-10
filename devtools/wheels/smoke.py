@@ -59,31 +59,14 @@ def check_cuda(expected, cuda):
     assert not problems, "\n".join(problems) + f"\n{output}"
 
 
-def opencl_devices():
-    import ctypes
-
-    cl = ctypes.CDLL("libOpenCL.so.1")
-    count = ctypes.c_uint()
-    cl.clGetPlatformIDs(0, None, ctypes.byref(count))
-    platforms = (ctypes.c_void_p * count.value)()
-    cl.clGetPlatformIDs(count.value, platforms, None)
-    for platform in platforms:
-        devices = ctypes.c_uint()
-        status = cl.clGetDeviceIDs(ctypes.c_void_p(platform), ctypes.c_uint64(0xFFFFFFFF), 0, None, ctypes.byref(devices))
-        print(f"OpenCL platform {platform:#x}: status {status}, {devices.value} devices")
-    assert count.value > 0, "no OpenCL platforms"
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("kind", choices=["base", "cuda", "opencl-devices"])
-    parser.add_argument("expected", nargs="?")
+    parser.add_argument("kind", choices=["base", "cuda"])
+    parser.add_argument("expected")
     parser.add_argument("cuda", nargs="?")
     parser.add_argument("--opencl", action="store_true", help="also compare the OpenCL platform with Reference")
     args = parser.parse_args()
-    if args.kind == "opencl-devices":
-        opencl_devices()
-    elif args.kind == "base":
+    if args.kind == "base":
         check_base(args.expected, args.opencl)
     else:
         check_cuda(args.expected, args.cuda)
