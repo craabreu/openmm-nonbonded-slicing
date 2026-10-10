@@ -67,6 +67,26 @@ To set up `openmm-nonbonded-slicing` for local development:
 
 6. Submit a pull request through the GitHub website.
 
+Releasing on PyPI
+-----------------
+
+Pushing a ``vX.Y.Z`` tag builds and tests wheels for every OpenMM version listed in
+``devtools/wheels/openmm-versions.json`` and publishes them as ``X.Y.Z``, ``X.Y.Z.post1``, ...
+(one release per OpenMM minor version). Each PyPI project is published from its own GitHub
+environment, which needs a required reviewer and a trusted publisher on PyPI: ``pypi`` for
+``openmm-nonbonded-slicing`` and ``pypi-cuda-12``/``pypi-cuda-13`` for the CUDA add-ons
+(``testpypi``, ``testpypi-cuda-12`` and ``testpypi-cuda-13`` on TestPyPI). The add-ons are
+published first, then the base package.
+
+To publish an existing tag, or to try a release on TestPyPI first, run the *Wheels* workflow
+manually with ``ref`` set to the tag and ``target`` set to ``testpypi`` or ``pypi``.
+
+To support a new OpenMM minor version, add an entry to ``openmm-versions.json`` with the next
+post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
+(the header of ``openmm/openmm.py``), then publish that post-release for the current version.
+The CUDA toolkits that build the CUDA add-ons are set in ``CUDAS`` of ``devtools/wheels/versions.py``.
+The PyPI project page shows the ``README.md`` of the published source.
+
 Pull Request Guidelines
 -----------------------
 

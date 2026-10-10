@@ -10,3 +10,8 @@ profiling/
 docs/_build/
 docs/pythonapi/*.rst
 !docs/pythonapi/index.rst
+
+# wheel tooling
+devtools/wheels/**/build/
+devtools/wheels/**/*.egg-info/
+__pycache__/
