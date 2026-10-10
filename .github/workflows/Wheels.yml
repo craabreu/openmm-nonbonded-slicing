@@ -6,6 +6,7 @@ on:
     tags: ["v*"]
   pull_request:
     branches: ["main"]
+    paths-ignore: ["docs/**", ".github/workflows/Linux.yml", ".github/workflows/MacOS.yml", ".github/workflows/Doc.yml"]
   workflow_dispatch:
     inputs:
       ref:
@@ -256,7 +257,8 @@ jobs:
 
   cuda-check:
     needs: [setup, linux, cuda]
-    name: "Install check OpenMM ${{ matrix.openmm }} CUDA ${{ matrix.cuda }}"
+    # Matrix values in a name stay unexpanded when the job is skipped; GitHub appends them otherwise
+    name: "Install check"
     runs-on: ubuntu-latest
     container: quay.io/pypa/manylinux_2_34_x86_64
     strategy:
@@ -377,7 +379,7 @@ jobs:
   publish-cuda:
     needs: [setup, linux, cuda, cuda-check, macos]
     if: needs.setup.outputs.target != 'none'
-    name: "Publish the CUDA ${{ matrix.cuda }} add-on"
+    name: "Publish CUDA add-on"
     strategy:
       fail-fast: false
       matrix:

@@ -15,6 +15,7 @@ dependencies:
   - openmm =@OPENMM_VERSION@
   - pip >=22.2
   - pytest
+  - pytest-xdist
   - python
   - doxygen
   - setuptools

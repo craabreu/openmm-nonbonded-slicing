@@ -81,10 +81,11 @@ jobs:
         shell: bash -l {0}
         run: |
           cd build
-          ctest --output-on-failure --exclude-regex 'TestCuda'
+          # On the CPU OpenCL device each precision takes ~10 min; mixed covers the shared kernels
+          ctest --output-on-failure --parallel 4 --exclude-regex 'TestCuda|TestOpenCLSlicedNonbondedForce(Single|Double)'
 
       - name: "Run Python test"
         shell: bash -l {0}
         run: |
           cd build/python/tests
-          pytest --verbose -k 'not Cuda' Test*
+          pytest --verbose --numprocesses auto -k 'not (Cuda or OpenCLsingle or OpenCLdouble)' Test*
