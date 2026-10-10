@@ -365,8 +365,9 @@ jobs:
           $RUNNER_TEMP/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
           $RUNNER_TEMP/test-env/bin/pip check
           cd $RUNNER_TEMP && $RUNNER_TEMP/test-env/bin/python $TOOLS/smoke.py base $VERSION
-          DESELECT=$(grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || echo "-k not testVersion")
-          cd $SRC/python/tests && $RUNNER_TEMP/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py $DESELECT
+          K=""
+          grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || K="not testVersion"
+          cd $SRC/python/tests && $RUNNER_TEMP/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py -k "$K"
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-${{ matrix.arch }}-${{ matrix.openmm }}-${{ matrix.python }}
