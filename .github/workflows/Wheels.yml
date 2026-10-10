@@ -406,16 +406,16 @@ jobs:
           python3 devtools/wheels/package.py arrange downloaded out --expected $(python3 devtools/wheels/versions.py count)
           ls -R out
       # Releases in increasing post order; skip-existing lets a failed publish be re-run
-      - if: hashFiles('out/0-cuda-${{ matrix.cuda }}/*.whl') != ''
+      - if: hashFiles(format('out/0-cuda-{0}/*.whl', matrix.cuda)) != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: "out/0-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/1-cuda-${{ matrix.cuda }}/*.whl') != ''
+      - if: hashFiles(format('out/1-cuda-{0}/*.whl', matrix.cuda)) != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: "out/1-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/2-cuda-${{ matrix.cuda }}/*.whl') != ''
+      - if: hashFiles(format('out/2-cuda-{0}/*.whl', matrix.cuda)) != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: "out/2-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
-      - if: hashFiles('out/3-cuda-${{ matrix.cuda }}/*.whl') != ''
+      - if: hashFiles(format('out/3-cuda-{0}/*.whl', matrix.cuda)) != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: "out/3-cuda-${{ matrix.cuda }}", repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
 
