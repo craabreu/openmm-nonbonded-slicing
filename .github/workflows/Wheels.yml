@@ -2,11 +2,11 @@ name: Wheels
 
 on:
   push:
-    branches: ["main"]
     tags: ["v*"]
+  # Other changes are covered by the Linux and MacOS workflows
   pull_request:
     branches: ["main"]
-    paths-ignore: ["docs/**", ".github/workflows/Linux.yml", ".github/workflows/MacOS.yml", ".github/workflows/Doc.yml"]
+    paths: ["devtools/wheels/**", ".github/workflows/Wheels.yml", "python/**", "**/CMakeLists.txt", "**/*.cmake"]
   workflow_dispatch:
     inputs:
       ref:
