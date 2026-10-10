@@ -161,15 +161,21 @@ jobs:
             --require 'OpenMM.libs/include/SlicedNonbondedForce.h'
       - name: "Test in a clean venv"
         run: |
-          # pocl gives the OpenCL tests a CPU device
-          dnf -y install epel-release && dnf -y install pocl
+          # pocl gives the OpenCL tests a CPU device; EPEL has no pocl, so take conda-forge's
+          curl -fsSL -o /tmp/micromamba \
+            https://github.com/mamba-org/micromamba-releases/releases/download/2.0.5-0/micromamba-linux-64
+          chmod +x /tmp/micromamba
+          MAMBA_ROOT_PREFIX=/tmp/mamba /tmp/micromamba create -q -y -p /opt/pocl -c conda-forge pocl-cpu=7.1
+          export OCL_ICD_VENDORS=/opt/pocl/etc/OpenCL/vendors
           VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
           /opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python -m venv /tmp/test-env
           /tmp/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
           /tmp/test-env/bin/pip check
           cd /tmp && /tmp/test-env/bin/python $TOOLS/smoke.py base $VERSION --opencl
-          DESELECT=$(grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || echo "-k not testVersion")
-          cd $SRC/python/tests && /tmp/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py $DESELECT
+          # pocl gets PME wrong in double precision, even with OpenMM's own NonbondedForce
+          K="not OpenCLdouble"
+          grep -q packages_distributions $SRC/python/tests/TestSlicedNonbondedForce.py || K="$K and not testVersion"
+          cd $SRC/python/tests && /tmp/test-env/bin/python -m pytest -v TestSlicedNonbondedForce.py -k "$K"
         env:
           MATRIX_PYTHON: ${{ matrix.python }}
       - uses: actions/upload-artifact@v4
