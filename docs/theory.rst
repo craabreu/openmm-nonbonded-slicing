@@ -158,3 +158,62 @@ package vkFFT_ or cuFFT_ to speed-up parallel FFT calculations via batched trans
 .. _vkFFT:                https://github.com/DTolm/VkFFT
 .. _cuFFT:                https://docs.nvidia.com/cuda/cufft
 
+
+Performance
+===========
+
+The table below shows the cost of replacing the :OpenMM:`NonbondedForce` of a box of 16,814 TIP3P
+water molecules (50,442 atoms, 8 nm, PME with a 1 nm cutoff) by a :class:`~nonbondedslicing.SlicedNonbondedForce`
+with *n* subsets of whole molecules, on the CUDA platform in mixed precision (NVIDIA RTX 4090,
+OpenMM 8.6). Every slice has its own scaling parameter. A *step* is a step of
+``LangevinMiddleIntegrator`` with 2 fs, which computes only forces. An *evaluation* is a call to
+``getState`` with ``getForces=True`` and ``getEnergy=True`` and, in the last column, with
+``getParameterDerivatives=True`` and one requested derivative per slice.
+
+.. list-table::
+    :header-rows: 1
+    :align: center
+
+    * - Force
+      - Subsets
+      - Slices
+      - Step (ms)
+      - Evaluation (ms)
+      - Evaluation with derivatives (ms)
+    * - :OpenMM:`NonbondedForce`
+      - --
+      - --
+      - 0.25
+      - 0.56
+      - --
+    * - :class:`~nonbondedslicing.SlicedNonbondedForce`
+      - 1
+      - 1
+      - 0.30
+      - 0.62
+      - 1.15
+    * -
+      - 2
+      - 3
+      - 0.36
+      - 0.68
+      - 1.43
+    * -
+      - 4
+      - 10
+      - 0.65
+      - 0.94
+      - 2.87
+    * -
+      - 8
+      - 36
+      - 1.05
+      - 1.41
+      - 9.34
+
+The cost of a step grows sublinearly with the number of subsets: going from 1 to 8 subsets (and from
+1 to 36 slices) makes a step about 3.5 times as expensive. Requesting derivatives does not change
+the cost of a step, since derivatives are only computed along with the energy. Each requested
+derivative adds a per-pair accumulation in the direct-space kernel, so an evaluation with
+derivatives grows with their number. Derivatives are best requested only for the slices whose
+energies are needed, and only in the steps where they are reported.
