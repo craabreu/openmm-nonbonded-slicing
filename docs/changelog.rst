@@ -2,6 +2,20 @@
 Changelog
 =========
 
+0.4.0 (unreleased)
+------------------
+
+**Breaking changes**
+
+* Energy parameter derivatives are only computed along with the energy, as in
+  ``getState(getEnergy=True, getParameterDerivatives=True)``. Requested without the energy, they
+  are NaN on all platforms. ``deriv(energy, ...)`` in a ``CustomIntegrator`` is not affected.
+
+**Performance**
+
+* GPU platforms: requested derivatives no longer slow down steps that compute only forces, such as
+  molecular dynamics steps, and computing many derivatives is faster.
+
 0.3.0
 -----
 

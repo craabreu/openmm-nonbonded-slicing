@@ -82,8 +82,20 @@ namespace NonbondedSlicing {
  * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
  * its getEnergyParameterDerivatives_ method.  For this, such State must have been generated from an
- * :OpenMM:`Context` by passing ``True`` to the keyword ``getParameterDerivatives`` of the Context's
- * getState_ method.
+ * :OpenMM:`Context` by passing ``True`` to both keywords ``getEnergy`` and ``getParameterDerivatives``
+ * of the Context's getState_ method.
+ *
+ * .. important::
+ *
+ *     Derivatives are only computed along with the energy.  A State requested with
+ *     ``getParameterDerivatives=True`` but without ``getEnergy=True`` holds NaN for every requested
+ *     derivative, on all platforms.  If other forces in the System also contribute derivatives with
+ *     respect to the same parameter, their sum is NaN too.  In exchange, steps that compute only
+ *     forces, such as regular molecular dynamics steps, do not pay for the derivatives.  Expressions
+ *     like ``deriv(energy, lambda)`` in a CustomIntegrator_ always compute the energy, so they work as
+ *     usual.
+ *
+ * .. _CustomIntegrator: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomIntegrator.html
  *
  * .. _getState: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState
  *
@@ -344,6 +356,10 @@ public:
      * Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
      * or Coulomb contributions. Requesting the derivative with respect to non-scaling global
      * parameters will raise an exception.
+     *
+     * Derivatives are only computed along with the energy: pass both ``getEnergy=True`` and
+     * ``getParameterDerivatives=True`` to the Context's ``getState`` method. Without the energy,
+     * the requested derivatives are NaN.
      *
      * Parameters
      * ----------

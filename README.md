@@ -21,7 +21,9 @@ formed by one particle in subset $I$ and one in subset $J$, and $\lambda_{I,J}$ 
 By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in [Context] global parameters. Derivatives
 with respect to these variables can be requested and used, for instance, to report individual energy
-slice contributions or sums thereof via [getState] with option `getParameterDerivatives=True`.
+slice contributions or sums thereof via [getState] with options `getEnergy=True` and
+`getParameterDerivatives=True`. Derivatives are only computed along with the energy: without
+`getEnergy=True`, they are NaN.
 
 Documentation
 =============
