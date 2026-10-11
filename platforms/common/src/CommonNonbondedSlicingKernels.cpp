@@ -22,6 +22,7 @@
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include <assert.h>
 #include <cmath>
+#include <limits>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -145,7 +146,7 @@ public:
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if ((groups&(1<<forceGroup)) != 0) {
             event->wait();
-            if (includeEnergy || hasDerivatives)
+            if (includeEnergy)
                 addEnergyKernel->execute(pmeEnergyBuffer.getSize());
         }
         return 0.0;
@@ -172,13 +173,12 @@ public:
     }
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         double energy = 0.0;
-        if ((includeEnergy || hasDerivatives) && (groups&(1<<forceGroup)) != 0) {
+        if (includeEnergy && (groups&(1<<forceGroup)) != 0) {
             Vec3 a, b, c;
             cc.getPeriodicBoxVectors(a, b, c);
             double volume = a[0]*b[1]*c[2];
-            if (includeEnergy)
-                for (int slice = 0; slice < numSlices; slice++)
-                    energy += sliceLambdas[slice].y*coefficients[slice]/volume;
+            for (int slice = 0; slice < numSlices; slice++)
+                energy += sliceLambdas[slice].y*coefficients[slice]/volume;
             if (hasDerivatives) {
                 map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
                 for (int slice = 0; slice < numSlices; slice++) {
@@ -204,7 +204,7 @@ CommonCalcSlicedNonbondedForceKernel::~CommonCalcSlicedNonbondedForceKernel() {
     ContextSelector selector(cc);
 }
 
-string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string param, bool conditionCoulomb, bool conditionLJ) {
+string CommonCalcSlicedNonbondedForceKernel::getDerivativeCode(string param, string variable, string scale, bool conditionCoulomb, bool conditionLJ) {
     stringstream exprCoulomb, exprLJ, exprBoth;
     int countCoulomb = 0, countLJ = 0, countBoth = 0;
     for (int slice = 0; slice < numSlices; slice++) {
@@ -219,15 +219,16 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeExpression(string para
             exprLJ<<(countLJ++ ? " || " : "")<<"slice=="<<slice;
     }
 
-    stringstream derivative;
+    // Branches, not multiplications by the condition: each interaction belongs to a single slice,
+    // so it updates a single accumulator, which is double precision in mixed mode
+    stringstream code;
     if (countBoth)
-        derivative<<"("<<exprBoth.str()<<")*(clEnergy + ljEnergy)";
+        code<<"if ("<<exprBoth.str()<<") "<<variable<<" += "<<scale<<"(clEnergy + ljEnergy);"<<endl;
     if (countCoulomb)
-        derivative<<(countBoth ? " + " : "")<<"("<<exprCoulomb.str()<<")*clEnergy";
+        code<<"if ("<<exprCoulomb.str()<<") "<<variable<<" += "<<scale<<"clEnergy;"<<endl;
     if (countLJ)
-        derivative<<(countBoth+countCoulomb ? " + " : "")<<"("<<exprLJ.str()<<")*ljEnergy";
-
-    return derivative.str();
+        code<<"if ("<<exprLJ.str()<<") "<<variable<<" += "<<scale<<"ljEnergy;"<<endl;
+    return code.str();
 }
 
 string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign) {
@@ -670,9 +671,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             stringstream code;
             for (string param : requestedDerivatives) {
                 string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
-                string expression = getDerivativeExpression(param, hasCoulomb, doLJPME);
-                if (expression.length() > 0)
-                    code<<variableName<<" += "<<expression<<";"<<endl;
+                code<<getDerivativeCode(param, variableName, "", hasCoulomb, doLJPME);
             }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
             if (force.getIncludeDirectSpace())
@@ -712,11 +711,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
-        string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
-        if (expression.length() > 0)
-            code<<variableName<<" += interactionScale*("<<expression<<");"<<endl;
+        code<<getDerivativeCode(param, variableName, "interactionScale*", hasCoulomb, hasLJ);
     }
-    replacements["COMPUTE_DERIVATIVES"] = code.str();
+    replacements["COMPUTE_DERIVATIVES"] = "#ifdef INCLUDE_ENERGY\n"+code.str()+"#endif\n";
     source = cc.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cc.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), numParticles > 3000, true);
@@ -752,9 +749,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
-            string expression = getDerivativeExpression(param, hasCoulomb, hasLJ);
-            if (expression.length() > 0)
-                code<<variableName<<" += "<<expression<<";"<<endl;
+            code<<getDerivativeCode(param, variableName, "", hasCoulomb, hasLJ);
         }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
         if (force.getIncludeDirectSpace())
@@ -846,6 +841,13 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
 
 double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
     ContextSelector selector(cc);
+    // Energy parameter derivatives are only computed along with the energy. Without it, they are
+    // made NaN so that a request for derivatives alone cannot pass for a valid result.
+    if (hasDerivatives && !includeEnergy && (includeDirect || includeReciprocal)) {
+        map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
+        for (const string& param : requestedDerivatives)
+            energyParamDerivs[param] = numeric_limits<double>::quiet_NaN();
+    }
     if (!hasInitializedKernel) {
         hasInitializedKernel = true;
 
@@ -1281,7 +1283,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeEvalEnergyKernel->setArg<mm_float4>(6, recipBoxVectorsFloat[1]);
                 pmeEvalEnergyKernel->setArg<mm_float4>(7, recipBoxVectorsFloat[2]);
             }
-            if (includeEnergy || hasDerivatives)
+            if (includeEnergy)
                 pmeEvalEnergyKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             pmeConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             fft->execFFT(pmeGrid2, pmeGrid1, false);
@@ -1357,7 +1359,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 if (hasDerivatives)
                     cc.clearBuffer(pmeEnergyParamDerivBuffer);
             }
-            if (includeEnergy || hasDerivatives)
+            if (includeEnergy)
                 pmeDispersionEvalEnergyKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             pmeDispersionConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ);
             dispersionFft->execFFT(pmeGrid2, pmeGrid1, false);

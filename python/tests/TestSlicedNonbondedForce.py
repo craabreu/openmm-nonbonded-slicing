@@ -1,4 +1,5 @@
 import copy
+import math
 import pickle
 import random
 
@@ -271,7 +272,7 @@ def testDerivatives():
     system.addForce(force)
     context = mm.Context(system, mm.VerletIntegrator(0.01), mm.Platform.getPlatformByName("Reference"))
     context.setPositions(positions)
-    derivative = context.getState(getParameterDerivatives=True).getEnergyParameterDerivatives()["lambda"]
+    derivative = context.getState(getEnergy=True, getParameterDerivatives=True).getEnergyParameterDerivatives()["lambda"]
     energy = {}
     for scale in (0.0, 1.0):
         context.setParameter("lambda", scale)
@@ -429,10 +430,11 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
     for groups in ({0}, {1}, {0, 1}):
         expected = {key: sum(oracle[key][g] for g in groups) for key in oracle}
         withEnergy = context.getState(getEnergy=True, getParameterDerivatives=True, groups=groups)
-        derivativesOnly = context.getState(getParameterDerivatives=True, groups=groups)
-        for state in (withEnergy, derivativesOnly):
-            derivatives = state.getEnergyParameterDerivatives()
-            for key, name in names.items():
-                ASSERT_EQUAL_TOL(expected[key], derivatives[name], tol)
+        derivatives = withEnergy.getEnergyParameterDerivatives()
+        for key, name in names.items():
+            ASSERT_EQUAL_TOL(expected[key], derivatives[name], tol)
+        # Derivatives are only computed along with the energy
+        derivatives = context.getState(getParameterDerivatives=True, groups=groups).getEnergyParameterDerivatives()
+        assert all(math.isnan(derivatives[name]) for name in names.values())
         total = sum(data["scales"][key]*expected[key] for key in expected)
         ASSERT_EQUAL_TOL(total, withEnergy.getPotentialEnergy(), tol)

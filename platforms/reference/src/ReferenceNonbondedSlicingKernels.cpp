@@ -23,6 +23,7 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <limits>
 
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
 #include "internal/ReferenceSlicedLJCoulomb14.h"
@@ -261,7 +262,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         for (int term = 0; term < 2; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
             if (info.hasDerivative)
-                energyParamDerivs[info.name] += sliceEnergies[slice][term];
+                // As on the GPU platforms, derivatives are only computed along with the energy
+                energyParamDerivs[info.name] += includeEnergy ? sliceEnergies[slice][term] : numeric_limits<double>::quiet_NaN();
         }
 
     return energy;

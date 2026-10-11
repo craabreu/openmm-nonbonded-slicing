@@ -19,6 +19,7 @@
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "sfmt/SFMT.h"
+#include <cmath>
 #include <functional>
 
 using namespace NonbondedSlicing;
@@ -1248,13 +1249,18 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     if (numSubsets == 3)
         sliced->addEnergyParameterDerivative(param21);
     context2.reinitialize(true);
-    state2 = context2.getState(State::ParameterDerivatives);
+    state2 = context2.getState(State::Energy | State::ParameterDerivatives);
     map<string, double> derivatives = state2.getEnergyParameterDerivatives();
     assertEqualTo(
         energy_lambda_one - energy_lambda_zero,
         derivatives[param01]+derivatives[param11]+derivatives[param21],
         tol
     );
+
+    // Derivatives are only computed along with the energy
+
+    derivatives = context2.getState(State::ParameterDerivatives).getEnergyParameterDerivatives();
+    ASSERT(isnan(derivatives[param01]));
 
     // Sum of derivatives
 
