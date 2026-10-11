@@ -6,7 +6,7 @@ on:
   # Other changes are covered by the Linux and MacOS workflows
   pull_request:
     branches: ["main"]
-    paths: ["devtools/wheels/**", ".github/workflows/Wheels.yml", "python/**", "**/CMakeLists.txt", "**/*.cmake"]
+    paths: ["devtools/wheels/**", ".github/workflows/Wheels.yml", "python/setup.py", "**/CMakeLists.txt", "**/*.cmake"]
   workflow_dispatch:
     inputs:
       ref:

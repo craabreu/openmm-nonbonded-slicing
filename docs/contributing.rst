@@ -81,7 +81,7 @@ published first, then the base package.
 To publish an existing tag, or to try a release on TestPyPI first, run the *Wheels* workflow
 manually with ``ref`` set to the tag and ``target`` set to ``testpypi`` or ``pypi``.
 Pull requests build a reduced set of wheels only when they change the packaging or the build
-(``devtools/wheels``, ``python``, CMake files or the workflow itself).
+(``devtools/wheels``, ``python/setup.py``, CMake files or the workflow itself).
 
 To support a new OpenMM minor version, add an entry to ``openmm-versions.json`` with the next
 post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
