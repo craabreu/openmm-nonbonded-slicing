@@ -89,9 +89,11 @@ namespace NonbondedSlicing {
  *
  *     Derivatives are only computed along with the energy.  A State requested with
  *     ``getParameterDerivatives=True`` but without ``getEnergy=True`` holds NaN for every requested
- *     derivative, on all platforms.  In exchange, steps that compute only forces, such as regular
- *     molecular dynamics steps, do not pay for the derivatives.  Expressions like
- *     ``deriv(energy, lambda)`` in a CustomIntegrator_ always compute the energy, so they work as usual.
+ *     derivative, on all platforms.  If other forces in the System also contribute derivatives with
+ *     respect to the same parameter, their sum is NaN too.  In exchange, steps that compute only
+ *     forces, such as regular molecular dynamics steps, do not pay for the derivatives.  Expressions
+ *     like ``deriv(energy, lambda)`` in a CustomIntegrator_ always compute the energy, so they work as
+ *     usual.
  *
  * .. _CustomIntegrator: http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomIntegrator.html
  *
