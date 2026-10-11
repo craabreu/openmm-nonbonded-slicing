@@ -114,7 +114,9 @@ environment, which needs a required reviewer and a trusted publisher on PyPI: <c
 (<code class="docutils literal notranslate"><span class="pre">testpypi</span></code>, <code class="docutils literal notranslate"><span class="pre">testpypi-cuda-12</span></code> and <code class="docutils literal notranslate"><span class="pre">testpypi-cuda-13</span></code> on TestPyPI). The add-ons are
 published first, then the base package.</p>
 <p>To publish an existing tag, or to try a release on TestPyPI first, run the <em>Wheels</em> workflow
-manually with <code class="docutils literal notranslate"><span class="pre">ref</span></code> set to the tag and <code class="docutils literal notranslate"><span class="pre">target</span></code> set to <code class="docutils literal notranslate"><span class="pre">testpypi</span></code> or <code class="docutils literal notranslate"><span class="pre">pypi</span></code>.</p>
+manually with <code class="docutils literal notranslate"><span class="pre">ref</span></code> set to the tag and <code class="docutils literal notranslate"><span class="pre">target</span></code> set to <code class="docutils literal notranslate"><span class="pre">testpypi</span></code> or <code class="docutils literal notranslate"><span class="pre">pypi</span></code>.
+Pull requests build a reduced set of wheels only when they change the packaging or the build
+(<code class="docutils literal notranslate"><span class="pre">devtools/wheels</span></code>, <code class="docutils literal notranslate"><span class="pre">python</span></code>, CMake files or the workflow itself).</p>
 <p>To support a new OpenMM minor version, add an entry to <code class="docutils literal notranslate"><span class="pre">openmm-versions.json</span></code> with the next
 post number, the exact OpenMM release to build against and the SWIG version of its PyPI wheel
 (the header of <code class="docutils literal notranslate"><span class="pre">openmm/openmm.py</span></code>), then publish that post-release for the current version.
