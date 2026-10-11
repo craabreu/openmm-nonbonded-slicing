@@ -39,6 +39,20 @@
             
   <section id="changelog">
 <h1>Changelog<a class="headerlink" href="#changelog" title="Link to this heading">¶</a></h1>
+<section id="unreleased">
+<h2>0.4.0 (unreleased)<a class="headerlink" href="#unreleased" title="Link to this heading">¶</a></h2>
+<p><strong>Breaking changes</strong></p>
+<ul class="simple">
+<li><p>Energy parameter derivatives are only computed along with the energy, as in
+<code class="docutils literal notranslate"><span class="pre">getState(getEnergy=True,</span> <span class="pre">getParameterDerivatives=True)</span></code>. Requested without the energy, they
+are NaN on all platforms. <code class="docutils literal notranslate"><span class="pre">deriv(energy,</span> <span class="pre">...)</span></code> in a <code class="docutils literal notranslate"><span class="pre">CustomIntegrator</span></code> is not affected.</p></li>
+</ul>
+<p><strong>Performance</strong></p>
+<ul class="simple">
+<li><p>GPU platforms: requested derivatives no longer slow down steps that compute only forces, such as
+molecular dynamics steps, and computing many derivatives is faster.</p></li>
+</ul>
+</section>
 <section id="id1">
 <h2>0.3.0<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
 <p>Requires OpenMM 8.4 or later. The Python wrapper must be built with the same SWIG version as OpenMM.</p>
@@ -118,6 +132,7 @@ wrapper; platform-specific CUDA and OpenCL tests run again.</p></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Changelog</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#unreleased">0.4.0 (unreleased)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#id1">0.3.0</a></li>
 </ul>
 </li>

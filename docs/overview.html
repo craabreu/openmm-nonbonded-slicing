@@ -51,8 +51,9 @@ formed by one particle in subset <em>I</em> and one in subset <em>J</em>, and <s
 <p>By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters. Derivatives
 with respect to these variables can be requested and used, for instance, to report individual energy
-slice contributions or sums thereof via <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>’s <code class="docutils literal notranslate"><span class="pre">getState</span></code> method with option
-<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>.</p>
+slice contributions or sums thereof via <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>’s <code class="docutils literal notranslate"><span class="pre">getState</span></code> method with options
+<code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> and <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>. Derivatives are only computed along with
+the energy: without <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code>, they are NaN.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
 <p>The plugin is distributed on <a class="reference external" href="https://anaconda.org/conda-forge/openmm-nonbonded-slicing">conda-forge</a>:</p>

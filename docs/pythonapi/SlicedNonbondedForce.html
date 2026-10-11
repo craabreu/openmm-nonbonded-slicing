@@ -77,8 +77,18 @@ multiply the Coulomb and Lennard-Jones parts of that slice separately.</p>
 <p>With <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addEnergyParameterDerivative" title="nonbondedslicing.SlicedNonbondedForce.addEnergyParameterDerivative"><code class="xref py py-func docutils literal notranslate"><span class="pre">addEnergyParameterDerivative()</span></code></a>, you can request the derivative with respect to a scaling
 parameter.  All requested derivatives can then be evaluated for a particular <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html">openmm.State</a> by calling
 its <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html#openmm.openmm.State.getEnergyParameterDerivatives">getEnergyParameterDerivatives</a> method.  For this, such State must have been generated from an
-<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> by passing <code class="docutils literal notranslate"><span class="pre">True</span></code> to the keyword <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives</span></code> of the Context’s
-<a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState">getState</a> method.</p>
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> by passing <code class="docutils literal notranslate"><span class="pre">True</span></code> to both keywords <code class="docutils literal notranslate"><span class="pre">getEnergy</span></code> and <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives</span></code>
+of the Context’s <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState">getState</a> method.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Derivatives are only computed along with the energy.  A State requested with
+<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code> but without <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> holds NaN for every requested
+derivative, on all platforms.  If other forces in the System also contribute derivatives with
+respect to the same parameter, their sum is NaN too.  In exchange, steps that compute only
+forces, such as regular molecular dynamics steps, do not pay for the derivatives.  Expressions
+like <code class="docutils literal notranslate"><span class="pre">deriv(energy,</span> <span class="pre">lambda)</span></code> in a <a class="reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomIntegrator.html">CustomIntegrator</a> always compute the energy, so they work as
+usual.</p>
+</div>
 <p>Many molecular force fields omit Coulomb and Lennard-Jones interactions between particles separated by one
 or two bonds, while using modified parameters for those separated by three bonds (known as “1-4 interactions”).
 This class provides a convenience method for this case called <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds" title="nonbondedslicing.SlicedNonbondedForce.createExceptionsFromBonds"><code class="xref py py-func docutils literal notranslate"><span class="pre">createExceptionsFromBonds()</span></code></a>.  You pass to it
@@ -393,6 +403,9 @@ have already been added with <a class="reference internal" href="#nonbondedslici
 Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
 or Coulomb contributions. Requesting the derivative with respect to non-scaling global
 parameters will raise an exception.</p>
+<p>Derivatives are only computed along with the energy: pass both <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> and
+<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code> to the Context’s <code class="docutils literal notranslate"><span class="pre">getState</span></code> method. Without the energy,
+the requested derivatives are NaN.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>parameter</strong> (<em>str</em>) – the name of the parameter</p>
