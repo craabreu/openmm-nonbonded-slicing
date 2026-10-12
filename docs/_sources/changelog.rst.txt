@@ -19,6 +19,7 @@ Changelog
 **Documentation**
 
 * Measured costs of slicing and of derivatives in the theory section.
+* Definition of the derivatives with respect to scaling parameters in the overview.
 
 0.3.0
 -----
