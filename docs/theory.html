@@ -146,6 +146,118 @@ scales approximately linearly with the number of subsets (not the number of slic
 with the OpenCL and CUDA instances of <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Platform.html">openmm.Platform</a>, we take advantage the capability of either
 package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFFT</a> or <a class="reference external" href="https://docs.nvidia.com/cuda/cufft">cuFFT</a> to speed-up parallel FFT calculations via batched transforms.</p>
 </section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
+<p>The tables below compare <a class="reference internal" href="pythonapi/SlicedNonbondedForce.html#nonbondedslicing.SlicedNonbondedForce" title="nonbondedslicing.SlicedNonbondedForce"><code class="xref py py-class docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code></a> with the
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> it replaces in two systems of about 50,000 atoms, using PME with a 1 nm
+cutoff on the CUDA platform in mixed precision (NVIDIA RTX 4090, OpenMM 8.6). Every slice has its
+own scaling parameter. A <em>step</em> is a <code class="docutils literal notranslate"><span class="pre">LangevinMiddleIntegrator</span></code> step of 2 fs, which computes only
+forces. An <em>evaluation</em> is a call to <code class="docutils literal notranslate"><span class="pre">getState</span></code> with <code class="docutils literal notranslate"><span class="pre">getForces=True</span></code> and <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code>.
+Columns marked <em>with derivatives</em> request one derivative per slice and, for evaluations, pass
+<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>. Times are in milliseconds and can be reproduced with
+<code class="docutils literal notranslate"><span class="pre">devtools/benchmarks/benchmark.py</span></code>.</p>
+<p>The first system is a box of 16,814 TIP3P water molecules (50,442 atoms, 8 nm) split into <em>n</em>
+contiguous blocks of whole molecules.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Force</p></th>
+<th class="head"><p>Subsets</p></th>
+<th class="head"><p>Slices</p></th>
+<th class="head"><p>Step</p></th>
+<th class="head"><p>Step with
+derivatives</p></th>
+<th class="head"><p>Evaluation</p></th>
+<th class="head"><p>Evaluation with
+derivatives</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>NonbondedForce</p></td>
+<td><p>–</p></td>
+<td><p>–</p></td>
+<td><p>0.25</p></td>
+<td><p>–</p></td>
+<td><p>0.58</p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
+<td><p>1</p></td>
+<td><p>1</p></td>
+<td><p>0.29</p></td>
+<td><p>0.30</p></td>
+<td><p>0.63</p></td>
+<td><p>1.16</p></td>
+</tr>
+<tr class="row-even"><td><p>SlicedNonbondedForce</p></td>
+<td><p>2</p></td>
+<td><p>3</p></td>
+<td><p>0.36</p></td>
+<td><p>0.36</p></td>
+<td><p>0.70</p></td>
+<td><p>1.45</p></td>
+</tr>
+<tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
+<td><p>4</p></td>
+<td><p>10</p></td>
+<td><p>0.65</p></td>
+<td><p>0.68</p></td>
+<td><p>0.96</p></td>
+<td><p>2.85</p></td>
+</tr>
+<tr class="row-even"><td><p>SlicedNonbondedForce</p></td>
+<td><p>8</p></td>
+<td><p>36</p></td>
+<td><p>1.05</p></td>
+<td><p>1.27</p></td>
+<td><p>1.43</p></td>
+<td><p>9.37</p></td>
+</tr>
+</tbody>
+</table>
+<p>The second system is the TYK2 kinase (Amber ff14SB) bound to ligand ejm_31 (OpenFF 2.3) from the
+OpenFF protein-ligand benchmark, in TIP3P water with 0.15 M NaCl (51,405 atoms, 8.15 nm cubic box).
+It is split into ligand (32 atoms), protein (4,652 atoms) and solvent, as one would do to decompose
+the ligand’s interactions.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Force</p></th>
+<th class="head"><p>Subsets</p></th>
+<th class="head"><p>Slices</p></th>
+<th class="head"><p>Step</p></th>
+<th class="head"><p>Step with
+derivatives</p></th>
+<th class="head"><p>Evaluation</p></th>
+<th class="head"><p>Evaluation with
+derivatives</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>NonbondedForce</p></td>
+<td><p>–</p></td>
+<td><p>–</p></td>
+<td><p>0.27</p></td>
+<td><p>–</p></td>
+<td><p>0.59</p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
+<td><p>3</p></td>
+<td><p>6</p></td>
+<td><p>0.41</p></td>
+<td><p>0.42</p></td>
+<td><p>0.74</p></td>
+<td><p>1.85</p></td>
+</tr>
+</tbody>
+</table>
+<p>The cost of a step grows sublinearly with the number of subsets: going from 1 to 8 subsets (and from
+1 to 36 slices) makes a step about 3.6 times as expensive. Since derivatives are only computed along
+with the energy, requesting them barely affects steps, except for a residual cost when there are many
+of them (about 20% with 36 derivatives). Each requested derivative adds a per-pair accumulation in
+the direct-space kernel, so an evaluation with derivatives grows with their number. Derivatives are
+best requested only for the slices whose energies are needed, and only in the steps where they are
+reported.</p>
+</section>
 </section>
 
 
@@ -182,6 +294,7 @@ package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFF
 <li class="toctree-l2"><a class="reference internal" href="#sliced-background-energy">Sliced Background Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-reciprocal-space-energy">Sliced Reciprocal-Space Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-pme-implementation">Sliced PME Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance">Performance</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="pythonapi/index.html">Python API</a></li>

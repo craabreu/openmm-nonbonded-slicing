@@ -16,6 +16,10 @@ Changelog
 * GPU platforms: requested derivatives no longer slow down steps that compute only forces, such as
   molecular dynamics steps, and computing many derivatives is faster.
 
+**Documentation**
+
+* Measured costs of slicing and of derivatives in the theory section.
+
 0.3.0
 -----
 
