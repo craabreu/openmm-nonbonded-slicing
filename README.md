@@ -7,16 +7,16 @@ OpenMM Nonbonded Slicing Plugin
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 This [OpenMM] plugin contains the **SlicedNonbondedForce** class, a variant of OpenMM's [NonbondedForce].
-By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
+By partitioning all particles among $`n`$ disjoint subsets, the total potential energy becomes a linear
 combination of contributions from pairs of subsets like
 
 ```math
 E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} \left( \lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J} \right)
 ```
 
-where each slice is defined by subsets $I$ and $J$, superscripts _vdW_ and _elec_ denote van
-der Waals and electrostatic contributions, $E_{I,J}$ is the potential energy of all particle pairs
-formed by one particle in subset $I$ and one in subset $J$, and $\lambda_{I,J}$ is a scaling parameter.
+where each slice is defined by subsets $`I`$ and $`J`$, superscripts _vdW_ and _elec_ denote van
+der Waals and electrostatic contributions, $`E_{I,J}`$ is the potential energy of all particle pairs
+formed by one particle in subset $`I`$ and one in subset $`J`$, and $`\lambda_{I,J}`$ is a scaling parameter.
 
 By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in [Context] global parameters. Derivatives
@@ -27,16 +27,16 @@ slice contributions or sums thereof via [getState] with options `getEnergy=True`
 
 A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
 both, of any number of slices. Since the energy is linear in the scaling parameters, the derivative
-with respect to a parameter $\lambda$ is the sum of the unscaled contributions it multiplies:
+with respect to a parameter $`\lambda`$ is the sum of the unscaled contributions it multiplies:
 
 ```math
 \frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J} + \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J}
 ```
 
-where $S^{elec}_\lambda$ and $S^{vdW}_\lambda$ are the sets of slices whose electrostatic and van der
-Waals contributions are scaled by $\lambda$. This derivative does not depend on the values of the
-scaling parameters. For instance, a parameter that scales both contributions of a single slice $I, J$
-yields its full energy $E^{vdW}_{I,J}+E^{elec}_{I,J}$, while one that scales the electrostatic
+where $`S^{elec}_\lambda`$ and $`S^{vdW}_\lambda`$ are the sets of slices whose electrostatic and van der
+Waals contributions are scaled by $`\lambda`$. This derivative does not depend on the values of the
+scaling parameters. For instance, a parameter that scales both contributions of a single slice $`I, J`$
+yields its full energy $`E^{vdW}_{I,J}+E^{elec}_{I,J}`$, while one that scales the electrostatic
 contributions of several slices yields their sum.
 
 Documentation
