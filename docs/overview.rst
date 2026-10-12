@@ -20,6 +20,20 @@ slice contributions or sums thereof via :OpenMM:`Context`'s ``getState`` method 
 ``getEnergy=True`` and ``getParameterDerivatives=True``. Derivatives are only computed along with
 the energy: without ``getEnergy=True``, they are NaN.
 
+A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
+both, of any number of slices. Since the energy is linear in the scaling parameters, the derivative
+with respect to a parameter :math:`\lambda` is the sum of the unscaled contributions it multiplies:
+
+.. math::
+   \frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
+   + \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J},
+
+where :math:`S^{elec}_\lambda` and :math:`S^{vdW}_\lambda` are the sets of slices whose electrostatic
+and van der Waals contributions are scaled by :math:`\lambda`. This derivative does not depend on the
+values of the scaling parameters. For instance, a parameter that scales both contributions of a
+single slice *I, J* yields its full energy :math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`, while one that
+scales the electrostatic contributions of several slices yields their sum.
+
 Installation
 ============
 
