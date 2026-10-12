@@ -158,3 +158,50 @@ package vkFFT_ or cuFFT_ to speed-up parallel FFT calculations via batched trans
 .. _vkFFT:                https://github.com/DTolm/VkFFT
 .. _cuFFT:                https://docs.nvidia.com/cuda/cufft
 
+
+Performance
+===========
+
+The tables below compare :class:`~nonbondedslicing.SlicedNonbondedForce` with the
+:OpenMM:`NonbondedForce` it replaces in two systems of about 50,000 atoms, using PME with a 1 nm
+cutoff on the CUDA platform in mixed precision (NVIDIA RTX 4090, OpenMM 8.6). Every slice has its
+own scaling parameter. A *step* is a ``LangevinMiddleIntegrator`` step of 2 fs, which computes only
+forces. An *evaluation* is a call to ``getState`` with ``getForces=True`` and ``getEnergy=True``.
+Columns marked *with derivatives* request one derivative per slice and, for evaluations, pass
+``getParameterDerivatives=True``. Times are in milliseconds and can be reproduced with
+``devtools/benchmarks/benchmark.py``.
+
+The first system is a box of 16,814 TIP3P water molecules (50,442 atoms, 8 nm) split into *n*
+contiguous blocks of whole molecules.
+
+=====================  =======  ======  ======  ==================  ==========  ==================
+Force                  Subsets  Slices  Step    Step with           Evaluation  Evaluation with
+                                                derivatives                     derivatives
+=====================  =======  ======  ======  ==================  ==========  ==================
+NonbondedForce         --       --      0.25    --                  0.58        --
+SlicedNonbondedForce   1        1       0.29    0.30                0.63        1.16
+SlicedNonbondedForce   2        3       0.36    0.36                0.70        1.45
+SlicedNonbondedForce   4        10      0.65    0.68                0.96        2.85
+SlicedNonbondedForce   8        36      1.05    1.27                1.43        9.37
+=====================  =======  ======  ======  ==================  ==========  ==================
+
+The second system is the TYK2 kinase (Amber ff14SB) bound to ligand ejm_31 (OpenFF 2.3) from the
+OpenFF protein-ligand benchmark, in TIP3P water with 0.15 M NaCl (51,405 atoms, 8.15 nm cubic box).
+It is split into ligand (32 atoms), protein (4,652 atoms) and solvent, as one would do to decompose
+the ligand's interactions.
+
+=====================  =======  ======  ======  ==================  ==========  ==================
+Force                  Subsets  Slices  Step    Step with           Evaluation  Evaluation with
+                                                derivatives                     derivatives
+=====================  =======  ======  ======  ==================  ==========  ==================
+NonbondedForce         --       --      0.27    --                  0.59        --
+SlicedNonbondedForce   3        6       0.41    0.42                0.74        1.85
+=====================  =======  ======  ======  ==================  ==========  ==================
+
+The cost of a step grows sublinearly with the number of subsets: going from 1 to 8 subsets (and from
+1 to 36 slices) makes a step about 3.6 times as expensive. Since derivatives are only computed along
+with the energy, requesting them barely affects steps, except for a residual cost when there are many
+of them (about 20% with 36 derivatives). Each requested derivative adds a per-pair accumulation in
+the direct-space kernel, so an evaluation with derivatives grows with their number. Derivatives are
+best requested only for the slices whose energies are needed, and only in the steps where they are
+reported.
