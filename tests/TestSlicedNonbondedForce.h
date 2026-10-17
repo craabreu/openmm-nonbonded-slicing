@@ -1584,8 +1584,11 @@ public:
     InnerTestSystem(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, int numSubsets, Kind kind, bool offsets, bool innerAtCutoff) :
             method(method), numSubsets(numSubsets), kind(kind), offsets(offsets), rc(innerAtCutoff ? cutoff : 0.8) {
         periodic = (method != NonbondedForce::NoCutoff && method != NonbondedForce::CutoffNonPeriodic);
+        // Molecules on a jittered lattice (spacing 0.75 nm): no overlaps, which would overflow the fixed-point
+        // force accumulators of the GPU platforms, and many pairs inside the switching range of the inner group.
         for (int m = 0; m < numMolecules; m++) {
-            Vec3 center(boxSize*genrand_real2(sfmt), boxSize*genrand_real2(sfmt), boxSize*genrand_real2(sfmt));
+            Vec3 site(0.375+0.75*(m%4), 0.375+0.75*((m/4)%4), 0.375+0.75*(m/16));
+            Vec3 center = site+Vec3(genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5)*0.2;
             positions.push_back(center);
             positions.push_back(center+Vec3(0.1, 0, 0));
             positions.push_back(center+Vec3(0, 0.1, 0));
@@ -1912,15 +1915,18 @@ int main(int argc, char* argv[]) {
         testInnerGroupErrors();
         testInnerGroupPair(false);
         testInnerGroupPair(true);
+        // The inner group tests use their own generator, so the other tests keep their random systems.
+        OpenMM_SFMT::SFMT innerSfmt;
+        init_gen_rand(1, innerSfmt);
         for (auto method : nonbondedMethods)
             for (int numSubsets : {1, 3})
                 for (auto kind : {InnerTestSystem::Both, InnerTestSystem::LJOnly, InnerTestSystem::CoulombOnly})
-                    testInnerGroupForces(sfmt, method, numSubsets, kind, numSubsets == 3, false);
-        testInnerGroupForces(sfmt, NonbondedForce::PME, 2, InnerTestSystem::Both, true, true);
+                    testInnerGroupForces(innerSfmt, method, numSubsets, kind, numSubsets == 3, false);
+        testInnerGroupForces(innerSfmt, NonbondedForce::PME, 2, InnerTestSystem::Both, true, true);
         for (auto method : nonbondedMethods)
-            testInnerGroupConsistency(sfmt, method);
-        testInnerGroupDerivatives(sfmt);
-        testInnerGroupOffsets(sfmt);
+            testInnerGroupConsistency(innerSfmt, method);
+        testInnerGroupDerivatives(innerSfmt);
+        testInnerGroupOffsets(innerSfmt);
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();
