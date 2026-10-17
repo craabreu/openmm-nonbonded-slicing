@@ -41,6 +41,15 @@ namespace NonbondedSlicing {
 %apply int& OUTPUT {int& ny};
 %apply int& OUTPUT {int& nz};
 
+%pythonappend SlicedNonbondedForce::getInnerCutoffDistance() const %{
+    from openmm import unit
+    val = unit.Quantity(val, unit.nanometer)
+%}
+%pythonappend SlicedNonbondedForce::getInnerSwitchingDistance() const %{
+    from openmm import unit
+    val = unit.Quantity(val, unit.nanometer)
+%}
+
 /**
  * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
  * electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
@@ -414,7 +423,12 @@ public:
      */
     void setInnerForceGroup(int group);
     /**
-     * Get the inner cutoff distance (in nm), beyond which the inner part of an interaction is zero.
+     * Get the inner cutoff distance, beyond which the inner part of an interaction is zero.
+     *
+     * Returns
+     * -------
+     *     distance : Quantity
+     *         the inner cutoff distance, in nm
      */
     double getInnerCutoffDistance() const;
     /**
@@ -427,8 +441,12 @@ public:
      */
     void setInnerCutoffDistance(double distance);
     /**
-     * Get the inner switching distance (in nm), where the inner part of an interaction begins to
-     * switch off.
+     * Get the inner switching distance, where the inner part of an interaction begins to switch off.
+     *
+     * Returns
+     * -------
+     *     distance : Quantity
+     *         the inner switching distance, in nm
      */
     double getInnerSwitchingDistance() const;
     /**

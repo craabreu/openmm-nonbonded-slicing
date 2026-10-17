@@ -483,13 +483,20 @@ def testInnerGroupAccessors():
     force.setInnerCutoffDistance(0.8*unit.nanometer)
     force.setInnerSwitchingDistance(0.5*unit.nanometer)
     assert force.getInnerForceGroup() == 3
-    ASSERT_EQUAL_TOL(0.8, force.getInnerCutoffDistance(), 1e-12)
-    ASSERT_EQUAL_TOL(0.5, force.getInnerSwitchingDistance(), 1e-12)
+    # Distances come back as quantities in nanometers, like the inherited getters
+    for getter, expected in [(force.getInnerCutoffDistance, 0.8), (force.getInnerSwitchingDistance, 0.5)]:
+        distance = getter()
+        assert unit.is_quantity(distance)
+        ASSERT_EQUAL_TOL(expected, distance.value_in_unit(unit.nanometer), 1e-12)
+    force.setCutoffDistance(1.0*unit.nanometer)
+    assert force.getInnerSwitchingDistance() < force.getInnerCutoffDistance() < force.getCutoffDistance()
+    force.setInnerCutoffDistance(8*unit.angstrom)
+    ASSERT_EQUAL_TOL(0.8, force.getInnerCutoffDistance().value_in_unit(unit.nanometer), 1e-12)
     with pytest.raises(Exception):
         force.setInnerForceGroup(32)
     copy_ = plugin.SlicedNonbondedForce._deserialize(mm.XmlSerializer.serialize(force))
     assert copy_.getInnerForceGroup() == 3
-    ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance(), 1e-12)
+    ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance().value_in_unit(unit.nanometer), 1e-12)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
