@@ -116,6 +116,47 @@ def measure(system, positions, platform, properties, steps, derivatives=False):
     return best(integrator.step, steps), best(evaluate, steps // 10)
 
 
+def inner_group(system, positions, platform, properties, steps):
+    """Milliseconds per force evaluation of each part of the inner force group split (switching from 0.5 to
+    0.8 nm), and of ufedmm's CustomNonbondedForce implementation of the same split if ufedmm is installed."""
+
+    def times(system, groups):
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions(positions)
+        context.getState(getForces=True)
+        result = []
+        for group in groups:
+            batches = []
+            for _ in range(3):
+                start = time.perf_counter()
+                for _ in range(steps):
+                    context.getState(getForces=True, groups=group)
+                batches.append((time.perf_counter() - start) / steps)
+            result.append(min(batches))
+        return result
+
+    system = mm.XmlSerializer.clone(system)
+    for force in system.getForces():
+        force.setForceGroup(3)
+    split = sliced(system, [0] * system.getNumParticles(), False)
+    force = nbs.SlicedNonbondedForce.cast(next(f for f in split.getForces() if nbs.SlicedNonbondedForce.isinstance(f)))
+    force.setForceGroup(0)
+    force.setReciprocalSpaceForceGroup(2)
+    force.setInnerForceGroup(1)
+    force.setInnerSwitchingDistance(0.5)
+    force.setInnerCutoffDistance(0.8)
+    rows = list(zip(["inner", "direct remainder", "direct remainder + reciprocal"],
+                    times(split, [{1}, {0}, {0, 2}])))
+    try:
+        from ufedmm.integrators import add_inner_nonbonded_force
+    except ImportError:
+        return rows
+    custom = mm.XmlSerializer.clone(system)
+    add_inner_nonbonded_force(custom, 0.5, 0.8, 1)
+    rows.append(("ufedmm inner (Custom forces)", times(custom, [{1}])[0]))
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("system", choices=["water", "tyk2"])
@@ -123,6 +164,8 @@ def main():
     parser.add_argument("--precision", default="mixed")
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--cache", type=Path, default=Path("benchmark-inputs"), help="where tyk2 inputs are kept")
+    parser.add_argument("--inner-group", action="store_true",
+                        help="time the parts of the inner force group split instead of slicing and derivatives")
     args = parser.parse_args()
 
     forcefield, modeller, layouts = water_box() if args.system == "water" else tyk2(args.cache)
@@ -132,6 +175,11 @@ def main():
     properties = {"Precision": args.precision} if args.platform in ("CUDA", "OpenCL", "HIP") else {}
 
     print(f"{args.system}: {system.getNumParticles()} atoms, OpenMM {mm.__version__}, {args.platform} {properties}")
+    if args.inner_group:
+        print("ms per force evaluation")
+        for label, seconds in inner_group(system, modeller.positions, platform, properties, args.steps):
+            print(f"{label:>32} {1e3 * seconds:8.3f}", flush=True)
+        return
     print("derivatives; times in ms: step, step with derivatives, evaluation, evaluation with derivatives")
     step, evaluation = measure(system, modeller.positions, platform, properties, args.steps)
     print(f"{'NonbondedForce':>24} {'':>6} {1e3 * step:8.3f} {'':>8} {1e3 * evaluation:8.3f}", flush=True)
