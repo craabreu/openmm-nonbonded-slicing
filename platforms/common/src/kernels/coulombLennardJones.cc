@@ -1,5 +1,7 @@
 {
-    int slice = SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
+    // Excluded pairs include those with a padding atom, whose subset may be garbage (e.g., stale
+    // local memory in OpenCL CPU kernels), so they must not index LAMBDA. Their terms are masked out.
+    int slice = isExcluded ? 0 : SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
     real clLambda = LAMBDA[slice].x;
     real ljLambda = LAMBDA[slice].y;
 #if USE_EWALD
