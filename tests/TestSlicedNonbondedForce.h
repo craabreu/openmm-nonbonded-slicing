@@ -1505,6 +1505,74 @@ void testInnerGroupErrors() {
     ASSERT(threw);
 }
 
+void testInnerGroupPair(bool asException) {
+    // Two particles. The inner energy must equal the integral of the switched bare force from r to the
+    // inner cutoff (V-hat vanishes there), the inner force must be S(r) times the bare force, and the three
+    // groups must add up to the unsplit result, including across the inner cutoff.
+
+    const double rs = 0.5, rc = 0.8, cutoff = 1.0, q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7;
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod(SlicedNonbondedForce::PME);
+    force->setCutoffDistance(cutoff);
+    force->setReciprocalSpaceForceGroup(2);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(rs);
+    force->setInnerCutoffDistance(rc);
+    if (asException) {
+        force->addParticle(0.0, sigma, 0.0);
+        force->addParticle(0.0, sigma, 0.0);
+        force->addException(0, 1, q1*q2, sigma, epsilon);
+    }
+    else {
+        force->addParticle(q1, sigma, epsilon);
+        force->addParticle(q2, sigma, epsilon);
+    }
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    auto bareForce = [&](double r) {
+        double s6 = pow(sigma/r, 6);
+        return 4*epsilon*(12*s6*s6-6*s6)/r + ONE_4PI_EPS0*q1*q2/(r*r);  // -dV/dr
+    };
+    auto switchValue = [&](double r) {
+        if (r <= rs)
+            return 1.0;
+        if (r >= rc)
+            return 0.0;
+        double z = (r-rs)/(rc-rs);
+        return 1+z*z*z*(-10+z*(15-z*6));
+    };
+    bool precise = platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double";
+    double tol = precise ? 1e-6 : 1e-4;
+    for (double r : {0.3, 0.45, 0.5, 0.55, 0.65, 0.75, 0.7999, 0.8, 0.8001, 0.9}) {
+        context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+        State inner = context.getState(State::Energy | State::Forces, false, 1<<1);
+        assertEqualTo(switchValue(r)*bareForce(r), inner.getForces()[1][0], tol);
+        double expected = 0.0;
+        if (r < rc) {
+            const int n = 2000;
+            double h = (rc-r)/n;
+            for (int i = 0; i <= n; i++) {
+                double s = r+i*h;
+                double w = (i == 0 || i == n) ? 1 : (i%2 ? 4 : 2);
+                expected += w*switchValue(s)*bareForce(s);
+            }
+            expected *= h/3;
+        }
+        assertEqualTo(expected, inner.getPotentialEnergy(), tol);
+        State all = context.getState(State::Energy | State::Forces);
+        State direct = context.getState(State::Energy | State::Forces, false, 1<<0);
+        State recip = context.getState(State::Energy | State::Forces, false, 1<<2);
+        assertEqualTo(all.getPotentialEnergy(), direct.getPotentialEnergy()+inner.getPotentialEnergy()+recip.getPotentialEnergy(), tol);
+        for (int i = 0; i < 2; i++)
+            assertEqualVec(all.getForces()[i], direct.getForces()[i]+inner.getForces()[i]+recip.getForces()[i], tol);
+    }
+}
+
 void testErrors() {
     SlicedNonbondedForce force(3);
     force.addParticle(0.0, 1.0, 0.0);
@@ -1563,6 +1631,8 @@ int main(int argc, char* argv[]) {
         initializeTests(argc, argv);
         testErrors();
         testInnerGroupErrors();
+        testInnerGroupPair(false);
+        testInnerGroupPair(true);
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();

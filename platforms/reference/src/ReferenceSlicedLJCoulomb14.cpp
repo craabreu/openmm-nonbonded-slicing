@@ -58,9 +58,13 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
 
    --------------------------------------------------------------------------------------- */
 
+void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
+    innerSplit = split;
+}
+
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
-                                     vector<double>& sliceLambdas, vector<double>& sliceEnergies) {
+                                     vector<double>& sliceLambdas, vector<double>& sliceEnergies, Mode mode) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -77,9 +81,33 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    double dEdR      = sliceLambdas[vdW]*parameters[1]*(12.0*sig6 - 6.0)*sig6;
-           dEdR     += sliceLambdas[Coul]*ONE_4PI_EPS0*parameters[2]*inverseR;
-           dEdR     *= inverseR*inverseR;
+    double r = deltaR[0][ReferenceForce::RIndex];
+    double innerVdwForce = 0.0, innerCoulForce = 0.0, innerVdwEnergy = 0.0, innerCoulEnergy = 0.0;
+    if (mode != Full && r < innerSplit.rc) {
+        double switchValue = innerSplit.switchValue(r);
+        innerVdwForce = switchValue*parameters[1]*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+        innerCoulForce = switchValue*ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
+        double sigma6 = pow(parameters[0], 6);
+        innerVdwEnergy = parameters[1]*(sigma6*sigma6*innerSplit.energyTerm(0, r) - sigma6*innerSplit.energyTerm(1, r));
+        innerCoulEnergy = ONE_4PI_EPS0*parameters[2]*innerSplit.energyTerm(2, r);
+    }
+    double vdwForce = parameters[1]*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+    double coulForce = ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
+    double vdwEnergy = parameters[1]*(sig6 - 1.0)*sig6;
+    double coulEnergy = ONE_4PI_EPS0*parameters[2]*inverseR;
+    if (mode == Inner) {
+        vdwForce = innerVdwForce;
+        coulForce = innerCoulForce;
+        vdwEnergy = innerVdwEnergy;
+        coulEnergy = innerCoulEnergy;
+    }
+    else if (mode == Remainder) {
+        vdwForce -= innerVdwForce;
+        coulForce -= innerCoulForce;
+        vdwEnergy -= innerVdwEnergy;
+        coulEnergy -= innerCoulEnergy;
+    }
+    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce;
 
     // accumulate forces
 
@@ -90,6 +118,6 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     }
 
     // accumulate energies
-    sliceEnergies[vdW] += parameters[1]*(sig6 - 1.0)*sig6;
-    sliceEnergies[Coul] += ONE_4PI_EPS0*parameters[2]*inverseR;
+    sliceEnergies[vdW] += vdwEnergy;
+    sliceEnergies[Coul] += coulEnergy;
 }

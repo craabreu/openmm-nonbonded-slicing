@@ -12,6 +12,7 @@
 
 #include "openmm/Vec3.h"
 #include "internal/windowsExportNonbondedSlicing.h"
+#include "internal/InnerSplit.h"
 #include <vector>
 
 using namespace std;
@@ -22,6 +23,11 @@ namespace NonbondedSlicing {
 class OPENMM_EXPORT_NONBONDED_SLICING ReferenceSlicedLJCoulomb14 {
 
 public:
+
+    /**
+     * Which part of an interaction to compute: all of it, only its inner part, or all but its inner part.
+     */
+    enum Mode {Full = 0, Inner = 1, Remainder = 2};
 
     /**---------------------------------------------------------------------------------------
 
@@ -51,6 +57,16 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
+       Set the inner force group split used by the Inner and Remainder modes.
+
+       @param split    the inner split
+
+       --------------------------------------------------------------------------------------- */
+
+    void setInnerSplit(const InnerSplit& split);
+
+    /**---------------------------------------------------------------------------------------
+
        Calculate nonbonded 1-4 interactinos
 
        @param atomIndices      atom indices of the atoms in each pair
@@ -59,18 +75,20 @@ public:
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
+       @param mode             which part of the interactions to compute
 
        --------------------------------------------------------------------------------------- */
 
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
-                          vector<double>& sliceLambdas, vector<double>& sliceEnergies);
+                          vector<double>& sliceLambdas, vector<double>& sliceEnergies, Mode mode=Full);
 
 private:
    static const int   Coul = 0;
    static const int   vdW = 1;
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
+   InnerSplit innerSplit;
 };
 
 } // namespace NonbondedSlicing

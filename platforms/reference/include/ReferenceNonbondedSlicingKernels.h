@@ -11,6 +11,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
+#include "internal/InnerSplit.h"
 #include "NonbondedSlicingKernels.h"
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
@@ -88,6 +89,7 @@ private:
     vector<double> dispersionCoefficients;
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic;
+    InnerSplit innerSplit;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;

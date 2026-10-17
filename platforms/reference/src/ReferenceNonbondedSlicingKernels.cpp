@@ -179,6 +179,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     else
         exceptionsArePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
     rfDielectric = force.getReactionFieldDielectric();
+    if (force.getInnerForceGroup() >= 0)
+        innerSplit = InnerSplit(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
     if (force.getUseDispersionCorrection())
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
     else
@@ -217,6 +219,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
+    clj.setInnerSplit(innerSplit);
     clj.calculatePairIxn(
         numParticles,
         posData,
@@ -230,19 +233,28 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         includeDirect,
         includeReciprocal
     );
+    if (includeInner)
+        clj.calculateInnerIxn(numParticles, posData, subsets, particleParamArray, sliceLambdas, exclusions, forceData, sliceEnergies);
 
-    if (includeDirect) {
+    if (includeDirect || includeInner) {
         ReferenceSlicedLJCoulomb14 nonbonded14;
+        nonbonded14.setInnerSplit(innerSplit);
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
         }
-        for (int k = 0; k < num14; k++) {
-            int slice = bonded14SliceArray[k];
-            nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
-                                         forceData, sliceLambdas[slice], sliceEnergies[slice]);
-        }
-        if (periodic || ewald || pme) {
+        vector<ReferenceSlicedLJCoulomb14::Mode> modes;
+        if (includeDirect)
+            modes.push_back(innerSplit.enabled ? ReferenceSlicedLJCoulomb14::Remainder : ReferenceSlicedLJCoulomb14::Full);
+        if (includeInner)
+            modes.push_back(ReferenceSlicedLJCoulomb14::Inner);
+        for (auto mode : modes)
+            for (int k = 0; k < num14; k++) {
+                int slice = bonded14SliceArray[k];
+                nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
+                                             forceData, sliceLambdas[slice], sliceEnergies[slice], mode);
+            }
+        if (includeDirect && (periodic || ewald || pme)) {
             Vec3* boxVectors = extractBoxVectors(context);
             double volume = boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2];
             for (int slice = 0; slice < numSlices; slice++)
