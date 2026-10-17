@@ -88,8 +88,10 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         innerVdwForce = switchValue*parameters[1]*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
         innerCoulForce = switchValue*ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
         double sigma6 = pow(parameters[0], 6);
-        innerVdwEnergy = parameters[1]*(sigma6*sigma6*innerSplit.energyTerm(0, r) - sigma6*innerSplit.energyTerm(1, r));
-        innerCoulEnergy = ONE_4PI_EPS0*parameters[2]*innerSplit.energyTerm(2, r);
+        double e[3];
+        innerSplit.energyTerms(r, e);
+        innerVdwEnergy = parameters[1]*(sigma6*sigma6*e[0] - sigma6*e[1]);
+        innerCoulEnergy = ONE_4PI_EPS0*parameters[2]*e[2];
     }
     double vdwForce = parameters[1]*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
     double coulForce = ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;

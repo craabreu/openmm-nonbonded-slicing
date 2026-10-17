@@ -1507,12 +1507,13 @@ void testInnerGroupErrors() {
     ASSERT(threw);
 }
 
-void testInnerGroupPair(bool asException) {
+void testInnerGroupPair(bool asException, double rs, double rc) {
     // Two particles. The inner energy must equal the integral of the switched bare force from r to the
     // inner cutoff (V-hat vanishes there), the inner force must be S(r) times the bare force, and the three
-    // groups must add up to the unsplit result, including across the inner cutoff.
+    // groups must add up to the unsplit result, including across the inner cutoff. Narrow switching windows
+    // and tiny switching distances are the cases where a closed-form inner energy loses precision.
 
-    const double rs = 0.5, rc = 0.8, cutoff = 1.0, q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7;
+    const double cutoff = 1.0, q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7;
     System system;
     system.addParticle(1.0);
     system.addParticle(1.0);
@@ -1550,7 +1551,7 @@ void testInnerGroupPair(bool asException) {
     };
     bool precise = platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double";
     double tol = precise ? 1e-6 : 1e-4;
-    for (double r : {0.3, 0.45, 0.5, 0.55, 0.65, 0.75, 0.7999, 0.8, 0.8001, 0.9}) {
+    for (double r : {0.3, 0.45, 0.5, 0.55, 0.65, 0.75, 0.785, 0.795, 0.7999, 0.8, 0.8001, 0.9}) {
         context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
         State inner = context.getState(State::Energy | State::Forces, false, 1<<1);
         assertEqualTo(switchValue(r)*bareForce(r), inner.getForces()[1][0], tol);
@@ -1913,8 +1914,11 @@ int main(int argc, char* argv[]) {
         initializeTests(argc, argv);
         testErrors();
         testInnerGroupErrors();
-        testInnerGroupPair(false);
-        testInnerGroupPair(true);
+        for (bool asException : {false, true}) {
+            testInnerGroupPair(asException, 0.5, 0.8);
+            testInnerGroupPair(asException, 0.79, 0.8);
+            testInnerGroupPair(asException, 0.001, 0.8);
+        }
         // The inner group tests use their own generator, so the other tests keep their random systems.
         OpenMM_SFMT::SFMT innerSfmt;
         init_gen_rand(1, innerSfmt);

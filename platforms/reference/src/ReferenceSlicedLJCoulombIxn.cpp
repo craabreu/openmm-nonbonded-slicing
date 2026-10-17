@@ -186,8 +186,10 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerPair(int ii, int jj, const vecto
     forceFactorCoul = switchValue*qq*inverseR*inverseR*inverseR;
     double sigma6 = sig*sig;
     sigma6 = sigma6*sigma6*sigma6;
-    vdwEnergy = eps*(sigma6*sigma6*innerSplit.energyTerm(0, r) - sigma6*innerSplit.energyTerm(1, r));
-    coulEnergy = qq*innerSplit.energyTerm(2, r);
+    double e[3];
+    innerSplit.energyTerms(r, e);
+    vdwEnergy = eps*(sigma6*sigma6*e[0] - sigma6*e[1]);
+    coulEnergy = qq*e[2];
 }
 
 void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(

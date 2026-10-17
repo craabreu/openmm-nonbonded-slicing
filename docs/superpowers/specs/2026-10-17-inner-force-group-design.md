@@ -296,9 +296,13 @@ it is out of scope here.
 
 ## 9. Risks and open points
 
-- **Single precision of V̂.** The V_pert polynomial in r and 1/r on [r_s, r_c] has no large
-  cancellations for the distances of interest (0.3–1.0 nm), but test 2 should be run in single
-  precision too and the tolerance recorded. Forces do not depend on V̂.
+- **Single precision of V̂.** Resolved during implementation: the closed-form V_pert above cancels
+  catastrophically (about 6 of 7 float digits for 0.5/0.8 nm, and even in double for narrow windows
+  such as 0.79/0.8 nm or tiny r_s such as 0.001 nm). The implementation evaluates the same function as
+  V̂_n = n∫ᵣ^{r_c} S(s) s⁻⁽ⁿ⁺¹⁾ ds beyond r_s and r⁻ⁿ − K_n below it, with
+  K_n = r_c⁻ⁿ + n∫_{r_s}^{r_c} (1−S) s⁻⁽ⁿ⁺¹⁾ ds; every integrand is positive and the integrals use
+  Gauss–Legendre quadrature in ln s (InnerSplit.h on the host and Reference platform, the common
+  kernels on the GPU). Forces do not depend on V̂.
 - **NoCutoff with the inner split.** Allowed and tested; on Reference it loops over all pairs.
 - **Group changes at runtime.** As for other force groups, they require Context reinitialization.
   Documented, not worked around.
