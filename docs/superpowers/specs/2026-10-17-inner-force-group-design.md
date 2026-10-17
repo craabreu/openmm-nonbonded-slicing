@@ -112,7 +112,9 @@ void   setInnerSwitchingDistance(double rs);
 Validation (in `SlicedNonbondedForceImpl::initialize`, so errors surface at Context creation):
 
 - `innerForceGroup` is −1 (disabled; the other two settings are ignored) or in [0, 31].
-- When enabled: 0 ≤ r_s < r_c; r_c ≤ `getCutoffDistance()` when the method uses a cutoff.
+- When enabled: 0 < r_s < r_c; r_c ≤ `getCutoffDistance()` when the method uses a cutoff. (r_s must
+  be strictly positive: with r_s = 0 the Lennard-Jones part of V_pert, ∫₀ P(s) s⁻¹² ds, diverges, so
+  V̂ does not exist.)
 - When enabled: `innerForceGroup != getForceGroup()` and `innerForceGroup != resolved reciprocal
   group` (both would put the fast part together with slow terms, which is never intended).
 - When enabled: `getIncludeDirectSpace()` must be true (if direct space is supplied by another
