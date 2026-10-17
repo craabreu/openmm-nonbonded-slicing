@@ -2,6 +2,16 @@
 Changelog
 =========
 
+0.5.0 (unreleased)
+------------------
+
+**New features**
+
+* Inner force group: a force-switched short-range copy of the direct-space interactions (particle
+  pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
+  integration, with an energy consistent with its force (``setInnerForceGroup``,
+  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``).
+
 0.4.0
 -----
 

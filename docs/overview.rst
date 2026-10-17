@@ -34,6 +34,42 @@ values of the scaling parameters. For instance, a parameter that scales both con
 single slice *I, J* yields its full energy :math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`, while one that
 scales the electrostatic contributions of several slices yields their sum.
 
+Force splitting for multiple time-step integration
+==================================================
+
+A SlicedNonbondedForce can place a short-range, force-switched copy of its direct-space pair
+interactions in a separate *inner* force group, so that a multiple time-step integrator can advance
+it with a small step while the remainder (the rest of direct space, the reciprocal-space sum and its
+exclusion corrections) is advanced with a large one. For a pair at distance :math:`r` with bare
+potential :math:`V(r)` (Lennard-Jones plus Coulomb, scaled by the slice's parameters), the inner
+force is
+
+.. math::
+   \mathbf{F}^\mathrm{inner}(r) = -S(r)\,V'(r)\,\hat{\mathbf{r}}, \qquad
+   S = 1 - 10 z^3 + 15 z^4 - 6 z^5, \quad z = \frac{r - r_s}{r_c - r_s},
+
+with :math:`S = 1` for :math:`r \le r_s` and :math:`S = 0` for :math:`r \ge r_c`, where
+:math:`r_s` and :math:`r_c` are the inner switching and cutoff distances. The inner energy is the
+potential :math:`\hat V` whose gradient is this force, shifted so that :math:`\hat V(r_c) = 0`
+:cite:`Abreu_2020`; the direct-space group reports :math:`V - \hat V` and the corresponding force.
+Every group therefore has an energy consistent with its force, and the groups add up to the
+unsplit result. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
+parameter offsets apply to both parts.
+
+.. code-block:: python
+
+   force = nonbondedslicing.SlicedNonbondedForce(nonbonded, 2)
+   force.setForceGroup(2)               # direct-space remainder; reciprocal space goes there too
+   force.setInnerForceGroup(1)
+   force.setInnerSwitchingDistance(0.5*unit.nanometer)
+   force.setInnerCutoffDistance(0.8*unit.nanometer)
+   # bonded forces in group 0; steps of 90, 3 and 0.5 fs
+   integrator = openmm.MTSIntegrator(90*unit.femtoseconds, [(2, 1), (1, 30), (0, 180)])
+
+The inner force group must differ from the force group of the force and from its reciprocal-space
+force group, and requires :math:`0 < r_s < r_c \le` cutoff distance. Changing these settings
+requires a new :OpenMM:`Context`, as for any force group.
+
 Installation
 ============
 
