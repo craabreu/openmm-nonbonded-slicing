@@ -55,6 +55,25 @@ public:
     void setUseCuFFT(bool use) {
         useCuFFT = use;
     };
+    /**
+     * Get the force group of the inner part of the direct-space interactions, or -1 if the inner
+     * force group is disabled (the default).  When enabled, every direct-space pair interaction
+     * (including 1-4 exceptions) is split into a short-range part, switched off smoothly between
+     * the inner switching distance and the inner cutoff distance, which is computed in the inner
+     * force group, and a remainder, which stays in the force group of this force.
+     */
+    int getInnerForceGroup() const {
+        return innerForceGroup;
+    }
+    void setInnerForceGroup(int group);
+    double getInnerCutoffDistance() const {
+        return innerCutoff;
+    }
+    void setInnerCutoffDistance(double distance);
+    double getInnerSwitchingDistance() const {
+        return innerSwitchingDistance;
+    }
+    void setInnerSwitchingDistance(double distance);
 protected:
     OpenMM::ForceImpl* createImpl() const;
 private:
@@ -66,6 +85,8 @@ private:
     std::vector<ScalingParameterInfo> scalingParameters;
     std::vector<int> energyParameterDerivatives;
     bool useCuFFT;
+    int innerForceGroup;
+    double innerCutoff, innerSwitchingDistance;
 };
 
 /**

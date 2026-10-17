@@ -129,6 +129,21 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
     }
+    if (owner.getInnerForceGroup() >= 0) {
+        double innerSwitch = owner.getInnerSwitchingDistance();
+        double innerCutoff = owner.getInnerCutoffDistance();
+        if (!(innerSwitch > 0.0 && innerSwitch < innerCutoff))
+            throw OpenMMException("SlicedNonbondedForce: the inner switching distance must satisfy 0 < r_switch < r_cutoff");
+        if (owner.getNonbondedMethod() != SlicedNonbondedForce::NoCutoff && innerCutoff > owner.getCutoffDistance())
+            throw OpenMMException("SlicedNonbondedForce: the inner cutoff distance cannot be greater than the cutoff distance");
+        int reciprocalGroup = owner.getReciprocalSpaceForceGroup();
+        if (reciprocalGroup < 0)
+            reciprocalGroup = owner.getForceGroup();
+        if (owner.getInnerForceGroup() == owner.getForceGroup() || owner.getInnerForceGroup() == reciprocalGroup)
+            throw OpenMMException("SlicedNonbondedForce: the inner force group must differ from the direct-space and reciprocal-space force groups");
+        if (!owner.getIncludeDirectSpace())
+            throw OpenMMException("SlicedNonbondedForce: the inner force group requires the direct space to be included");
+    }
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
 }
 
@@ -138,7 +153,9 @@ double SlicedNonbondedForceImpl::calcForcesAndEnergy(ContextImpl& context, bool 
     if (reciprocalGroup < 0)
         reciprocalGroup = owner.getForceGroup();
     bool includeReciprocal = ((groups&(1<<reciprocalGroup)) != 0);
-    return kernel.getAs<CalcSlicedNonbondedForceKernel>().execute(context, includeForces, includeEnergy, includeDirect, includeReciprocal);
+    int innerGroup = owner.getInnerForceGroup();
+    bool includeInner = (innerGroup >= 0 && (groups&(1<<innerGroup)) != 0);
+    return kernel.getAs<CalcSlicedNonbondedForceKernel>().execute(context, includeForces, includeEnergy, includeDirect, includeReciprocal, includeInner);
 }
 
 std::vector<std::string> SlicedNonbondedForceImpl::getKernelNames() {

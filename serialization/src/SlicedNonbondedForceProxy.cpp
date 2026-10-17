@@ -22,7 +22,7 @@ SlicedNonbondedForceProxy::SlicedNonbondedForceProxy() : SerializationProxy("Sli
 }
 
 void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 1);
+    node.setIntProperty("version", 2);
     const SlicedNonbondedForce& force = *reinterpret_cast<const SlicedNonbondedForce*>(object);
     node.setIntProperty("numSubsets", force.getNumSubsets());
     node.setIntProperty("forceGroup", force.getForceGroup());
@@ -50,6 +50,9 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setIntProperty("ljny", ny);
     node.setIntProperty("ljnz", nz);
     node.setIntProperty("recipForceGroup", force.getReciprocalSpaceForceGroup());
+    node.setIntProperty("innerForceGroup", force.getInnerForceGroup());
+    node.setDoubleProperty("innerCutoff", force.getInnerCutoffDistance());
+    node.setDoubleProperty("innerSwitchingDistance", force.getInnerSwitchingDistance());
     SerializationNode& globalParams = node.createChildNode("GlobalParameters");
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
         globalParams.createChildNode("Parameter").setStringProperty("name", force.getGlobalParameterName(i)).setDoubleProperty("default", force.getGlobalParameterDefaultValue(i));
@@ -103,7 +106,7 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
 
 void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) const {
     int version = node.getIntProperty("version");
-    if (version != 1)
+    if (version < 1 || version > 2)
         throw OpenMMException("Unsupported version number");
     SlicedNonbondedForce* force = new SlicedNonbondedForce(node.getIntProperty("numSubsets"));
     try {
@@ -130,6 +133,9 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         nz = node.getIntProperty("ljnz", 0);
         force->setLJPMEParameters(alpha, nx, ny, nz);
         force->setReciprocalSpaceForceGroup(node.getIntProperty("recipForceGroup", -1));
+        force->setInnerForceGroup(node.getIntProperty("innerForceGroup", -1));
+        force->setInnerCutoffDistance(node.getDoubleProperty("innerCutoff", 0.0));
+        force->setInnerSwitchingDistance(node.getDoubleProperty("innerSwitchingDistance", 0.0));
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())
             force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));

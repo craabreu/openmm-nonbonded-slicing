@@ -35,6 +35,9 @@ void testSerialization() {
     force.setExceptionsUsePeriodicBoundaryConditions(true);
     force.setIncludeDirectSpace(false);
     force.setReciprocalSpaceForceGroup(2);
+    force.setInnerForceGroup(3);
+    force.setInnerCutoffDistance(0.8);
+    force.setInnerSwitchingDistance(0.5);
     force.setUseCuFFT(false);
     double alpha = 0.5;
     int nx = 3, ny = 5, nz = 7;
@@ -77,6 +80,9 @@ void testSerialization() {
     ASSERT_EQUAL(force.getReactionFieldDielectric(), force2.getReactionFieldDielectric());
     ASSERT_EQUAL(force.getUseDispersionCorrection(), force2.getUseDispersionCorrection());
     ASSERT_EQUAL(force.getExceptionsUsePeriodicBoundaryConditions(), force2.getExceptionsUsePeriodicBoundaryConditions());
+    ASSERT_EQUAL(force.getInnerForceGroup(), force2.getInnerForceGroup());
+    ASSERT_EQUAL(force.getInnerCutoffDistance(), force2.getInnerCutoffDistance());
+    ASSERT_EQUAL(force.getInnerSwitchingDistance(), force2.getInnerSwitchingDistance());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());

@@ -17,16 +17,16 @@ using namespace std;
 class OpenCLParallelCalcSlicedNonbondedForceKernel::Task : public OpenCLContext::WorkTask {
 public:
     Task(ContextImpl& context, OpenCLCalcSlicedNonbondedForceKernel& kernel, bool includeForce,
-            bool includeEnergy, bool includeDirect, bool includeReciprocal, double& energy) : context(context), kernel(kernel),
-            includeForce(includeForce), includeEnergy(includeEnergy), includeDirect(includeDirect), includeReciprocal(includeReciprocal), energy(energy) {
+            bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner, double& energy) : context(context), kernel(kernel),
+            includeForce(includeForce), includeEnergy(includeEnergy), includeDirect(includeDirect), includeReciprocal(includeReciprocal), includeInner(includeInner), energy(energy) {
     }
     void execute() {
-        energy += kernel.execute(context, includeForce, includeEnergy, includeDirect, includeReciprocal);
+        energy += kernel.execute(context, includeForce, includeEnergy, includeDirect, includeReciprocal, includeInner);
     }
 private:
     ContextImpl& context;
     OpenCLCalcSlicedNonbondedForceKernel& kernel;
-    bool includeForce, includeEnergy, includeDirect, includeReciprocal;
+    bool includeForce, includeEnergy, includeDirect, includeReciprocal, includeInner;
     double& energy;
 };
 
@@ -41,11 +41,11 @@ void OpenCLParallelCalcSlicedNonbondedForceKernel::initialize(const System& syst
         getKernel(i).initialize(system, force);
 }
 
-double OpenCLParallelCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double OpenCLParallelCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner) {
     for (int i = 0; i < (int) data.contexts.size(); i++) {
         OpenCLContext& cl = *data.contexts[i];
         ComputeContext::WorkThread& thread = cl.getWorkThread();
-        thread.addTask(new Task(context, getKernel(i), includeForces, includeEnergy, includeDirect, includeReciprocal, data.contextEnergy[i]));
+        thread.addTask(new Task(context, getKernel(i), includeForces, includeEnergy, includeDirect, includeReciprocal, includeInner, data.contextEnergy[i]));
     }
     return 0.0;
 }

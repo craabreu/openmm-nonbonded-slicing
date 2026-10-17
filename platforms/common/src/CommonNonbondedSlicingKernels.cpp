@@ -839,7 +839,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.addForce(info);
 }
 
-double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner) {
     ContextSelector selector(cc);
     // Energy parameter derivatives are only computed along with the energy. Without it, they are
     // made NaN so that a request for derivatives alone cannot pass for a valid result.

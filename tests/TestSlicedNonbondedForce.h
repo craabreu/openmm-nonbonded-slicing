@@ -1458,6 +1458,53 @@ bool throwsException(const function<void()>& call) {
     return false;
 }
 
+void testInnerGroupErrors() {
+    // Each configure() call should make Context creation fail; the unmodified setup must succeed.
+
+    auto build = [](function<void(SlicedNonbondedForce&)> configure, bool expectFailure) {
+        System system;
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+        force->setNonbondedMethod(SlicedNonbondedForce::PME);
+        force->setCutoffDistance(1.0);
+        force->addParticle(1.0, 0.3, 0.5);
+        force->addParticle(-1.0, 0.3, 0.5);
+        force->setInnerForceGroup(1);
+        force->setInnerSwitchingDistance(0.5);
+        force->setInnerCutoffDistance(0.8);
+        configure(*force);
+        system.addForce(force);
+        VerletIntegrator integrator(0.001);
+        bool threw = false;
+        try {
+            Context context(system, integrator, platform);
+        }
+        catch (const OpenMMException&) {
+            threw = true;
+        }
+        ASSERT_EQUAL(expectFailure, threw);
+    };
+    build([](SlicedNonbondedForce& f) {}, false);
+    build([](SlicedNonbondedForce& f) { f.setInnerSwitchingDistance(0.0); }, true);   // r_s must be > 0
+    build([](SlicedNonbondedForce& f) { f.setInnerSwitchingDistance(0.8); }, true);   // r_s must be < r_c
+    build([](SlicedNonbondedForce& f) { f.setInnerCutoffDistance(1.2); }, true);      // r_c must be <= cutoff
+    build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(0); }, true);            // same as direct group
+    build([](SlicedNonbondedForce& f) { f.setReciprocalSpaceForceGroup(1); }, true);  // same as reciprocal group
+    build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
+    build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
+    bool threw = false;
+    try {
+        SlicedNonbondedForce force(1);
+        force.setInnerForceGroup(32);
+    }
+    catch (const OpenMMException&) {
+        threw = true;
+    }
+    ASSERT(threw);
+}
+
 void testErrors() {
     SlicedNonbondedForce force(3);
     force.addParticle(0.0, 1.0, 0.0);
@@ -1515,6 +1562,7 @@ int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
         testErrors();
+        testInnerGroupErrors();
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();

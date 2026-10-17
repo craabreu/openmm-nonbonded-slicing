@@ -185,7 +185,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         dispersionCoefficients.resize(numSlices, 0.0);
 }
 
-double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner) {
     computeParameters(context);
     vector<Vec3>& posData = extractPositions(context);
     vector<Vec3>& forceData = extractForces(context);
