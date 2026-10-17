@@ -441,3 +441,77 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
         assert all(math.isnan(derivatives[name]) for name in names.values())
         total = sum(data["scales"][key]*expected[key] for key in expected)
         ASSERT_EQUAL_TOL(total, withEnergy.getPotentialEnergy(), tol)
+
+
+@pytest.mark.parametrize("methodName", ["Ewald", "PME"])
+@pytest.mark.parametrize("platformName, precision", cases)
+def testDirectSpaceWithExclusions(platformName, precision, methodName):
+    # The Ewald exclusion corrections are in the reciprocal space force group, so the direct space
+    # force group and its derivatives match a CustomNonbondedForce with the same exclusions
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    tol = TOL_SLICE_DOUBLE if platformName == "Reference" or precision == "double" else TOL_SLICE_SINGLE
+    rng = random.Random(11)
+    n, length, cutoff = 3, 2.4, 1.0
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(SLICE_METHODS[methodName])
+    nonbonded.setCutoffDistance(cutoff)
+    nonbonded.setUseDispersionCorrection(False)
+    positions = []
+    for k in range(n**3):
+        center = mm.Vec3(*[(i + 0.5 + 0.2*rng.random())*length/n for i in (k % n, k//n % n, k//n**2)])
+        positions += [center, center + mm.Vec3(0.1, 0, 0), center + mm.Vec3(-0.0333, 0.0943, 0)]
+        for q, sigma, epsilon in [(-0.834, 0.315, 0.636), (0.417, 1, 0), (0.417, 1, 0)]:
+            nonbonded.addParticle(q, sigma, epsilon)
+        for i, j in [(0, 1), (0, 2), (1, 2)]:
+            nonbonded.addException(3*k+i, 3*k+j, 0, 1, 0)
+    data = dict(box=[mm.Vec3(length, 0, 0), mm.Vec3(0, length, 0), mm.Vec3(0, 0, length)], positions=positions)
+
+    sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(sliced.getNumParticles()):
+        sliced.setParticleSubset(i, (i//3) % 2)
+    sliced.setReciprocalSpaceForceGroup(1)
+    scaling = {"lambdaCross": (0, 1, True, True), "lambdaCoul11": (1, 1, True, False)}
+    for name, (subset1, subset2, includeCoulomb, includeLJ) in scaling.items():
+        sliced.addGlobalParameter(name, 0.5)
+        sliced.addScalingParameter(name, subset1, subset2, includeCoulomb, includeLJ)
+        sliced.addEnergyParameterDerivative(name)
+    _, context2 = _sliceContext(data, sliced, platform, properties)
+
+    if methodName == "PME":
+        alpha = value(sliced.getPMEParametersInContext(context2)[0])
+    else:
+        alpha = math.sqrt(-math.log(2*nonbonded.getEwaldErrorTolerance()))/cutoff
+    direct = mm.CustomNonbondedForce(
+        "scaleCoul*ONE_4PI_EPS0*q1*q2*erfc(alpha*r)/r + scaleLJ*4*eps*((sig/r)^12-(sig/r)^6);"
+        "scaleCoul=select(subset1+subset2-1, select(subset1+subset2-2, 1, lambdaCoul11), lambdaCross);"
+        "scaleLJ=select(subset1+subset2-1, 1, lambdaCross);"
+        "sig=0.5*(sigma1+sigma2); eps=sqrt(epsilon1*epsilon2)"
+    )
+    direct.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
+    direct.setCutoffDistance(cutoff)
+    # 1/(4 pi epsilon0) in kJ nm/(mol e^2), as in OpenMM
+    direct.addGlobalParameter("ONE_4PI_EPS0", 1/(4*math.pi*8.8541878128e-18/(1.602176634e-19**2*6.02214076e23)))
+    direct.addGlobalParameter("alpha", alpha)
+    for name in scaling:
+        direct.addGlobalParameter(name, 0.5)
+        direct.addEnergyParameterDerivative(name)
+    for parameter in ("q", "sigma", "epsilon", "subset"):
+        direct.addPerParticleParameter(parameter)
+    for i in range(nonbonded.getNumParticles()):
+        q, sigma, epsilon = map(value, nonbonded.getParticleParameters(i))
+        direct.addParticle([q, sigma, epsilon, sliced.getParticleSubset(i)])
+    for i in range(nonbonded.getNumExceptions()):
+        direct.addExclusion(*nonbonded.getExceptionParameters(i)[:2])
+    _, context1 = _sliceContext(data, direct, platform, properties)
+
+    state1 = context1.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+    state2 = context2.getState(getEnergy=True, getForces=True, getParameterDerivatives=True, groups={0})
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), tol)
+    for force1, force2 in zip(state1.getForces(), state2.getForces()):
+        ASSERT_EQUAL_VEC(force1, force2, tol)
+    derivatives1 = state1.getEnergyParameterDerivatives()
+    derivatives2 = state2.getEnergyParameterDerivatives()
+    for name in scaling:
+        assert derivatives1[name] != 0
+        ASSERT_EQUAL_TOL(derivatives1[name], derivatives2[name], tol)

@@ -1028,17 +1028,24 @@ void testExclusionsInReciprocalGroup(NonbondedForce::NonbondedMethod method) {
         nonbonded->addException(i+1, i+2, 0, 1, 0);
     }
 
-    // Put direct and reciprocal space in different force groups.
+    // Put direct and reciprocal space in different force groups and scale two slices.
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
     for (int i = 0; i < numParticles; i++)
         sliced->setParticleSubset(i, (i/3)%2);
+    sliced->addGlobalParameter("lambdaCross", 1);
+    sliced->addScalingParameter("lambdaCross", 0, 1, true, true);
+    sliced->addEnergyParameterDerivative("lambdaCross");
+    sliced->addGlobalParameter("lambdaCoul11", 1);
+    sliced->addScalingParameter("lambdaCoul11", 1, 1, true, false);
+    sliced->addEnergyParameterDerivative("lambdaCoul11");
     sliced->setForceGroup(0);
     sliced->setReciprocalSpaceForceGroup(1);
     system2.addForce(sliced);
 
     // The reference direct space is a CustomNonbondedForce with the same exclusions, which
-    // means no correction for the reciprocal space interactions between excluded pairs.
+    // means no correction for the reciprocal space interactions between excluded pairs, and
+    // with the same scaling of slices.
 
     VerletIntegrator integrator2(0.01);
     Context context2(system2, integrator2, platform);
@@ -1053,19 +1060,27 @@ void testExclusionsInReciprocalGroup(NonbondedForce::NonbondedMethod method) {
         NonbondedForceImpl::calcEwaldParameters(system2, *sliced, alpha, kmaxx, kmaxy, kmaxz);
     }
     CustomNonbondedForce* direct = new CustomNonbondedForce(
-        "ONE_4PI_EPS0*q1*q2*erfc(alpha*r)/r + 4*eps*((sig/r)^12-(sig/r)^6); sig=0.5*(sigma1+sigma2); eps=sqrt(epsilon1*epsilon2)"
+        "scaleCoul*ONE_4PI_EPS0*q1*q2*erfc(alpha*r)/r + scaleLJ*4*eps*((sig/r)^12-(sig/r)^6);"
+        "scaleCoul=select(subset1+subset2-1, select(subset1+subset2-2, 1, lambdaCoul11), lambdaCross);"
+        "scaleLJ=select(subset1+subset2-1, 1, lambdaCross);"
+        "sig=0.5*(sigma1+sigma2); eps=sqrt(epsilon1*epsilon2)"
     );
     direct->setNonbondedMethod(CustomNonbondedForce::CutoffPeriodic);
     direct->setCutoffDistance(cutoff);
     direct->addGlobalParameter("ONE_4PI_EPS0", ONE_4PI_EPS0);
     direct->addGlobalParameter("alpha", alpha);
+    direct->addGlobalParameter("lambdaCross", 1);
+    direct->addGlobalParameter("lambdaCoul11", 1);
+    direct->addEnergyParameterDerivative("lambdaCross");
+    direct->addEnergyParameterDerivative("lambdaCoul11");
     direct->addPerParticleParameter("q");
     direct->addPerParticleParameter("sigma");
     direct->addPerParticleParameter("epsilon");
+    direct->addPerParticleParameter("subset");
     for (int i = 0; i < numParticles; i++) {
         double charge, sigma, epsilon;
         nonbonded->getParticleParameters(i, charge, sigma, epsilon);
-        direct->addParticle({charge, sigma, epsilon});
+        direct->addParticle({charge, sigma, epsilon, (double) sliced->getParticleSubset(i)});
     }
     for (int i = 0; i < nonbonded->getNumExceptions(); i++) {
         int particle1, particle2;
@@ -1100,6 +1115,23 @@ void testExclusionsInReciprocalGroup(NonbondedForce::NonbondedMethod method) {
     State state3 = context2.getState(State::Energy | State::Forces);
     assertEnergy(state2, state3, tol);
     assertForces(state2, state3, tol);
+
+    // Scaled direct space and its derivatives
+
+    for (Context* context : {&context1, &context2}) {
+        context->setParameter("lambdaCross", 0.7);
+        context->setParameter("lambdaCoul11", 0.4);
+    }
+    state1 = context1.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<0);
+    state2 = context2.getState(State::Energy | State::Forces | State::ParameterDerivatives, false, 1<<0);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
+    map<string, double> derivatives1 = state1.getEnergyParameterDerivatives();
+    map<string, double> derivatives2 = state2.getEnergyParameterDerivatives();
+    for (string name : {"lambdaCross", "lambdaCoul11"}) {
+        ASSERT(derivatives1[name] != 0);
+        assertEqualTo(derivatives1[name], derivatives2[name], tol);
+    }
 }
 
 void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, int numSubsets, bool offsets, bool exceptions, bool lj) {
