@@ -388,6 +388,59 @@ public:
      */
     const std::string& getEnergyParameterDerivativeName(int index) const;
     /**
+     * Get the force group of the inner part of the direct-space interactions, or -1 if the inner
+     * force group is disabled.
+     */
+    int getInnerForceGroup() const;
+    /**
+     * Set the force group of the inner part of the direct-space interactions.  When enabled, every
+     * direct-space pair interaction, including 1-4 exceptions, is split into a short-range part and
+     * a remainder.  The short-range part is the bare Lennard-Jones plus Coulomb force multiplied by
+     * a quintic switching function that goes from 1 at the inner switching distance to 0 at the
+     * inner cutoff distance; its energy is the potential whose gradient is that force, shifted to
+     * vanish at the inner cutoff.  The remainder stays in the force group of this force.  Slice
+     * scaling parameters and parameter offsets apply to both parts.  This is the force splitting
+     * used for multiple time-step integration in :cite:`Abreu_2020`.
+     *
+     * The inner force group must differ from the force group of this force and from the reciprocal
+     * space force group, and requires 0 < inner switching distance < inner cutoff distance <=
+     * cutoff distance.  Like other force group settings, changes take effect when a new
+     * :OpenMM:`Context` is created or an existing one is reinitialized.
+     *
+     * Parameters
+     * ----------
+     *     group : int
+     *         the force group, between 0 and 31, or -1 to disable the inner force group
+     */
+    void setInnerForceGroup(int group);
+    /**
+     * Get the inner cutoff distance (in nm), beyond which the inner part of an interaction is zero.
+     */
+    double getInnerCutoffDistance() const;
+    /**
+     * Set the inner cutoff distance.
+     *
+     * Parameters
+     * ----------
+     *     distance : double
+     *         the inner cutoff distance, measured in nm
+     */
+    void setInnerCutoffDistance(double distance);
+    /**
+     * Get the inner switching distance (in nm), where the inner part of an interaction begins to
+     * switch off.
+     */
+    double getInnerSwitchingDistance() const;
+    /**
+     * Set the inner switching distance.
+     *
+     * Parameters
+     * ----------
+     *     distance : double
+     *         the inner switching distance, measured in nm
+     */
+    void setInnerSwitchingDistance(double distance);
+    /**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * The default value is `True`.
      */
