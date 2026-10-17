@@ -34,6 +34,13 @@ values of the scaling parameters. For instance, a parameter that scales both con
 single slice *I, J* yields its full energy :math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`, while one that
 scales the electrostatic contributions of several slices yields their sum.
 
+With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
+calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. Unlike in OpenMM_'s
+NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
+exceptions are computed in the reciprocal-space force group, because they only cancel part of the
+reciprocal-space sum :cite:`Procacci_1998,Morrone_2010`. For the same reason, they are kept when
+direct space is turned off with ``setIncludeDirectSpace(False)``.
+
 Installation
 ============
 

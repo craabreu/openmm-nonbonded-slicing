@@ -118,6 +118,12 @@ namespace NonbondedSlicing {
  * at constant pressure, this can improve the quality of the result.  Call :func:`setUseDispersionCorrection` to set whether
  * this should be used.
  *
+ * With Ewald, PME, or LJPME, you can call :func:`setReciprocalSpaceForceGroup` to compute the reciprocal space
+ * part in a different force group than the direct space part, as in multiple time stepping.  Unlike in
+ * :OpenMM:`NonbondedForce`, the terms that subtract the reciprocal space interactions of excluded pairs and
+ * exceptions are computed in the reciprocal space force group, because they only cancel part of the reciprocal
+ * space sum.  For the same reason, they are kept when direct space is turned off with :func:`setIncludeDirectSpace`.
+ *
  * In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
  * Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
  * two states it can exist in, each described by a different set of parameters for the atoms that make up the
@@ -233,6 +239,22 @@ public:
      * Get the name of the method used for handling long range nonbonded interactions.
      */
     std::string getNonbondedMethodName() const;
+    /**
+     * Set whether to include direct space interactions when calculating forces and energy.  This is useful if
+     * you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that
+     * computes it in a nonstandard way.
+     *
+     * Unlike in :OpenMM:`NonbondedForce`, turning off direct space does not remove the terms that subtract the
+     * reciprocal space interactions of excluded pairs and exceptions with Ewald, PME, or LJPME.  These terms
+     * belong to the reciprocal space calculation and are computed in its force group.  A replacement for the
+     * direct space calculation must not include them, or they will be counted twice.
+     *
+     * Parameters
+     * ----------
+     *     include : bool
+     *         whether to include direct space interactions
+     */
+    void setIncludeDirectSpace(bool include);
     /**
      * Get the specified number of particle subsets.
      */
