@@ -427,7 +427,10 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
         sliced.addEnergyParameterDerivative(name)
     system, context = _sliceContext(data, sliced, platform, properties)
 
-    for groups in ({0}, {1}, {0, 1}):
+    # NonbondedForce computes the Ewald exclusion corrections in its direct space force group, while
+    # SlicedNonbondedForce computes them in its reciprocal space force group
+    ewald = methodName in ("Ewald", "PME", "LJPME")
+    for groups in ({0, 1},) if ewald else ({0}, {1}, {0, 1}):
         expected = {key: sum(oracle[key][g] for g in groups) for key in oracle}
         withEnergy = context.getState(getEnergy=True, getParameterDerivatives=True, groups=groups)
         derivatives = withEnergy.getEnergyParameterDerivatives()
