@@ -15,6 +15,12 @@ Changelog
   ``NonbondedForce``. Total forces and energies are unchanged. These terms are also kept when
   ``setIncludeDirectSpace(False)`` is used.
 
+**Bug fixes**
+
+* OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
+  using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
+  excluded pairs is now fixed to a valid value. Results were not affected.
+
 0.4.0
 -----
 
