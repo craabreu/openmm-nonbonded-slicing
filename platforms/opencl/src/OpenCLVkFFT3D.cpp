@@ -60,7 +60,11 @@ void OpenCLVkFFT::execFFT(ArrayInterface& in, ArrayInterface& out, bool forward)
         params.inputBuffer = &context.unwrap(out).getDeviceBuffer()();
         params.buffer = &context.unwrap(in).getDeviceBuffer()();
     }
-    params.commandQueue = &context.getQueue()();
+    // getQueue() returns a cl::CommandQueue by value, so the handle must be kept in a local that
+    // outlives the VkFFTAppend call; taking the address of the temporary's handle leaves VkFFT
+    // reading a dead stack slot.
+    cl_command_queue queue = context.getQueue()();
+    params.commandQueue = &queue;
     VkFFTResult result = VkFFTAppend(&app, forward ? -1 : 1, &params);
     if (result != VKFFT_SUCCESS)
         throw OpenMMException("Error executing VkFFT: "+context.intToString(result));

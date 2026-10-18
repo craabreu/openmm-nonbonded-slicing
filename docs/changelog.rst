@@ -17,6 +17,9 @@ Changelog
 * LJPME with no charged particles and a requested scaling parameter derivative threw
   "ComputeArray has not been initialized" on devices without a separate PME queue, such as CPU
   OpenCL devices.
+* OpenCL: the PME/LJPME FFT passed VkFFT a pointer to the command queue handle of a temporary
+  object, which could be overwritten before use and then corrupt memory (undefined behavior that
+  depended on the compiler and on the surrounding code).
 
 0.4.0
 -----
