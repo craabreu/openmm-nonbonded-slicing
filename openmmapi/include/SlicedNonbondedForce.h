@@ -55,6 +55,12 @@ public:
     void setUseCuFFT(bool use) {
         useCuFFT = use;
     };
+    bool getReciprocalExclusions() const {
+        return reciprocalExclusions;
+    };
+    void setReciprocalExclusions(bool reciprocal) {
+        reciprocalExclusions = reciprocal;
+    };
 protected:
     OpenMM::ForceImpl* createImpl() const;
 private:
@@ -65,7 +71,7 @@ private:
     std::map<int, int> subsets;
     std::vector<ScalingParameterInfo> scalingParameters;
     std::vector<int> energyParameterDerivatives;
-    bool useCuFFT;
+    bool useCuFFT, reciprocalExclusions;
 };
 
 /**

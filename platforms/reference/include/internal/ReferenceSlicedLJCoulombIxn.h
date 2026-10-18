@@ -25,7 +25,7 @@ class ReferenceSlicedLJCoulombIxn {
 
       bool cutoff;
       bool useSwitch;
-      bool periodic, periodicExceptions;
+      bool periodic, periodicExceptions, reciprocalExclusions;
       bool ewald;
       bool pme, ljpme;
       const OpenMM::NeighborList* neighborList;
@@ -160,6 +160,15 @@ class ReferenceSlicedLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
 
       void setPeriodicExceptions(bool periodic);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set whether the Ewald exclusion corrections go with the reciprocal space calculation
+         instead of the direct space one.
+
+         --------------------------------------------------------------------------------------- */
+
+      void setReciprocalExclusions(bool reciprocal);
 
       /**---------------------------------------------------------------------------------------
 

@@ -215,6 +215,7 @@ def _sampleForce():
     force.addScalingParameter("a", 2, 1, True, False)
     force.addEnergyParameterDerivative("a")
     force.setUseCuFFT(False)
+    force.setReciprocalExclusions(True)
     return force
 
 
@@ -233,6 +234,7 @@ def testCopyAndPickle(duplicate):
     assert list(other.getScalingParameter(0)) == ["a", 2, 1, True, False]
     assert other.getEnergyParameterDerivativeName(0) == "a"
     assert other.getUseCuFFT() is False
+    assert other.getReciprocalExclusions() is True
     other.setParticleSubset(0, 1)
     assert force.getParticleSubset(0) == 0
 
@@ -247,6 +249,12 @@ def testSystemSerialization():
     assert force.getNumSubsets() == 3
     assert force.getParticleSubset(1) == 2
     assert force.getUseCuFFT() is False
+    assert force.getReciprocalExclusions() is True
+
+
+def testReciprocalExclusionsDefault():
+    assert plugin.SlicedNonbondedForce(2).getReciprocalExclusions() is False
+    assert plugin.SlicedNonbondedForce(mm.NonbondedForce(), 2).getReciprocalExclusions() is False
 
 
 def testDerivatives():
@@ -427,10 +435,7 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
         sliced.addEnergyParameterDerivative(name)
     system, context = _sliceContext(data, sliced, platform, properties)
 
-    # NonbondedForce computes the Ewald exclusion corrections in its direct space force group, while
-    # SlicedNonbondedForce computes them in its reciprocal space force group
-    ewald = methodName in ("Ewald", "PME", "LJPME")
-    for groups in ({0, 1},) if ewald else ({0}, {1}, {0, 1}):
+    for groups in ({0}, {1}, {0, 1}):
         expected = {key: sum(oracle[key][g] for g in groups) for key in oracle}
         withEnergy = context.getState(getEnergy=True, getParameterDerivatives=True, groups=groups)
         derivatives = withEnergy.getEnergyParameterDerivatives()
@@ -446,8 +451,9 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
 @pytest.mark.parametrize("methodName", ["Ewald", "PME"])
 @pytest.mark.parametrize("platformName, precision", cases)
 def testDirectSpaceWithExclusions(platformName, precision, methodName):
-    # The Ewald exclusion corrections are in the reciprocal space force group, so the direct space
-    # force group and its derivatives match a CustomNonbondedForce with the same exclusions
+    # With reciprocal exclusions, the Ewald exclusion corrections are in the reciprocal space force
+    # group, so the direct space force group and its derivatives match a CustomNonbondedForce with the
+    # same exclusions
     platform = mm.Platform.getPlatformByName(platformName)
     properties = {} if platformName == "Reference" else {"Precision": precision}
     tol = TOL_SLICE_DOUBLE if platformName == "Reference" or precision == "double" else TOL_SLICE_SINGLE
@@ -471,6 +477,7 @@ def testDirectSpaceWithExclusions(platformName, precision, methodName):
     for i in range(sliced.getNumParticles()):
         sliced.setParticleSubset(i, (i//3) % 2)
     sliced.setReciprocalSpaceForceGroup(1)
+    sliced.setReciprocalExclusions(True)
     scaling = {"lambdaCross": (0, 1, True, True), "lambdaCoul11": (1, 1, True, False)}
     for name, (subset1, subset2, includeCoulomb, includeLJ) in scaling.items():
         sliced.addGlobalParameter(name, 0.5)

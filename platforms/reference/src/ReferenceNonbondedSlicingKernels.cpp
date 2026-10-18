@@ -178,6 +178,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         exceptionsArePeriodic = false;
     else
         exceptionsArePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
+    reciprocalExclusions = force.getReciprocalExclusions();
     rfDielectric = force.getReactionFieldDielectric();
     if (force.getUseDispersionCorrection())
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(system, force);
@@ -206,6 +207,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setPeriodic(boxVectors);
         clj.setPeriodicExceptions(exceptionsArePeriodic);
     }
+    clj.setReciprocalExclusions(reciprocalExclusions);
     if (ewald)
         clj.setUseEwald(ewaldAlpha, kmax[0], kmax[1], kmax[2]);
     if (pme)

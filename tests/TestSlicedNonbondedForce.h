@@ -75,18 +75,15 @@ void testInstantiateFromNonbondedForce(NonbondedForce::NonbondedMethod method) {
 
     State state = context.getState(State::Forces | State::Energy, true);
 
-    // NonbondedForce computes the Ewald exclusion corrections in its direct space force group, while
-    // SlicedNonbondedForce computes them in its reciprocal space force group. Compare the sums.
-
-    State state1 = context.getState(State::Forces | State::Energy, true, (1<<0) + (1<<2));
-    State state2 = context.getState(State::Forces | State::Energy, true, (1<<1) + (1<<3));
+    State state1 = context.getState(State::Forces | State::Energy, true, 1<<0);
+    State state2 = context.getState(State::Forces | State::Energy, true, 1<<1);
     assertEnergy(state1, state2, TOL);
     assertForces(state1, state2, TOL);
 
     context.setParameter("p1", 1);
 
-    State state3 = context.getState(State::Forces | State::Energy, true, (1<<0) + (1<<2));
-    State state4 = context.getState(State::Forces | State::Energy, true, (1<<1) + (1<<3));
+    State state3 = context.getState(State::Forces | State::Energy, true, 1<<2);
+    State state4 = context.getState(State::Forces | State::Energy, true, 1<<3);
     assertEnergy(state3, state4, TOL);
     assertForces(state3, state4, TOL);
 }
@@ -678,17 +675,20 @@ void testChangingParameters() {
     system.addForce(sliced);
     system.setDefaultPeriodicBoxVectors(Vec3(boxSize, 0, 0), Vec3(0, boxSize, 0), Vec3(0, 0, boxSize));
 
-    // See if the forces and energies match the Reference platform. NonbondedForce computes the Ewald
-    // exclusion corrections in its direct space force group, while SlicedNonbondedForce computes them
-    // in its reciprocal space force group. Compare the sums.
+    // See if the forces and energies match the Reference platform.
 
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    State state1 = context.getState(State::Forces | State::Energy, true, (1<<0) + (1<<2));
-    State state2 = context.getState(State::Forces | State::Energy, true, (1<<1) + (1<<3));
+    State state1 = context.getState(State::Forces | State::Energy, true, 1<<0);
+    State state2 = context.getState(State::Forces | State::Energy, true, 1<<1);
     assertEnergy(state1, state2, TOL);
     assertForces(state1, state2, TOL);
+
+    State state3 = context.getState(State::Forces | State::Energy, true, 1<<2);
+    State state4 = context.getState(State::Forces | State::Energy, true, 1<<3);
+    assertEnergy(state3, state4, TOL);
+    assertForces(state3, state4, TOL);
 
     // Now modify parameters and see if they still agree.
 
@@ -701,10 +701,7 @@ void testChangingParameters() {
     }
     nonbonded->updateParametersInContext(context);
     sliced->updateParametersInContext(context);
-    state1 = context.getState(State::Forces | State::Energy, true, (1<<0) + (1<<2));
-    state2 = context.getState(State::Forces | State::Energy, true, (1<<1) + (1<<3));
-    assertEnergy(state1, state2, TOL);
-    assertForces(state1, state2, TOL);
+    assertForcesAndEnergy(context, TOL);
 }
 
 void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
@@ -1028,7 +1025,8 @@ void testExclusionsInReciprocalGroup(NonbondedForce::NonbondedMethod method) {
         nonbonded->addException(i+1, i+2, 0, 1, 0);
     }
 
-    // Put direct and reciprocal space in different force groups and scale two slices.
+    // Put direct and reciprocal space in different force groups, with the exclusion corrections in the
+    // reciprocal space one, and scale two slices.
 
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(*nonbonded, 2);
     for (int i = 0; i < numParticles; i++)
@@ -1041,6 +1039,7 @@ void testExclusionsInReciprocalGroup(NonbondedForce::NonbondedMethod method) {
     sliced->addEnergyParameterDerivative("lambdaCoul11");
     sliced->setForceGroup(0);
     sliced->setReciprocalSpaceForceGroup(1);
+    sliced->setReciprocalExclusions(true);
     system2.addForce(sliced);
 
     // The reference direct space is a CustomNonbondedForce with the same exclusions, which
@@ -1143,11 +1142,6 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
     double tol = (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-4 : 1e-3;
-
-    // NonbondedForce computes the Ewald exclusion corrections in its direct space force group, while
-    // SlicedNonbondedForce computes them in its reciprocal space force group.
-
-    bool sameGroupSplit = !exceptions || method == NonbondedForce::NoCutoff || method == NonbondedForce::CutoffNonPeriodic || method == NonbondedForce::CutoffPeriodic;
 
     System system1, system2;
     for (int i = 0; i < numParticles; i++) {
@@ -1273,22 +1267,19 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     Context context2(system2, integrator2, platform);
     context2.setPositions(positions);
 
-    State state1, state2;
-    if (sameGroupSplit) {
-        // Direct space
+    // Direct space
 
-        state1 = context1.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
-        state2 = context2.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
+    State state1 = context1.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
+    State state2 = context2.getState(State::Energy | State::Forces | State::Positions, false, 1<<0);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
-        // Reciprocal space
+    // Reciprocal space
 
-        state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
-        state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
-    }
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Overall
 
@@ -1334,21 +1325,19 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     if (numSubsets == 3)
         context2.setParameter(param21, value[param21]);
 
-    if (sameGroupSplit) {
-        // Direct space
+    // Direct space
 
-        state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
-        state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
-        // Reciprocal space
+    // Reciprocal space
 
-        state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
-        state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
-    }
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Overall
 
@@ -1392,21 +1381,19 @@ void testNonbondedSlicing(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMeth
     if (numSubsets == 3)
         context2.setParameter(param21, value[param21]);
 
-    if (sameGroupSplit) {
-        // Direct space
+    // Direct space
 
-        state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
-        state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<0);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<0);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
-        // Reciprocal space
+    // Reciprocal space
 
-        state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
-        state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
-        assertEnergy(state1, state2, tol);
-        assertForces(state1, state2, tol);
-    }
+    state1 = context1.getState(State::Energy | State::Forces, false, 1<<1);
+    state2 = context2.getState(State::Energy | State::Forces, false, 1<<1);
+    assertEnergy(state1, state2, tol);
+    assertForces(state1, state2, tol);
 
     // Overall
 

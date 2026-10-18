@@ -37,6 +37,7 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setIntProperty("exceptionsUsePeriodic", force.getExceptionsUsePeriodicBoundaryConditions());
     node.setBoolProperty("includeDirectSpace", force.getIncludeDirectSpace());
     node.setBoolProperty("useCuFFT", force.getUseCuFFT());
+    node.setBoolProperty("reciprocalExclusions", force.getReciprocalExclusions());
     double alpha;
     int nx, ny, nz;
     force.getPMEParameters(alpha, nx, ny, nz);
@@ -119,6 +120,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         if (node.hasProperty("includeDirectSpace"))
             force->setIncludeDirectSpace(node.getBoolProperty("includeDirectSpace"));
         force->setUseCuFFT(node.getBoolProperty("useCuFFT", true));
+        force->setReciprocalExclusions(node.getBoolProperty("reciprocalExclusions", false));
         double alpha = node.getDoubleProperty("alpha", 0.0);
         int nx = node.getIntProperty("nx", 0);
         int ny = node.getIntProperty("ny", 0);

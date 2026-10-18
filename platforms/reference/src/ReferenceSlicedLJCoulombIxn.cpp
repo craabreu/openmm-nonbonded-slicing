@@ -35,7 +35,7 @@ using namespace OpenMM;
    --------------------------------------------------------------------------------------- */
 
 ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false),
-            periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
+            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -156,6 +156,10 @@ void ReferenceSlicedLJCoulombIxn::setUseLJPME(double alpha, int meshSize[3]) {
 
 void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
     periodicExceptions = periodic;
+}
+
+void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
+    reciprocalExclusions = reciprocal;
 }
 
 /**---------------------------------------------------------------------------------------
@@ -359,9 +363,10 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     // EXCLUSION CORRECTIONS
     // **************************************************************************************
     // Subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
-    // Unlike in OpenMM's NonbondedForce, this is done along with the reciprocal space calculation.
+    // As in OpenMM's NonbondedForce, this goes with the direct space calculation by default, and with
+    // the reciprocal space calculation if reciprocal exclusions are requested.
 
-    if (includeReciprocal) {
+    if (reciprocalExclusions ? includeReciprocal : includeDirect) {
         const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
         for (int i = 0; i < numberOfAtoms; i++)
             for (int exclusion : exclusions[i]) {

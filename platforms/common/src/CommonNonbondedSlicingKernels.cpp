@@ -639,8 +639,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
     }
 
-    // Add code to subtract off the reciprocal part of excluded interactions. Unlike in OpenMM's
-    // NonbondedForce, this goes in the reciprocal space force group, since it only cancels part of
+    // Add code to subtract off the reciprocal part of excluded interactions. As in OpenMM's
+    // NonbondedForce, this goes in the direct space force group by default. With reciprocal
+    // exclusions, it goes in the reciprocal space force group instead, since it only cancels part of
     // the reciprocal space sum and must be computed along with it (e.g., in multiple time stepping).
 
     if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
@@ -676,7 +677,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 code<<getDerivativeCode(param, variableName, "", hasCoulomb, doLJPME);
             }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
-            cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), recipForceGroup);
+            string source = cc.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements);
+            if (force.getReciprocalExclusions())
+                cc.getBondedUtilities().addInteraction(atoms, source, recipForceGroup);
+            else if (force.getIncludeDirectSpace())
+                cc.getBondedUtilities().addInteraction(atoms, source, force.getForceGroup());
         }
     }
 

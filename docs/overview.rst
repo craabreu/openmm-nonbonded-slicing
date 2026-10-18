@@ -35,11 +35,13 @@ single slice *I, J* yields its full energy :math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`,
 scales the electrostatic contributions of several slices yields their sum.
 
 With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
-calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. Unlike in OpenMM_'s
+calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. As in OpenMM_'s
 NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
-exceptions are computed in the reciprocal-space force group, because they only cancel part of the
-reciprocal-space sum :cite:`Procacci_1998,Morrone_2010`. For the same reason, they are kept when
-direct space is turned off with ``setIncludeDirectSpace(False)``.
+exceptions are computed in the direct-space force group by default. Since they only cancel part of
+the reciprocal-space sum, they should be integrated along with it whenever the two groups are
+evaluated at different times :cite:`Procacci_1998,Morrone_2010`. Calling
+``setReciprocalExclusions(True)`` moves them to the reciprocal-space force group, where they are
+also kept when direct space is turned off with ``setIncludeDirectSpace(False)``.
 
 Installation
 ============

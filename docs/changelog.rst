@@ -5,15 +5,15 @@ Changelog
 0.5.0 (unreleased)
 ------------------
 
-**Breaking changes**
+**New features**
 
-* With Ewald, PME or LJPME, the terms that subtract the reciprocal-space interactions of excluded
-  pairs and exceptions are computed in the reciprocal-space force group, not in the direct-space
-  one. They only cancel part of the reciprocal-space sum, so both must be evaluated together, as
-  in multiple time stepping (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al.,
-  J. Chem. Theory Comput. 6, 1798, 2010). This intentionally differs from OpenMM's
-  ``NonbondedForce``. Total forces and energies are unchanged. These terms are also kept when
-  ``setIncludeDirectSpace(False)`` is used.
+* ``setReciprocalExclusions(True)`` computes the terms that subtract the reciprocal-space
+  interactions of excluded pairs and exceptions (Ewald, PME and LJPME) in the reciprocal-space
+  force group instead of the direct-space one. They only cancel part of the reciprocal-space sum,
+  so both should be evaluated together when they are integrated with different time steps
+  (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
+  1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
+  is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
 
 **Bug fixes**
 
