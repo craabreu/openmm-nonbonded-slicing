@@ -18,6 +18,20 @@ where each slice is defined by subsets $`I`$ and $`J`$, superscripts _vdW_ and _
 der Waals and electrostatic contributions, $`E_{I,J}`$ is the potential energy of all particle pairs
 formed by one particle in subset $`I`$ and one in subset $`J`$, and $`\lambda_{I,J}`$ is a scaling parameter.
 
+The nonbonded energy can be partitioned along a second, independent axis. Slicing by *subset*, above,
+decides which particle pairs a scaling parameter applies to. Slicing by *distance*, through an optional
+**inner force group**, splits every pair interaction into a short-range part, switched off smoothly
+between an inner switching distance and an inner cutoff, and a remainder, so that a multiple time-step
+integrator can advance the two with different time steps. The two partitions compose exactly,
+
+```math
+E = \sum_{I \le J} \sum_{t \in \{vdW, elec\}} \lambda^{t}_{I,J} \left( E^{t,\mathrm{inner}}_{I,J} + E^{t,\mathrm{outer}}_{I,J} \right),
+```
+
+because the inner part of a pair interaction is scaled by the same parameters as the rest of it, and
+each force group reports an energy consistent with its force. The inner force group is described in
+the [documentation](https://craabreu.github.io/openmm-nonbonded-slicing/).
+
 By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in [Context] global parameters. Derivatives
 with respect to these variables can be requested and used, for instance, to report individual energy
