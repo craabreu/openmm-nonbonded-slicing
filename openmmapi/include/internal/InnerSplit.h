@@ -40,8 +40,9 @@ namespace NonbondedSlicing {
  * with the positive series L_6(Y) = sum(Y^j/j, j>=6) = -log(1-Y) - sum(Y^j/j, j<6).  Nothing is
  * expanded about a distant point and nothing is integrated from rs, which is what makes this form
  * accurate even in single precision (see docs/theory.rst).  The GPU kernels evaluate the same
- * expressions with constants computed here; they evaluate L_6(Y)/Y^6 from a Chebyshev expansion on
- * [0, 0.8] (a universal function, accurate to 5e-10) and from the logarithm above it.
+ * expressions with constants computed here.  L_6(Y)/Y^6 = sum(Y^m/(m+6), m>=0) is the Lerch
+ * transcendent Phi(Y, 1, 6) = 2F1(1, 6; 7; Y)/6, a universal function that the kernels evaluate from a
+ * Chebyshev expansion on [0, 0.8] (accurate to 5e-10) and from the logarithm above it.
  */
 class InnerSplit {
 public:
@@ -60,7 +61,8 @@ public:
     double rs, rc, gamma;
     double a12[9], a6[3], c1, K[3];
     /**
-     * Chebyshev coefficients of sum(Y^m/(m+6), m>=0) on [0, 0.8], in the variable u = 2.5*Y-1.
+     * Chebyshev coefficients of the Lerch transcendent Phi(Y, 1, 6) = sum(Y^m/(m+6), m>=0) on [0, 0.8],
+     * in the variable u = 2.5*Y-1 (check: mpmath.lerchphi(Y, 1, 6)).
      */
     static const double* ellChebyshev() {
         static const double c[21] = {

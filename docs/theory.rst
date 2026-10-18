@@ -203,10 +203,14 @@ the Coulomb power, :math:`n = 1`, the integral has a logarithm, and the three :m
    - 30 \left( (\gamma-1)^2 L_6(Y) + (1-2\gamma)\frac{Y^5}{5} + \frac{Y^4}{4} \right) \right],
    \qquad L_6(Y) = \sum_{j \ge 6} \frac{Y^j}{j} = -\ln(1-Y) - \sum_{j=1}^{5} \frac{Y^j}{j}.
 
-The function :math:`L_6(Y)/Y^6` does not depend on the switching range, so the GPU kernels evaluate
-it from a fixed Chebyshev expansion on :math:`0 \le Y \le 0.8`, accurate to :math:`5 \times 10^{-10}`,
-and from the logarithm above that, where the subtraction loses at most one digit; the Reference
-platform sums the series. With these expressions, :math:`e_{12}` and :math:`e_6` are accurate to a
+The function :math:`L_6(Y)/Y^6 = \sum_{m \ge 0} Y^m/(m+6)` is the Lerch transcendent
+:math:`\Phi(Y, 1, 6)`, equivalently :math:`{}_2F_1(1, 6; 7; Y)/6`, and :math:`L_6(Y)` itself is the
+incomplete beta function :math:`B_Y(6, 0)`. None of these is available in the GPU math libraries,
+and the logarithm, the only elementary function in the family, requires the subtraction above, which
+cancels for small :math:`Y`. Since the function does not depend on the switching range, the GPU
+kernels evaluate it from a fixed Chebyshev expansion on :math:`0 \le Y \le 0.8`, accurate to
+:math:`5 \times 10^{-10}`, and from the logarithm above that, where the subtraction loses at most one
+digit; the Reference platform sums the series. With these expressions, :math:`e_{12}` and :math:`e_6` are accurate to a
 few units in the last place and :math:`e_1` to about :math:`3 \times 10^{-6}` in single precision,
 for any switching range, and all three are exact to rounding in double precision. The Reference
 platform and the constants of the GPU kernels are computed by the same code, in ``InnerSplit.h``.
