@@ -1460,6 +1460,38 @@ bool throwsException(const function<void()>& call) {
     return false;
 }
 
+void testLJPMEWithoutCharges() {
+    // LJPME with no charges and a requested derivative: the Coulomb part of PME is skipped, and the
+    // dispersion part must still find initialized energy and derivative buffers on every platform.
+
+    System system;
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::LJPME);
+    force->setCutoffDistance(1.0);
+    vector<Vec3> positions;
+    for (int i = 0; i < 16; i++) {
+        system.addParticle(1.0);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->setParticleSubset(i, i%2);
+        positions.push_back(Vec3(0.5*(i%4)+0.1*(i%2), 0.5*(i/4), 0.2*(i%3)));
+    }
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    force->addGlobalParameter("lambda", 0.5);
+    force->addScalingParameter("lambda", 0, 1, false, true);
+    force->addEnergyParameterDerivative("lambda");
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions(positions);
+    double derivative = context.getState(State::Energy | State::ParameterDerivatives).getEnergyParameterDerivatives().at("lambda");
+    context.setParameter("lambda", 1.0);
+    double e1 = context.getState(State::Energy).getPotentialEnergy();
+    context.setParameter("lambda", 0.0);
+    double e0 = context.getState(State::Energy).getPotentialEnergy();
+    assertEqualTo(e1-e0, derivative, 1e-4);
+    ASSERT(fabs(derivative) > 1e-3);
+}
+
 void testInnerGroupErrors() {
     // Each configure() call should make Context creation fail; the unmodified setup must succeed.
 
@@ -1916,6 +1948,7 @@ int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
         testErrors();
+        testLJPMEWithoutCharges();
         testInnerGroupErrors();
         for (bool asException : {false, true}) {
             testInnerGroupPair(asException, 0.5, 0.8);

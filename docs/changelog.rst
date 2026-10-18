@@ -12,6 +12,12 @@ Changelog
   integration, with an energy consistent with its force (``setInnerForceGroup``,
   ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``).
 
+**Bug fixes**
+
+* LJPME with no charged particles and a requested scaling parameter derivative threw
+  "ComputeArray has not been initialized" on devices without a separate PME queue, such as CPU
+  OpenCL devices.
+
 0.4.0
 -----
 
