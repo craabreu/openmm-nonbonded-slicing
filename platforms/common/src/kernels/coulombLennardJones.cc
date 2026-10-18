@@ -34,35 +34,36 @@
 #endif
         innerForce = innerSwitch*(ljLambda*innerForceLJ + clLambda*qq*invR);
 #ifdef INCLUDE_ENERGY
-        // Shifted inner energy terms for the powers 12, 6 and 1: e_n = n*integral(S(s)*s^-(n+1), s=r..rc) beyond the
-        // switching distance, computed by Gauss-Legendre quadrature in log(s) (no cancellation in any precision),
-        // and r^-n - K_n below it.
+        // Shifted inner energy terms e_12, e_6 and e_1 (see InnerSplit.h): with x = (rc-r)/r, the Lennard-Jones terms
+        // are x^4 times a polynomial in x; the Coulomb term uses Y = 1-r/rc and the positive series L_m(Y) = sum(Y^j/j, j>=m).
         real e12, e6, e1;
         if (r > INNER_SWITCH) {
-            e12 = e6 = e1 = 0.0f;
-            const real logR = LOG(r);
-            const real panel = (INNER_LOG_CUTOFF-logR)/INNER_PANELS;
-            for (int p = 0; p < INNER_PANELS; p++) {
-                const real center = logR+(p+0.5f)*panel;
-                for (int k = 0; k < 3; k++) {
-                    const real node = 0.5f*panel*(k == 0 ? INNER_GL_X0 : (k == 1 ? INNER_GL_X1 : INNER_GL_X2));
-                    const real weight = (k == 0 ? INNER_GL_W0 : (k == 1 ? INNER_GL_W1 : INNER_GL_W2));
-                    for (int side = -1; side <= 1; side += 2) {
-                        const real s = EXP(center+side*node);
-                        const real z = (s-INNER_SWITCH)*INNER_SWITCH_SCALE;
-                        const real ws = weight*(1.0f+z*z*z*(-10.0f+z*(15.0f-z*6.0f)));
-                        const real invS = RECIP(s);
-                        const real invS2 = invS*invS;
-                        const real invS6 = invS2*invS2*invS2;
-                        e12 += ws*invS6*invS6;
-                        e6 += ws*invS6;
-                        e1 += ws*invS;
-                    }
-                }
+            const real x = (INNER_CUTOFF-r)*invR;
+            real x4 = x*x;
+            x4 *= x4;
+            e12 = x4*(INNER_A12_0+x*(INNER_A12_1+x*(INNER_A12_2+x*(INNER_A12_3+x*(INNER_A12_4+x*(INNER_A12_5+x*(INNER_A12_6+x*(INNER_A12_7+x*INNER_A12_8))))))));
+            e6 = x4*(INNER_A6_0+x*(INNER_A6_1+x*INNER_A6_2));
+            const real Y = (INNER_CUTOFF-r)*INNER_INV_CUTOFF;
+        const real Y2 = Y*Y, Y4 = Y2*Y2, Y5 = Y4*Y, Y6 = Y4*Y2;
+        const real invOneMinusY = INNER_CUTOFF*invR;
+        real L6;
+        if (Y < 0.8f) {
+            // L6/Y^6 = sum(Y^m/(m+6), m>=0) from its Chebyshev expansion on [0, 0.8] (Clenshaw recurrence)
+            const real ell[21] = {INNER_ELL_0, INNER_ELL_1, INNER_ELL_2, INNER_ELL_3, INNER_ELL_4, INNER_ELL_5, INNER_ELL_6,
+                                  INNER_ELL_7, INNER_ELL_8, INNER_ELL_9, INNER_ELL_10, INNER_ELL_11, INNER_ELL_12, INNER_ELL_13,
+                                  INNER_ELL_14, INNER_ELL_15, INNER_ELL_16, INNER_ELL_17, INNER_ELL_18, INNER_ELL_19, INNER_ELL_20};
+            const real u = 2.5f*Y-1.0f, u2 = 2.0f*u;
+            real b1 = 0.0f, b2 = 0.0f;
+            for (int j = 20; j > 0; j--) {
+                const real b0 = u2*b1-b2+ell[j];
+                b2 = b1;
+                b1 = b0;
             }
-            e12 *= 6.0f*panel;
-            e6 *= 3.0f*panel;
-            e1 *= 0.5f*panel;
+            L6 = Y6*(u*b1-b2+ell[0]);
+        }
+        else
+            L6 = LOG(INNER_CUTOFF*invR)-(Y+Y2*0.5f+Y2*Y*(1.0f/3.0f)+Y4*0.25f+Y5*0.2f);
+        e1 = INNER_C1*(Y4*(10.0f-15.0f*INNER_GAMMA*Y+6.0f*INNER_GAMMA*INNER_GAMMA*Y2)*invOneMinusY-30.0f*(INNER_GAMMA1SQ*L6+(1.0f-2.0f*INNER_GAMMA)*Y5*0.2f+Y4*0.25f));
         }
         else {
             const real invR2 = invR*invR;

@@ -298,11 +298,12 @@ it is out of scope here.
 
 - **Single precision of V̂.** Resolved during implementation: the closed-form V_pert above cancels
   catastrophically (about 6 of 7 float digits for 0.5/0.8 nm, and even in double for narrow windows
-  such as 0.79/0.8 nm or tiny r_s such as 0.001 nm). The implementation evaluates the same function as
-  V̂_n = n∫ᵣ^{r_c} S(s) s⁻⁽ⁿ⁺¹⁾ ds beyond r_s and r⁻ⁿ − K_n below it, with
-  K_n = r_c⁻ⁿ + n∫_{r_s}^{r_c} (1−S) s⁻⁽ⁿ⁺¹⁾ ds; every integrand is positive and the integrals use
-  Gauss–Legendre quadrature in ln s (InnerSplit.h on the host and Reference platform, the common
-  kernels on the GPU). Forces do not depend on V̂.
+  such as 0.79/0.8 nm or tiny r_s such as 0.001 nm). The implementation evaluates the same function
+  in the variable y = 1 − s/r_c, where the switch is the smoothstep polynomial P(γy) with
+  γ = r_c/(r_c − r_s): the Lennard-Jones terms become x⁴ times polynomials in x = (r_c − r)/r with
+  positive coefficients, and the Coulomb term uses the positive log remainder L_m(Y) = Σ_{j≥m} Yʲ/j
+  (docs/theory.rst, "Inner Force Group Energy"). One definition, in InnerSplit.h, serves the host,
+  the Reference platform and the GPU kernel constants. Forces do not depend on V̂.
 - **NoCutoff with the inner split.** Allowed and tested; on Reference it loops over all pairs.
 - **Group changes at runtime.** As for other force groups, they require Context reinitialization.
   Documented, not worked around.

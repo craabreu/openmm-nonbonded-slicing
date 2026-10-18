@@ -1549,12 +1549,15 @@ void testInnerGroupPair(bool asException, double rs, double rc) {
         double z = (r-rs)/(rc-rs);
         return 1+z*z*z*(-10+z*(15-z*6));
     };
+    // The inner force is S(r) times the bare force, whose Lennard-Jones and Coulomb parts nearly cancel at
+    // some distances, so its absolute precision is set by the parts; the energy terms are each accurate to
+    // a few units in the last place.
     bool precise = platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double";
-    double tol = precise ? 1e-6 : 1e-4;
+    double tol = precise ? 1e-6 : 1e-5, forceTol = precise ? 1e-6 : 1e-4;
     for (double r : {0.3, 0.45, 0.5, 0.55, 0.65, 0.75, 0.785, 0.795, 0.7999, 0.8, 0.8001, 0.9}) {
         context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
         State inner = context.getState(State::Energy | State::Forces, false, 1<<1);
-        assertEqualTo(switchValue(r)*bareForce(r), inner.getForces()[1][0], tol);
+        assertEqualTo(switchValue(r)*bareForce(r), inner.getForces()[1][0], forceTol);
         double expected = 0.0;
         if (r < rc) {
             const int n = 2000;

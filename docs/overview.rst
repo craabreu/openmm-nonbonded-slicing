@@ -53,7 +53,8 @@ with :math:`S = 1` for :math:`r \le r_s` and :math:`S = 0` for :math:`r \ge r_c`
 potential :math:`\hat V` whose gradient is this force, shifted so that :math:`\hat V(r_c) = 0`
 :cite:`Abreu_2020`; the direct-space group reports :math:`V - \hat V` and the corresponding force.
 Every group therefore has an energy consistent with its force, and the groups add up to the
-unsplit result. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
+unsplit result. The closed form of :math:`\hat V` used by all platforms is derived in the theory
+section. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
 parameter offsets apply to both parts.
 
 .. code-block:: python

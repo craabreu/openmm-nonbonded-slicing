@@ -379,16 +379,17 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         innerDefines["INNER_CUTOFF_SQUARED"] = cc.doubleToString(split.rc*split.rc);
         innerDefines["INNER_SWITCH"] = cc.doubleToString(split.rs);
         innerDefines["INNER_SWITCH_SCALE"] = cc.doubleToString(1.0/(split.rc-split.rs));
-        // The inner energy uses 6-point Gauss-Legendre quadrature in log(r), on panels whose width
-        // keeps 12*width <= 3, which gives a relative error below 1e-8 for any switching range.
-        innerDefines["INNER_LOG_CUTOFF"] = cc.doubleToString(log(split.rc));
-        innerDefines["INNER_PANELS"] = cc.intToString(max(1, (int) ceil(4.0*log(split.rc/split.rs))));
-        innerDefines["INNER_GL_X0"] = cc.doubleToString(0.2386191860831969);
-        innerDefines["INNER_GL_X1"] = cc.doubleToString(0.6612093864662645);
-        innerDefines["INNER_GL_X2"] = cc.doubleToString(0.9324695142031521);
-        innerDefines["INNER_GL_W0"] = cc.doubleToString(0.4679139345726910);
-        innerDefines["INNER_GL_W1"] = cc.doubleToString(0.3607615730481386);
-        innerDefines["INNER_GL_W2"] = cc.doubleToString(0.1713244923791704);
+        innerDefines["INNER_CUTOFF"] = cc.doubleToString(split.rc);
+        innerDefines["INNER_INV_CUTOFF"] = cc.doubleToString(1.0/split.rc);
+        innerDefines["INNER_GAMMA"] = cc.doubleToString(split.gamma);
+        innerDefines["INNER_C1"] = cc.doubleToString(split.c1);
+        innerDefines["INNER_GAMMA1SQ"] = cc.doubleToString((split.gamma-1)*(split.gamma-1));
+        for (int m = 0; m <= 20; m++)
+            innerDefines["INNER_ELL_"+cc.intToString(m)] = cc.doubleToString(InnerSplit::ellChebyshev()[m]);
+        for (int m = 0; m <= 8; m++)
+            innerDefines["INNER_A12_"+cc.intToString(m)] = cc.doubleToString(split.a12[m]);
+        for (int m = 0; m <= 2; m++)
+            innerDefines["INNER_A6_"+cc.intToString(m)] = cc.doubleToString(split.a6[m]);
         innerDefines["INNER_K12"] = cc.doubleToString(split.K[0]);
         innerDefines["INNER_K6"] = cc.doubleToString(split.K[1]);
         innerDefines["INNER_K1"] = cc.doubleToString(split.K[2]);
