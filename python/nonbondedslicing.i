@@ -382,7 +382,7 @@ public:
      *     U(r) = 4 \\lambda \\epsilon \\left( s^2 - s \\right), \\quad
      *     s = \\frac{1}{\\alpha (1 - \\lambda) + (r/\\sigma)^6},
      *
-     * which is finite at :math:`r = 0` whenever :math:`\\lambda < 1` and reduces to the usual
+     * which is finite at :math:`r = 0` whenever :math:`\\lambda < 1` and :math:`\\alpha > 0`, and reduces to the usual
      * potential when :math:`\\lambda = 1` or :math:`\\alpha = 0`. The slice must have a scaling
      * parameter that applies to Lennard-Jones interactions, and :math:`\\lambda` must stay between
      * 0 and 1. Derivatives with respect to :math:`\\lambda` account for the soft-core form, so

@@ -14,6 +14,7 @@
 #include "openmm/OpenMMException.h"
 #include <string.h>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 using namespace std;
@@ -154,8 +155,8 @@ void SlicedNonbondedForce::setScalingParameter(int index, const string& paramete
 void SlicedNonbondedForce::setUseSoftcorePotential(int subset1, int subset2, double alpha) {
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    if (alpha < 0)
-        throwException(__FILE__, __LINE__, "The soft-core parameter alpha cannot be negative");
+    if (!(alpha >= 0) || !std::isfinite(alpha))
+        throwException(__FILE__, __LINE__, "The soft-core parameter alpha must be finite and non-negative");
     int slice = sliceIndex(subset1, subset2);
     if (alpha == 0)
         softcoreAlphas.erase(slice);

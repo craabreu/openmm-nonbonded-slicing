@@ -110,6 +110,10 @@ def testSoftcoreAPI():
         force.setUseSoftcorePotential(0, 3, 0.5)
     with pytest.raises(Exception):
         force.setUseSoftcorePotential(0, 1, -1.0)
+    with pytest.raises(Exception):
+        force.setUseSoftcorePotential(0, 1, float('nan'))
+    with pytest.raises(Exception):
+        force.setUseSoftcorePotential(0, 1, float('inf'))
     clone = copy.deepcopy(force)
     assert clone.getSoftcoreAlpha(0, 1) == 0.5
     force.setUseSoftcorePotential(0, 1, 0.0)
