@@ -124,19 +124,12 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         owner.getExceptionParameterOffset(index, parameter, offset, charge, sigma, epsilon);
         offsetParams.insert(parameter);
     }
-    set<int> slicesWithLJScaling;
     for (int index = 0; index < owner.getNumScalingParameters(); index++) {
         owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
-        if (includeLJ)
-            slicesWithLJScaling.insert(sliceIndex(subset1, subset2));
     }
-    int numSubsets = owner.getNumSubsets();
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            if (owner.getSoftcoreAlpha(i, j) > 0 && slicesWithLJScaling.find(sliceIndex(i, j)) == slicesWithLJScaling.end())
-                throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
+    checkSoftcoreSlices();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
 }
 
@@ -361,7 +354,25 @@ vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System&
     return dispersionCorrections;
 }
 
+void SlicedNonbondedForceImpl::checkSoftcoreSlices() const {
+    set<int> slicesWithLJScaling;
+    string parameter;
+    int subset1, subset2;
+    bool includeCoulomb, includeLJ;
+    for (int index = 0; index < owner.getNumScalingParameters(); index++) {
+        owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
+        if (includeLJ)
+            slicesWithLJScaling.insert(sliceIndex(subset1, subset2));
+    }
+    int numSubsets = owner.getNumSubsets();
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            if (owner.getSoftcoreAlpha(i, j) > 0 && slicesWithLJScaling.find(sliceIndex(i, j)) == slicesWithLJScaling.end())
+                throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
+}
+
 void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
+    checkSoftcoreSlices();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().copyParametersToContext(context, owner);
     context.systemChanged();
 }

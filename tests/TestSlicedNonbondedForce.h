@@ -25,6 +25,7 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <limits>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -2021,6 +2022,8 @@ void testErrors() {
     ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 3, 0.5); }));
     ASSERT(throwsException([&]() { force.setUseSoftcorePotential(3, 0, 0.5); }));
     ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, -0.5); }));
+    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, numeric_limits<double>::quiet_NaN()); }));
+    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, numeric_limits<double>::infinity()); }));
     ASSERT(throwsException([&]() { force.getSoftcoreAlpha(0, 3); }));
     assertEqualTo(0.0, force.getSoftcoreAlpha(0, 1), 0.0);
     force.setUseSoftcorePotential(2, 0, 0.5);
@@ -2061,6 +2064,14 @@ void testErrors() {
     noLJScaling->setScalingParameter(0, "q", 0, 1, true, true);
     VerletIntegrator integrator3(0.01);
     Context context3(system2, integrator3, platform);
+
+    // updateParametersInContext must apply the same rule and leave the Context untouched on failure.
+
+    noLJScaling->setUseSoftcorePotential(1, 1, 0.5);
+    ASSERT(throwsException([&]() { noLJScaling->updateParametersInContext(context3); }));
+    noLJScaling->setUseSoftcorePotential(1, 1, 0.0);
+    noLJScaling->setUseSoftcorePotential(0, 1, 0.7);
+    noLJScaling->updateParametersInContext(context3);
 }
 
 void runPlatformTests();
