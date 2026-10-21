@@ -9,6 +9,8 @@ Changelog
 
 * GPU platforms: a ``SlicedNonbondedForce`` without energy parameter derivatives no longer fails to
   compile with PME or LJPME when another force in the same context requests derivatives.
+* GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
+  their own slice instead of those of slice 0.
 
 **Performance**
 

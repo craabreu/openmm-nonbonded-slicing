@@ -1524,7 +1524,9 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
             force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd, sigma, epsilon);
             if (make_pair(particle1, particle2) != exceptionAtoms[i])
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, 0);
+            union {int i; float f;} slice;
+            slice.i = sliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, slice.f);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
     }
