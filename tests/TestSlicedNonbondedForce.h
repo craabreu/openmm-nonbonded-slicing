@@ -2003,6 +2003,42 @@ void testSoftcoreUpdateUsesContextScaling() {
     ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
 }
 
+void testSoftcoreFailedUpdateKeepsAlpha() {
+    // An update that fails for a reason unrelated to the soft-core potential must not apply a new alpha.
+
+    System system;
+    for (int i = 0; i < 3; i++)
+        system.addParticle(1.0);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
+    force->addParticle(0.5, 0.3, 0.8);
+    force->addParticle(-0.5, 0.35, 0.6);
+    force->addParticle(0.25, 0.3, 0.7);
+    force->setParticleSubset(1, 1);
+    force->addException(0, 2, 0.0, 0.3, 0.0);
+    force->addGlobalParameter("lambda", 0.5);
+    force->addScalingParameter("lambda", 0, 1, true, true);
+    force->setUseSoftcorePotential(0, 1, 0.5);
+    system.addForce(force);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.28, 0, 0), Vec3(0, 0.31, 0.05)});
+    double original = context.getState(State::Energy).getPotentialEnergy();
+
+    // Turning an excluded exception into a non-excluded one makes the update fail.
+
+    force->setUseSoftcorePotential(0, 1, 2.0);
+    force->setExceptionParameters(0, 0, 2, 0.1, 0.3, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(original, context.getState(State::Energy).getPotentialEnergy(), TOL);
+
+    // The same alpha alone is accepted and changes the energy.
+
+    force->setExceptionParameters(0, 0, 2, 0.0, 0.3, 0.0);
+    force->updateParametersInContext(context);
+    ASSERT(abs(context.getState(State::Energy).getPotentialEnergy()-original) > 1e-3);
+}
+
 void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
     // A single pair with large sigma, so that the switching function and the LJPME potential shift
     // at the cutoff have a large effect on the soft-core minus hard-core differences, which are
@@ -2222,6 +2258,7 @@ int main(int argc, char* argv[]) {
         testSoftcore(sfmt, NonbondedForce::PME, true, true);
         testSoftcoreFailedUpdateLeavesContextUntouched();
         testSoftcoreUpdateUsesContextScaling();
+        testSoftcoreFailedUpdateKeepsAlpha();
         testSoftcoreSinglePair(NonbondedForce::CutoffPeriodic, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);

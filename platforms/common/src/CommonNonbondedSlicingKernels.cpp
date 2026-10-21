@@ -1499,21 +1499,6 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
     if (numExceptions != exceptionAtoms.size())
         throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
 
-    // Update the soft-core parameters if needed.
-
-    bool softcoreChanged = false;
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++) {
-            double alpha = force.getSoftcoreAlpha(i, j);
-            int slice = sliceIndex(i, j);
-            if (alpha != sliceSoftcoreAlphasVec[slice]) {
-                sliceSoftcoreAlphasVec[slice] = alpha;
-                softcoreChanged = true;
-            }
-        }
-    if (softcoreChanged)
-        uploadSoftcoreAlphas();
-
     // TODO: Remove lines below and implement the approach added to OpenMM in commit 78902be (PR #4610)
 
     int firstParticle = 0;
@@ -1624,6 +1609,21 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
         throw OpenMMException("updateParametersInContext: The number of exception parameter offsets has changed");
     if (e.size() > 0)
         exceptionParamOffsets.upload(e);
+
+    // Update the soft-core parameters if needed, now that no check can fail.
+
+    bool softcoreChanged = false;
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++) {
+            double alpha = force.getSoftcoreAlpha(i, j);
+            int slice = sliceIndex(i, j);
+            if (alpha != sliceSoftcoreAlphasVec[slice]) {
+                sliceSoftcoreAlphasVec[slice] = alpha;
+                softcoreChanged = true;
+            }
+        }
+    if (softcoreChanged)
+        uploadSoftcoreAlphas();
 
     // Compute other values.
 

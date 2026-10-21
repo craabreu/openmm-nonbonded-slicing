@@ -302,12 +302,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
 
-    // Update the soft-core parameters.
-
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
-
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
@@ -348,6 +342,12 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     SlicedNonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (force.getUseDispersionCorrection() && (method == SlicedNonbondedForce::CutoffPeriodic || method == SlicedNonbondedForce::Ewald || method == SlicedNonbondedForce::PME))
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(context.getSystem(), force);
+
+    // Update the soft-core parameters, now that no check can fail.
+
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
