@@ -22,7 +22,7 @@ SlicedNonbondedForceProxy::SlicedNonbondedForceProxy() : SerializationProxy("Sli
 }
 
 void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 1);
+    node.setIntProperty("version", 2);
     const SlicedNonbondedForce& force = *reinterpret_cast<const SlicedNonbondedForce*>(object);
     node.setIntProperty("numSubsets", force.getNumSubsets());
     node.setIntProperty("forceGroup", force.getForceGroup());
@@ -100,11 +100,18 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     SerializationNode& energyParameterDerivatives = node.createChildNode("energyParameterDerivatives");
     for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
         energyParameterDerivatives.createChildNode("energyParameterDerivative").setStringProperty("parameter", force.getEnergyParameterDerivativeName(i));
+    SerializationNode& softcoreSlices = node.createChildNode("SoftcoreSlices");
+    for (int i = 0; i < force.getNumSubsets(); i++)
+        for (int j = i; j < force.getNumSubsets(); j++) {
+            double alpha = force.getSoftcoreAlpha(i, j);
+            if (alpha > 0)
+                softcoreSlices.createChildNode("Slice").setIntProperty("subset1", i).setIntProperty("subset2", j).setDoubleProperty("alpha", alpha);
+        }
 }
 
 void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) const {
     int version = node.getIntProperty("version");
-    if (version != 1)
+    if (version < 1 || version > 2)
         throw OpenMMException("Unsupported version number");
     SlicedNonbondedForce* force = new SlicedNonbondedForce(node.getIntProperty("numSubsets"));
     try {
@@ -157,6 +164,11 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         const SerializationNode& energyParameterDerivatives = node.getChildNode("energyParameterDerivatives");
         for (auto& param : energyParameterDerivatives.getChildren())
             force->addEnergyParameterDerivative(param.getStringProperty("parameter"));
+        if (version >= 2) {
+            const SerializationNode& softcoreSlices = node.getChildNode("SoftcoreSlices");
+            for (auto& slice : softcoreSlices.getChildren())
+                force->setUseSoftcorePotential(slice.getIntProperty("subset1"), slice.getIntProperty("subset2"), slice.getDoubleProperty("alpha"));
+        }
     }
     catch (...) {
         delete force;
