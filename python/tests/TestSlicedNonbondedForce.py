@@ -98,6 +98,123 @@ def testParameterClash():
         mm.Context(system, mm.VerletIntegrator(0.01), platform)
 
 
+def testSoftcoreAPI():
+    force = plugin.SlicedNonbondedForce(3)
+    force.addParticle(0.0, 1.0, 1.0)
+    force.addGlobalParameter("lambda", 1.0)
+    force.addScalingParameter("lambda", 0, 1, False, True)
+    assert force.getSoftcoreAlpha(0, 1) == 0.0
+    force.setUseSoftcorePotential(1, 0, 0.5)
+    assert force.getSoftcoreAlpha(0, 1) == 0.5
+    with pytest.raises(Exception):
+        force.setUseSoftcorePotential(0, 3, 0.5)
+    with pytest.raises(Exception):
+        force.setUseSoftcorePotential(0, 1, -1.0)
+    clone = copy.deepcopy(force)
+    assert clone.getSoftcoreAlpha(0, 1) == 0.5
+    force.setUseSoftcorePotential(0, 1, 0.0)
+    assert force.getSoftcoreAlpha(1, 0) == 0.0
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testSoftcore(platformName, precision):
+    """Soft-core minus hard-core sliced energies match a CustomNonbondedForce."""
+    random.seed(1)
+    numMolecules = 100
+    numParticles = 2*numMolecules
+    boxSize = 10.0
+    cutoff = 3.5
+    alpha, lam = 0.5, 0.4
+
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(cutoff)
+    nonbonded.setEwaldErrorTolerance(1e-4)
+    positions = []
+    M = int(numMolecules**(1.0/3.0))
+    if M*M*M < numMolecules:
+        M += 1
+    for k in range(numMolecules):
+        iz = k//(M*M)
+        iy = (k - iz*M*M)//M
+        ix = k - M*(iy + iz*M)
+        center = mm.Vec3(ix + 0.5, iy + 0.5, iz + 0.5)*(boxSize/M)
+        delta = mm.Vec3(0.5 - ix%2, 0.5 - iy%2, 0.5 - iz%2)/2
+        positions += [center + delta, center - delta]
+        nonbonded.addParticle(0.2, 1.0, 1.0)
+        nonbonded.addParticle(-0.2, 1.0, 1.0)
+        nonbonded.addException(2*k, 2*k+1, -0.04, 1.0, 1.0)
+    subsets = [random.randint(0, 1) for _ in range(numParticles)]
+
+    def makeSystem(*forces):
+        system = mm.System()
+        for _ in range(numParticles):
+            system.addParticle(1.0)
+        system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
+        for force in forces:
+            system.addForce(force)
+        return system
+
+    def makeSliced(softcore):
+        sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
+        for i, s in enumerate(subsets):
+            sliced.setParticleSubset(i, s)
+        sliced.addGlobalParameter("lambda", lam)
+        sliced.addScalingParameter("lambda", 0, 1, True, True)
+        sliced.addEnergyParameterDerivative("lambda")
+        if softcore:
+            sliced.setUseSoftcorePotential(0, 1, alpha)
+        return sliced
+
+    expression = ("lambda*4*eps*(ssc*(ssc-1) - sig6*(sig6-1));"
+                  "ssc=sig6/(1+alpha*(1-lambda)*sig6); sig6=(sigma/r)^6;")
+    custom = mm.CustomNonbondedForce(expression + "sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)")
+    custom.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
+    custom.setCutoffDistance(cutoff)
+    custom.addPerParticleParameter("sigma")
+    custom.addPerParticleParameter("eps")
+    custom.addGlobalParameter("lambda", lam)
+    custom.addGlobalParameter("alpha", alpha)
+    custom.addEnergyParameterDerivative("lambda")
+    for _ in range(numParticles):
+        custom.addParticle([1.0, 1.0])
+    custom.addInteractionGroup({i for i, s in enumerate(subsets) if s == 0}, {i for i, s in enumerate(subsets) if s == 1})
+    bonds = mm.CustomBondForce(expression)
+    bonds.addPerBondParameter("sigma")
+    bonds.addPerBondParameter("eps")
+    bonds.addGlobalParameter("lambda", lam)
+    bonds.addGlobalParameter("alpha", alpha)
+    bonds.addEnergyParameterDerivative("lambda")
+    for k in range(numMolecules):
+        i, j = 2*k, 2*k+1
+        custom.addExclusion(i, j)
+        if subsets[i] != subsets[j]:
+            bonds.addBond(i, j, [1.0, 1.0])
+
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    contexts = []
+    for system in (makeSystem(makeSliced(True)), makeSystem(makeSliced(False)), makeSystem(custom, bonds)):
+        context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+        context.setPositions(positions)
+        contexts.append(context)
+    if platformName == "Reference" or precision == "double":
+        tol = 1e-4
+    else:
+        tol = 1e-3 if precision == "mixed" else 5e-3
+    for value in (lam, 0.0, 1.0):
+        states = []
+        for context in contexts:
+            context.setParameter("lambda", value)
+            states.append(context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True))
+        soft, hard, diff = states
+        ASSERT_EQUAL_TOL(diff.getPotentialEnergy(), soft.getPotentialEnergy() - hard.getPotentialEnergy(), tol)
+        for fs, fh, fd in zip(soft.getForces(), hard.getForces(), diff.getForces()):
+            ASSERT_EQUAL_VEC(fd, fs - fh, tol)
+        derivs = [state.getEnergyParameterDerivatives()["lambda"] for state in states]
+        ASSERT_EQUAL_TOL(derivs[2], derivs[0] - derivs[1], tol)
+
+
 @pytest.mark.parametrize("platformName, precision", cases)
 def testCoulomb(platformName, precision):
     system = mm.System()

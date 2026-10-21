@@ -374,9 +374,56 @@ public:
      */
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     /**
+     * Use the soft-core Lennard-Jones potential in a particular slice. With :math:`\\lambda` the
+     * scaling parameter that multiplies the Lennard-Jones contributions of the slice, each pair
+     * in it interacts through
+     *
+     * .. math::
+     *     U(r) = 4 \\lambda \\epsilon \\left( s^2 - s \\right), \\quad
+     *     s = \\frac{1}{\\alpha (1 - \\lambda) + (r/\\sigma)^6},
+     *
+     * which is finite at :math:`r = 0` whenever :math:`\\lambda < 1` and reduces to the usual
+     * potential when :math:`\\lambda = 1` or :math:`\\alpha = 0`. The slice must have a scaling
+     * parameter that applies to Lennard-Jones interactions, and :math:`\\lambda` must stay between
+     * 0 and 1. Derivatives with respect to :math:`\\lambda` account for the soft-core form, so
+     * for this slice they are not its van der Waals energy and they change with :math:`\\lambda`.
+     *
+     * Soft-core applies to the direct-space Lennard-Jones term and to 1-4 exceptions; the
+     * dispersion correction and the reciprocal-space part of LJPME are not affected.
+     * ``updateParametersInContext`` can change :math:`\\alpha` in a Context that already has
+     * a soft-core slice, but cannot add soft-core slices to one created without any.
+     *
+     * Parameters
+     * ----------
+     *     subset1 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets` minus 1
+     *     subset2 : int
+     *         the index of a particle subset.  Legal values are between 0 and the result of
+     *         :func:`getNumSubsets` minus 1
+     *     alpha : float
+     *         the soft-core parameter :math:`\alpha`, typically 0.5.  Zero turns the soft-core
+     *         potential off for this slice
+     */
+    void setUseSoftcorePotential(int subset1, int subset2, double alpha);
+    /**
+     * Get the soft-core parameter of a particular slice, or zero if the slice uses the
+     * usual Lennard-Jones potential.
+     *
+     * Parameters
+     * ----------
+     *     subset1 : int
+     *         the index of a particle subset
+     *     subset2 : int
+     *         the index of a particle subset
+     */
+    double getSoftcoreAlpha(int subset1, int subset2) const;
+    /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
-     * can be used to obtain the value of an energy slice or a sum thereof. The parameter must
-     * have already been added with :func:`addGlobalParameter` and :func:`addScalingParameter`.
+     * can be used to obtain the value of an energy slice or a sum thereof. This does not hold
+     * for the Lennard-Jones contribution of a slice that uses the soft-core potential (see
+     * :func:`setUseSoftcorePotential`). The parameter must have already been added with
+     * :func:`addGlobalParameter` and :func:`addScalingParameter`.
      * Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
      * or Coulomb contributions. Requesting the derivative with respect to non-scaling global
      * parameters will raise an exception.
