@@ -151,6 +151,25 @@ void SlicedNonbondedForce::setScalingParameter(int index, const string& paramete
     scalingParameters[index] = info;
 }
 
+void SlicedNonbondedForce::setUseSoftcorePotential(int subset1, int subset2, double alpha) {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    if (alpha < 0)
+        throwException(__FILE__, __LINE__, "The soft-core parameter alpha cannot be negative");
+    int slice = sliceIndex(subset1, subset2);
+    if (alpha == 0)
+        softcoreAlphas.erase(slice);
+    else
+        softcoreAlphas[slice] = alpha;
+}
+
+double SlicedNonbondedForce::getSoftcoreAlpha(int subset1, int subset2) const {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    auto element = softcoreAlphas.find(sliceIndex(subset1, subset2));
+    return element == softcoreAlphas.end() ? 0.0 : element->second;
+}
+
 int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) const {
     for (int i = 0; i < scalingParameters.size(); i++) {
         int index = scalingParameters[i].globalParamIndex;

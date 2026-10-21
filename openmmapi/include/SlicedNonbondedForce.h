@@ -47,6 +47,8 @@ public:
     int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
     void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    void setUseSoftcorePotential(int subset1, int subset2, double alpha);
+    double getSoftcoreAlpha(int subset1, int subset2) const;
     int addEnergyParameterDerivative(const std::string& parameter);
     const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
@@ -71,6 +73,7 @@ private:
     std::map<int, int> subsets;
     std::vector<ScalingParameterInfo> scalingParameters;
     std::vector<int> energyParameterDerivatives;
+    std::map<int, double> softcoreAlphas;
     bool useCuFFT, reciprocalExclusions;
 };
 

@@ -1727,6 +1727,17 @@ void testErrors() {
     force.setScalingParameter(0, "a", 2, 2, true, true);
     force.addScalingParameter("c", 0, 1, true, false);
 
+    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 3, 0.5); }));
+    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(3, 0, 0.5); }));
+    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, -0.5); }));
+    ASSERT(throwsException([&]() { force.getSoftcoreAlpha(0, 3); }));
+    assertEqualTo(0.0, force.getSoftcoreAlpha(0, 1), 0.0);
+    force.setUseSoftcorePotential(2, 0, 0.5);
+    assertEqualTo(0.5, force.getSoftcoreAlpha(0, 2), 0.0);
+    assertEqualTo(0.5, force.getSoftcoreAlpha(2, 0), 0.0);
+    force.setUseSoftcorePotential(0, 2, 0.0);
+    assertEqualTo(0.0, force.getSoftcoreAlpha(2, 0), 0.0);
+
     ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("unknown"); }));
     force.addGlobalParameter("d", 1.0);
     ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("d"); }));
@@ -1743,6 +1754,22 @@ void testErrors() {
     system.addForce(clash);
     VerletIntegrator integrator(0.01);
     ASSERT(throwsException([&]() { Context context(system, integrator, platform); }));
+
+    // A soft-core slice needs a scaling parameter that applies to Lennard-Jones interactions.
+
+    System system2;
+    system2.addParticle(1.0);
+    SlicedNonbondedForce* noLJScaling = new SlicedNonbondedForce(2);
+    noLJScaling->addParticle(1.0, 1.0, 1.0);
+    noLJScaling->addGlobalParameter("q", 1.0);
+    noLJScaling->addScalingParameter("q", 0, 1, true, false);
+    noLJScaling->setUseSoftcorePotential(0, 1, 0.5);
+    system2.addForce(noLJScaling);
+    VerletIntegrator integrator2(0.01);
+    ASSERT(throwsException([&]() { Context context(system2, integrator2, platform); }));
+    noLJScaling->setScalingParameter(0, "q", 0, 1, true, true);
+    VerletIntegrator integrator3(0.01);
+    Context context3(system2, integrator3, platform);
 }
 
 void runPlatformTests();
