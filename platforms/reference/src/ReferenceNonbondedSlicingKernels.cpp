@@ -11,6 +11,7 @@
 #include "ReferenceNonbondedSlicingKernels.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/SoftcoreUtilities.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/reference/RealVec.h"
@@ -86,13 +87,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
             sliceScalingParams[slice][vdW] = info;
     }
 
-    sliceSoftcoreAlphas.resize(numSlices, 0.0);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
-    hasSoftcore = false;
-    for (double alpha : sliceSoftcoreAlphas)
-        hasSoftcore = hasSoftcore || alpha > 0;
+    sliceSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    hasSoftcore = anySoftcoreSlice(sliceSoftcoreAlphas);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -291,11 +287,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     // Check the soft-core parameters before changing any state.
 
-    if (!hasSoftcore)
-        for (int i = 0; i < numSubsets; i++)
-            for (int j = i; j < numSubsets; j++)
-                if (force.getSoftcoreAlpha(i, j) > 0)
-                    throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
+    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
+        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
 
     // Get particle subsets.
 
@@ -345,9 +339,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     // Update the soft-core parameters, now that no check can fail.
 
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
+    sliceSoftcoreAlphas = newSoftcoreAlphas;
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

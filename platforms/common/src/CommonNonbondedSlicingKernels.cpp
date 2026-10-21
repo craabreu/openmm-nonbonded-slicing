@@ -12,6 +12,7 @@
 #include "CommonNonbondedSlicingKernelSources.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/SoftcoreUtilities.h"
 #include "openmm/common/ComputeForceInfo.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/Context.h"
@@ -318,13 +319,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             sliceLambdasVecFloat[i] = mm_float2(sliceLambdasVec[i].x, sliceLambdasVec[i].y);
         sliceLambdas.upload(sliceLambdasVecFloat);
     }
-    sliceSoftcoreAlphasVec.resize(numSlices, 0.0);
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            sliceSoftcoreAlphasVec[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
-    hasSoftcore = false;
-    for (double alpha : sliceSoftcoreAlphasVec)
-        hasSoftcore = hasSoftcore || alpha > 0;
+    sliceSoftcoreAlphasVec = getSliceSoftcoreAlphas(force);
+    hasSoftcore = anySoftcoreSlice(sliceSoftcoreAlphasVec);
     sliceSoftcoreAlphas.initialize(cc, numSlices, sizeOfReal, "sliceSoftcoreAlphas");
     uploadSoftcoreAlphas();
 
@@ -737,8 +733,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
     replacements["LAMBDA"] = prefix+"lambda";
     cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2));
+    // SOFTCORE_ALPHA only appears in HAS_SOFTCORE blocks, so the kernel needs the argument only then.
     replacements["SOFTCORE_ALPHA"] = prefix+"softcoreAlpha";
-    cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceSoftcoreAlphas, prefix+"softcoreAlpha", "real", 1));
+    if (hasSoftcore)
+        cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceSoftcoreAlphas, prefix+"softcoreAlpha", "real", 1));
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
@@ -778,7 +776,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         replacements["PARAMS"] = cc.getBondedUtilities().addArgument(exceptionParams, "float4");
         replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
         replacements["HAS_SOFTCORE"] = (hasSoftcore ? "1" : "0");
-        replacements["SOFTCORE_ALPHAS"] = cc.getBondedUtilities().addArgument(sliceSoftcoreAlphas, "real");
+        // As in the nonbonded kernel, SOFTCORE_ALPHAS only appears in HAS_SOFTCORE blocks.
+        replacements["SOFTCORE_ALPHAS"] = hasSoftcore ? cc.getBondedUtilities().addArgument(sliceSoftcoreAlphas, "real") : "softcoreAlphas";
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -1464,11 +1463,9 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
                 throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Lennard-Jones interactions, because all epsilons were originally 0");
         }
     }
-    if (!hasSoftcore)
-        for (int i = 0; i < numSubsets; i++)
-            for (int j = i; j < numSubsets; j++)
-                if (force.getSoftcoreAlpha(i, j) > 0)
-                    throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
+    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
+        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
     for (int i = 0; i < force.getNumParticles(); i++)
         subsetsVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetsVec);
@@ -1612,18 +1609,10 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
 
     // Update the soft-core parameters if needed, now that no check can fail.
 
-    bool softcoreChanged = false;
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++) {
-            double alpha = force.getSoftcoreAlpha(i, j);
-            int slice = sliceIndex(i, j);
-            if (alpha != sliceSoftcoreAlphasVec[slice]) {
-                sliceSoftcoreAlphasVec[slice] = alpha;
-                softcoreChanged = true;
-            }
-        }
-    if (softcoreChanged)
+    if (newSoftcoreAlphas != sliceSoftcoreAlphasVec) {
+        sliceSoftcoreAlphasVec = newSoftcoreAlphas;
         uploadSoftcoreAlphas();
+    }
 
     // Compute other values.
 

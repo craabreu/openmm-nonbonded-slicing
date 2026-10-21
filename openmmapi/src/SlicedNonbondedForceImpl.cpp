@@ -12,6 +12,7 @@
   #define _USE_MATH_DEFINES // Needed to get M_PI
 #endif
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/SoftcoreUtilities.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 #include "NonbondedSlicingKernels.h"
@@ -361,11 +362,10 @@ void SlicedNonbondedForceImpl::checkSoftcoreSlices() const {
     // The kernels keep the scaling parameters they were created with, so the soft-core slices are
     // checked against the slices whose Lennard-Jones interactions were scaled at initialization.
 
-    int numSubsets = owner.getNumSubsets();
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            if (owner.getSoftcoreAlpha(i, j) > 0 && slicesWithLJScaling.find(sliceIndex(i, j)) == slicesWithLJScaling.end())
-                throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
+    vector<double> alphas = getSliceSoftcoreAlphas(owner);
+    for (int slice = 0; slice < alphas.size(); slice++)
+        if (alphas[slice] > 0 && slicesWithLJScaling.find(slice) == slicesWithLJScaling.end())
+            throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
 }
 
 void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
