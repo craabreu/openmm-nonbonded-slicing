@@ -59,12 +59,15 @@ public:
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
+       @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
+       @param sliceDerivCorrection  the correction to add to the vdW energy of the slice to obtain its derivative
 
        --------------------------------------------------------------------------------------- */
 
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
-                          vector<double>& sliceLambdas, vector<double>& sliceEnergies);
+                          vector<double>& sliceLambdas, vector<double>& sliceEnergies,
+                          double softcoreAlpha, double& sliceDerivCorrection);
 
 private:
    static const int   Coul = 0;

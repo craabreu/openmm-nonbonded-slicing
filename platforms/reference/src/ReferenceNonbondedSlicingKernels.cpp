@@ -86,6 +86,14 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
             sliceScalingParams[slice][vdW] = info;
     }
 
+    sliceSoftcoreAlphas.resize(numSlices, 0.0);
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
+    hasSoftcore = false;
+    for (double alpha : sliceSoftcoreAlphas)
+        hasSoftcore = hasSoftcore || alpha > 0;
+
     // Identify which exceptions are 1-4 interactions.
 
     set<int> exceptionsWithOffsets;
@@ -217,6 +225,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUseLJPME(ewaldDispersionAlpha, dispersionGridSize);
     }
     vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
+    vector<double> sliceDerivCorrections(numSlices, 0.0);
+    clj.setSoftcoreAlphas(sliceSoftcoreAlphas);
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
     clj.calculatePairIxn(
@@ -229,6 +239,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         exclusions,
         forceData,
         sliceEnergies,
+        sliceDerivCorrections,
         includeDirect,
         includeReciprocal
     );
@@ -242,7 +253,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         for (int k = 0; k < num14; k++) {
             int slice = bonded14SliceArray[k];
             nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
-                                         forceData, sliceLambdas[slice], sliceEnergies[slice]);
+                                         forceData, sliceLambdas[slice], sliceEnergies[slice],
+                                         sliceSoftcoreAlphas[slice], sliceDerivCorrections[slice]);
         }
         if (periodic || ewald || pme) {
             Vec3* boxVectors = extractBoxVectors(context);
@@ -263,9 +275,11 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     for (int slice = 0; slice < numSlices; slice++)
         for (int term = 0; term < 2; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
-            if (info.hasDerivative)
+            if (info.hasDerivative) {
                 // As on the GPU platforms, derivatives are only computed along with the energy
-                energyParamDerivs[info.name] += includeEnergy ? sliceEnergies[slice][term] : numeric_limits<double>::quiet_NaN();
+                double derivative = sliceEnergies[slice][term] + (term == vdW ? sliceDerivCorrections[slice] : 0.0);
+                energyParamDerivs[info.name] += includeEnergy ? derivative : numeric_limits<double>::quiet_NaN();
+            }
         }
 
     return energy;
@@ -279,6 +293,16 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
 
     for (int i = 0; i < numParticles; i++)
         subsets[i] = force.getParticleSubset(i);
+
+    // Update the soft-core parameters.
+
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++) {
+            double alpha = force.getSoftcoreAlpha(i, j);
+            if (alpha > 0 && !hasSoftcore)
+                throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
+            sliceSoftcoreAlphas[sliceIndex(i, j)] = alpha;
+        }
 
     // Identify which exceptions are 1-4 interactions.
 

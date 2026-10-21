@@ -16,6 +16,7 @@
 
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
 #include "internal/ReferenceSlicedPME.h"
+#include "internal/ReferenceSoftcoreLJ.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/OpenMMException.h"
@@ -162,6 +163,10 @@ void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
     reciprocalExclusions = reciprocal;
 }
 
+void ReferenceSlicedLJCoulombIxn::setSoftcoreAlphas(const vector<double>& alphas) {
+    sliceSoftcoreAlphas = alphas;
+}
+
 /**---------------------------------------------------------------------------------------
 
    Calculate Ewald ixn
@@ -175,6 +180,7 @@ void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
    @param sliceEnergies    the energy of each slice
+   @param sliceDerivCorrections  the correction to add to the vdW energy of each slice to obtain its derivative
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -183,7 +189,7 @@ void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
 void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceDerivCorrections, bool includeDirect, bool includeReciprocal
 ) const {
     typedef complex<double> d_complex;
 
@@ -462,8 +468,11 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         sig2 *= sig2;
         double sig6 = sig2*sig2*sig2;
         double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-        double dEdRvdW = switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
-        double vdwEnergy = eps*(sig6-1.0)*sig6;
+        double lambda = sliceLambdas[slice][vdW];
+        double alpha = sliceSoftcoreAlphas[slice];
+        double vdwEnergy, rdUdr, derivCorrection;
+        computeSoftcoreLJ(sig6, eps, lambda, alpha, vdwEnergy, rdUdr, derivCorrection);
+        double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
 
         if (ljpme) {
             double dalphaR   = alphaDispersionEwald*r;
@@ -485,8 +494,12 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
             sig2 = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
             sig2 *= sig2;
             sig6 = sig2*sig2*sig2;
-            // The additive part of the potential shift
-            double potentialshift = eps*(1.0-sig6*inverseCut6)*sig6*inverseCut6;
+            // The additive part of the potential shift, in the soft-core form so that the
+            // energy stays continuous at the cutoff
+            double shiftEnergy, shiftRdUdr, shiftDerivCorrection;
+            computeSoftcoreLJ(sig6*inverseCut6, eps, lambda, alpha, shiftEnergy, shiftRdUdr, shiftDerivCorrection);
+            double potentialshift = -shiftEnergy;
+            derivCorrection -= shiftDerivCorrection;
             dalphaR   = alphaDispersionEwald*cutoffDistance;
             dar2 = dalphaR*dalphaR;
             dar4 = dar2*dar2;
@@ -498,6 +511,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         if (useSwitch) {
             dEdRvdW -= vdwEnergy*switchDeriv*inverseR;
             vdwEnergy *= switchValue;
+            derivCorrection *= switchValue;
         }
 
         // accumulate forces
@@ -511,6 +525,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 
         // accumulate energies
         sliceEnergies[slice][vdW] += vdwEnergy;
+        sliceDerivCorrections[slice] += derivCorrection;
         sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
     }
 
@@ -530,6 +545,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
    @param sliceEnergies    the energy of each slice
+   @param sliceDerivCorrections  the correction to add to the vdW energy of each slice to obtain its derivative
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -538,19 +554,19 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceDerivCorrections, bool includeDirect, bool includeReciprocal
 ) const {
 
     if (ewald || pme || ljpme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, numberOfSubsets, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
-                          sliceEnergies, includeDirect, includeReciprocal);
+                          sliceEnergies, sliceDerivCorrections, includeDirect, includeReciprocal);
         return;
     }
     if (!includeDirect)
         return;
     if (cutoff) {
         for (auto& pair : *neighborList)
-            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
+            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies, sliceDerivCorrections);
     }
     else {
         for (int ii = 0; ii < numberOfAtoms; ii++) {
@@ -558,7 +574,7 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
 
             for (int jj = ii+1; jj < numberOfAtoms; jj++)
                 if (exclusions[jj].find(ii) == exclusions[jj].end())
-                    calculateOneIxn(ii, jj, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
+                    calculateOneIxn(ii, jj, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies, sliceDerivCorrections);
         }
     }
 }
@@ -575,13 +591,14 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
      @param sliceLambda      Coulomb and LJ scaling parameters for each slice
      @param forces           force array (forces added)
      @param sliceEnergies    the energy of each slice
+   @param sliceDerivCorrections  the correction to add to the vdW energy of each slice to obtain its derivative
 
      --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     int ii, int jj, vector<Vec3>& atomCoordinates, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<Vec3>& forces,
-    vector<vector<double>>& sliceEnergies
+    vector<vector<double>>& sliceEnergies, vector<double>& sliceDerivCorrections
 ) const {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
@@ -613,18 +630,21 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     double sig6 = sig2*sig2*sig2;
 
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-    double dEdRvdW = switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+    double energy, rdUdr, derivCorrection;
+    computeSoftcoreLJ(sig6, eps, sliceLambdas[slice][vdW], sliceSoftcoreAlphas[slice], energy, rdUdr, derivCorrection);
+    double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
     double dEdRCoul = inverseR*inverseR;
     if (cutoff)
         dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
     else
         dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
-    double energy = eps*(sig6-1.0)*sig6;
     if (useSwitch) {
         dEdRvdW -= energy*switchDeriv*inverseR;
         energy *= switchValue;
+        derivCorrection *= switchValue;
     }
     sliceEnergies[slice][vdW] += energy;
+    sliceDerivCorrections[slice] += derivCorrection;
     if (cutoff)
         sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
     else

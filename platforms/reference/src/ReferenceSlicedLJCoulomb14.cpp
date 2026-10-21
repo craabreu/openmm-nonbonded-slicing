@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include "internal/ReferenceSlicedLJCoulomb14.h"
+#include "internal/ReferenceSoftcoreLJ.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 
@@ -55,12 +56,15 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
+       @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
+       @param sliceDerivCorrection  the correction to add to the vdW energy of the slice to obtain its derivative
 
    --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
-                                     vector<double>& sliceLambdas, vector<double>& sliceEnergies) {
+                                     vector<double>& sliceLambdas, vector<double>& sliceEnergies,
+                                     double softcoreAlpha, double& sliceDerivCorrection) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -77,7 +81,10 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    double dEdR      = sliceLambdas[vdW]*parameters[1]*(12.0*sig6 - 6.0)*sig6;
+    double energy, rdUdr, derivCorrection;
+    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], softcoreAlpha, energy, rdUdr, derivCorrection);
+
+    double dEdR      = sliceLambdas[vdW]*rdUdr;
            dEdR     += sliceLambdas[Coul]*ONE_4PI_EPS0*parameters[2]*inverseR;
            dEdR     *= inverseR*inverseR;
 
@@ -90,6 +97,7 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     }
 
     // accumulate energies
-    sliceEnergies[vdW] += parameters[1]*(sig6 - 1.0)*sig6;
+    sliceEnergies[vdW] += energy;
+    sliceDerivCorrection += derivCorrection;
     sliceEnergies[Coul] += ONE_4PI_EPS0*parameters[2]*inverseR;
 }

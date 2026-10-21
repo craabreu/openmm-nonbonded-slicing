@@ -95,6 +95,8 @@ private:
     vector<int> subsets;
     vector<vector<double>> sliceLambdas;
     vector<vector<ScalingParameterInfo>> sliceScalingParams;
+    vector<double> sliceSoftcoreAlphas;
+    bool hasSoftcore;
 };
 
 class ReferenceCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
