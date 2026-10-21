@@ -142,6 +142,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray chargeBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
+        ComputeArray sliceSoftcoreAlphas;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -173,14 +174,17 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
 
         int numSubsets, numSlices;
         bool hasDerivatives;
+        bool hasSoftcore;
         std::vector<int> subsetsVec;
         std::vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
         std::vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
+        std::vector<double> sliceSoftcoreAlphasVec;
         std::vector<ScalingParameterInfo> sliceScalingParams;
         AddEnergyPostComputation* addEnergy;
 
         std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ);
         std::string getCoulombDerivativeCode(ComputeContext& cc, std::vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
+        void uploadSoftcoreAlphas();
 
         double totalCharge;
     };
