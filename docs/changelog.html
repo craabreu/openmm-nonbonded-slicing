@@ -39,6 +39,26 @@
             
   <section id="changelog">
 <h1>Changelog<a class="headerlink" href="#changelog" title="Link to this heading">¶</a></h1>
+<section id="unreleased">
+<h2>0.4.1 (unreleased)<a class="headerlink" href="#unreleased" title="Link to this heading">¶</a></h2>
+<p><strong>Bug fixes</strong></p>
+<ul class="simple">
+<li><p>GPU platforms: a <code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code> without energy parameter derivatives no longer fails to
+compile with PME or LJPME when another force in the same context requests derivatives.</p></li>
+</ul>
+<p><strong>Performance</strong></p>
+<ul class="simple">
+<li><p>GPU platforms: PME force interpolation loads the slice scale factors once per atom rather than
+once per grid point, and atoms are sorted every fourth step below 15,000 atoms and every second
+step above, as in OpenMM. A step with 2 subsets in a 1,503-atom water box went from 110 to 64 µs
+(<code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code>: 58 µs).</p></li>
+</ul>
+<p><strong>Documentation</strong></p>
+<ul class="simple">
+<li><p>Benchmark tables in the theory section remeasured with the device-side reduction of energy
+parameter derivatives proposed in <a class="reference external" href="https://github.com/openmm/openmm/pull/5520">openmm/openmm#5520</a>.</p></li>
+</ul>
+</section>
 <section id="id1">
 <h2>0.4.0<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
 <p><strong>Breaking changes</strong></p>
@@ -137,6 +157,7 @@ wrapper; platform-specific CUDA and OpenCL tests run again.</p></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Changelog</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#unreleased">0.4.1 (unreleased)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#id1">0.4.0</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#id2">0.3.0</a></li>
 </ul>
