@@ -35,7 +35,7 @@ using namespace OpenMM;
    --------------------------------------------------------------------------------------- */
 
 ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false),
-            periodic(false), periodicExceptions(false), ewald(false), pme(false), ljpme(false) {
+            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -156,6 +156,10 @@ void ReferenceSlicedLJCoulombIxn::setUseLJPME(double alpha, int meshSize[3]) {
 
 void ReferenceSlicedLJCoulombIxn::setPeriodicExceptions(bool periodic) {
     periodicExceptions = periodic;
+}
+
+void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
+    reciprocalExclusions = reciprocal;
 }
 
 /**---------------------------------------------------------------------------------------
@@ -356,6 +360,74 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     }
 
     // **************************************************************************************
+    // EXCLUSION CORRECTIONS
+    // **************************************************************************************
+    // Subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
+    // As in OpenMM's NonbondedForce, this goes with the direct space calculation by default, and with
+    // the reciprocal space calculation if reciprocal exclusions are requested.
+
+    if (reciprocalExclusions ? includeReciprocal : includeDirect) {
+        const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
+        for (int i = 0; i < numberOfAtoms; i++)
+            for (int exclusion : exclusions[i]) {
+                if (exclusion > i) {
+                    int ii = i;
+                    int jj = exclusion;
+
+                    int si = atomSubsets[ii];
+                    int sj = atomSubsets[jj];
+                    int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
+
+                    double deltaR[2][ReferenceForce::LastDeltaRIndex];
+                    if (periodicExceptions)
+                        ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
+                    else
+                        ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
+                    double r        = deltaR[0][ReferenceForce::RIndex];
+                    double inverseR = 1.0/(deltaR[0][ReferenceForce::RIndex]);
+                    double alphaR   = alphaEwald*r;
+                    if (erf(alphaR) > 1e-6) {
+                        double dEdR = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*inverseR*inverseR;
+                        dEdR = dEdR*(erf(alphaR) - 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
+
+                        // accumulate forces
+                        double factor = sliceLambdas[slice][Coul]*dEdR;
+                        for (int kk = 0; kk < 3; kk++) {
+                            double force = factor*deltaR[0][kk];
+                            forces[ii][kk] -= force;
+                            forces[jj][kk] += force;
+                        }
+
+                        // accumulate energies
+
+                        sliceEnergies[slice][Coul] -= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
+                    }
+                    else
+                        sliceEnergies[slice][Coul] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
+
+                    if (ljpme) {
+                        // Dispersion terms.  Here we just back out the reciprocal space terms, and don't add any extra real space terms.
+                        double dalphaR   = alphaDispersionEwald*r;
+                        double inverseR2 = inverseR*inverseR;
+                        double dar2 = dalphaR*dalphaR;
+                        double dar4 = dar2*dar2;
+                        double dar6 = dar4*dar2;
+                        double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0)*atomParameters[ii][EpsIndex];
+                        double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0)*atomParameters[jj][EpsIndex];
+                        sliceEnergies[slice][vdW] += c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
+                        double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4 + dar6/6.0));
+                        double factor = sliceLambdas[slice][vdW]*dEdR;
+                        for (int kk = 0; kk < 3; kk++) {
+                            double force = factor*deltaR[0][kk];
+                            forces[ii][kk] -= force;
+                            forces[jj][kk] += force;
+                        }
+                    }
+                }
+            }
+    }
+
+    // **************************************************************************************
     // SHORT-RANGE ENERGY AND FORCES
     // **************************************************************************************
 
@@ -442,66 +514,6 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
     }
 
-    // Now subtract off the exclusions, since they were implicitly included in the reciprocal space sum.
-
-    const double TWO_OVER_SQRT_PI = 2/sqrt(PI_M);
-    for (int i = 0; i < numberOfAtoms; i++)
-        for (int exclusion : exclusions[i]) {
-            if (exclusion > i) {
-                int ii = i;
-                int jj = exclusion;
-
-                int si = atomSubsets[ii];
-                int sj = atomSubsets[jj];
-                int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
-
-                double deltaR[2][ReferenceForce::LastDeltaRIndex];
-                if (periodicExceptions)
-                    ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
-                else
-                    ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
-                double r        = deltaR[0][ReferenceForce::RIndex];
-                double inverseR = 1.0/(deltaR[0][ReferenceForce::RIndex]);
-                double alphaR   = alphaEwald*r;
-                if (erf(alphaR) > 1e-6) {
-                    double dEdR = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*inverseR*inverseR;
-                    dEdR = dEdR*(erf(alphaR) - 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
-
-                    // accumulate forces
-                    double factor = sliceLambdas[slice][Coul]*dEdR;
-                    for (int kk = 0; kk < 3; kk++) {
-                        double force = factor*deltaR[0][kk];
-                        forces[ii][kk] -= force;
-                        forces[jj][kk] += force;
-                    }
-
-                    // accumulate energies
-
-                    sliceEnergies[slice][Coul] -= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erf(alphaR);
-                }
-                else
-                    sliceEnergies[slice][Coul] -= alphaEwald*TWO_OVER_SQRT_PI*ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
-
-                if (ljpme) {
-                    // Dispersion terms.  Here we just back out the reciprocal space terms, and don't add any extra real space terms.
-                    double dalphaR   = alphaDispersionEwald*r;
-                    double inverseR2 = inverseR*inverseR;
-                    double dar2 = dalphaR*dalphaR;
-                    double dar4 = dar2*dar2;
-                    double dar6 = dar4*dar2;
-                    double c6i = 8.0*pow(atomParameters[ii][SigIndex], 3.0)*atomParameters[ii][EpsIndex];
-                    double c6j = 8.0*pow(atomParameters[jj][SigIndex], 3.0)*atomParameters[jj][EpsIndex];
-                    sliceEnergies[slice][vdW] += c6i*c6j*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4));
-                    double dEdR = -6.0*c6i*c6j*inverseR2*inverseR2*inverseR2*inverseR2*(1.0 - EXP(-dar2)*(1.0 + dar2 + 0.5*dar4 + dar6/6.0));
-                    double factor = sliceLambdas[slice][vdW]*dEdR;
-                    for (int kk = 0; kk < 3; kk++) {
-                        double force = factor*deltaR[0][kk];
-                        forces[ii][kk] -= force;
-                        forces[jj][kk] += force;
-                    }
-                }
-            }
-        }
 }
 
 

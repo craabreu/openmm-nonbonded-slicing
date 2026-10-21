@@ -368,6 +368,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     bool usePeriodic = (nonbondedMethod != NoCutoff && nonbondedMethod != CutoffNonPeriodic);
     doLJPME = (nonbondedMethod == LJPME && hasLJ);
     hasReciprocal = (nonbondedMethod == Ewald) || ((nonbondedMethod == PME || nonbondedMethod == LJPME) && hasCoulomb) || doLJPME;
+    int recipForceGroup = force.getReciprocalSpaceForceGroup();
+    if (recipForceGroup < 0)
+        recipForceGroup = force.getForceGroup();
     usePosqCharges = hasCoulomb ? cc.requestPosqCharges() : false;
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
@@ -526,9 +529,6 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             if (usePmeQueue) {
                 pmeDefines["USE_PME_STREAM"] = "1";
                 pmeQueue = cc.createQueue();
-                int recipForceGroup = force.getReciprocalSpaceForceGroup();
-                if (recipForceGroup < 0)
-                    recipForceGroup = force.getForceGroup();
                 pmeSyncEvent = cc.createEvent();
                 paramsSyncEvent = cc.createEvent();
                 cc.addPreComputation(new SyncQueuePreComputation(cc, pmeQueue, pmeSyncEvent, recipForceGroup));
@@ -643,7 +643,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             backgroundEnergyVolume += sliceLambdasVec[slice].x*sliceBackgroundEnergyVolume[slice];
     }
 
-    // Add code to subtract off the reciprocal part of excluded interactions.
+    // Add code to subtract off the reciprocal part of excluded interactions. As in OpenMM's
+    // NonbondedForce, this goes in the direct space force group by default. With reciprocal
+    // exclusions, it goes in the reciprocal space force group instead, since it only cancels part of
+    // the reciprocal space sum and must be computed along with it (e.g., in multiple time stepping).
 
     if (nonbondedMethod == Ewald || nonbondedMethod == PME || nonbondedMethod == LJPME) {
         int numContexts = cc.getNumContexts();
@@ -678,8 +681,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
                 code<<getDerivativeCode(param, variableName, "", hasCoulomb, doLJPME);
             }
             replacements["COMPUTE_DERIVATIVES"] = code.str();
-            if (force.getIncludeDirectSpace())
-                cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements), force.getForceGroup());
+            string source = cc.replaceStrings(CommonNonbondedSlicingKernelSources::pmeExclusions, replacements);
+            if (force.getReciprocalExclusions())
+                cc.getBondedUtilities().addInteraction(atoms, source, recipForceGroup);
+            else if (force.getIncludeDirectSpace())
+                cc.getBondedUtilities().addInteraction(atoms, source, force.getForceGroup());
         }
     }
 

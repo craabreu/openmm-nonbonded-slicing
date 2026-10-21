@@ -2,8 +2,18 @@
 Changelog
 =========
 
-0.4.1 (unreleased)
+0.5.0 (unreleased)
 ------------------
+
+**New features**
+
+* ``setReciprocalExclusions(True)`` computes the terms that subtract the reciprocal-space
+  interactions of excluded pairs and exceptions (Ewald, PME and LJPME) in the reciprocal-space
+  force group instead of the direct-space one. They only cancel part of the reciprocal-space sum,
+  so both should be evaluated together when they are integrated with different time steps
+  (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
+  1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
+  is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
 
 **Bug fixes**
 
@@ -11,6 +21,9 @@ Changelog
   compile with PME or LJPME when another force in the same context requests derivatives.
 * GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
   their own slice instead of those of slice 0.
+* OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
+  using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
+  excluded pairs is now fixed to a valid value. Results were not affected.
 
 **Performance**
 

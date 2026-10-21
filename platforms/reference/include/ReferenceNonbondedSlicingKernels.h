@@ -86,7 +86,7 @@ private:
     double nonbondedCutoff, switchingDistance, rfDielectric, ewaldAlpha, ewaldDispersionAlpha;
     vector<double> dispersionCoefficients;
     int kmax[3], gridSize[3], dispersionGridSize[3];
-    bool useSwitchingFunction, exceptionsArePeriodic;
+    bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;

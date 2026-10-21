@@ -118,6 +118,13 @@ namespace NonbondedSlicing {
  * at constant pressure, this can improve the quality of the result.  Call :func:`setUseDispersionCorrection` to set whether
  * this should be used.
  *
+ * With Ewald, PME, or LJPME, you can call :func:`setReciprocalSpaceForceGroup` to compute the reciprocal space
+ * part in a different force group than the direct space part, as in multiple time stepping.  As in
+ * :OpenMM:`NonbondedForce`, the terms that subtract the reciprocal space interactions of excluded pairs and
+ * exceptions are computed in the direct space force group by default.  Since they only cancel part of the
+ * reciprocal space sum, you can call :func:`setReciprocalExclusions` to compute them in the reciprocal space
+ * force group instead.
+ *
  * In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
  * Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
  * two states it can exist in, each described by a different set of parameters for the atoms that make up the
@@ -233,6 +240,23 @@ public:
      * Get the name of the method used for handling long range nonbonded interactions.
      */
     std::string getNonbondedMethodName() const;
+    /**
+     * Set whether to include direct space interactions when calculating forces and energy.  This is useful if
+     * you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that
+     * computes it in a nonstandard way.
+     *
+     * With Ewald, PME, or LJPME, turning off direct space also removes the terms that subtract the reciprocal
+     * space interactions of excluded pairs and exceptions, as in :OpenMM:`NonbondedForce`, unless
+     * :func:`setReciprocalExclusions` has been called with `True`.  In that case, these terms are kept in the
+     * reciprocal space force group, and a replacement for the direct space calculation must not include them,
+     * or they will be counted twice.
+     *
+     * Parameters
+     * ----------
+     *     include : bool
+     *         whether to include direct space interactions
+     */
+    void setIncludeDirectSpace(bool include);
     /**
      * Get the specified number of particle subsets.
      */
@@ -402,6 +426,26 @@ public:
      *         whether to use the cuFFT library
      */
     void setUseCuFFT(bool use);
+    /**
+     * Get whether the terms that subtract the reciprocal space interactions of excluded pairs and exceptions
+     * are computed in the reciprocal space force group.  The default value is `False`.
+     */
+    bool getReciprocalExclusions() const;
+    /**
+     * Set whether the terms that subtract the reciprocal space interactions of excluded pairs and exceptions
+     * are computed in the reciprocal space force group, rather than in the direct space force group as in
+     * :OpenMM:`NonbondedForce`.  This only matters with Ewald, PME, or LJPME, when the reciprocal space force
+     * group differs from the direct space one (see :func:`setReciprocalSpaceForceGroup`).  These terms only
+     * cancel part of the reciprocal space sum, so they should be computed along with it whenever both are
+     * evaluated at different times, as in multiple time stepping.  Otherwise, the cancellation is incomplete
+     * and the slow force acquires a fast, intramolecular component.
+     *
+     * Parameters
+     * ----------
+     *     reciprocal : bool
+     *         whether to compute these terms in the reciprocal space force group
+     */
+    void setReciprocalExclusions(bool reciprocal);
 
     %newobject _deserialize;
     %extend {

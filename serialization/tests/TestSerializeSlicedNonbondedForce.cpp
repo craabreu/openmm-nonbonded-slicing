@@ -36,6 +36,7 @@ void testSerialization() {
     force.setIncludeDirectSpace(false);
     force.setReciprocalSpaceForceGroup(2);
     force.setUseCuFFT(false);
+    force.setReciprocalExclusions(true);
     double alpha = 0.5;
     int nx = 3, ny = 5, nz = 7;
     force.setPMEParameters(alpha, nx, ny, nz);
@@ -86,6 +87,7 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumSubsets(), force2.getNumSubsets());
     ASSERT_EQUAL(force.getReciprocalSpaceForceGroup(), force2.getReciprocalSpaceForceGroup());
     ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
+    ASSERT_EQUAL(force.getReciprocalExclusions(), force2.getReciprocalExclusions());
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -189,10 +191,27 @@ void testMissingUseCuFFT() {
     delete copy;
 }
 
+void testMissingReciprocalExclusions() {
+    SlicedNonbondedForce force(2);
+    force.setReciprocalExclusions(true);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t start = xml.find(" reciprocalExclusions=\"");
+    ASSERT(start != string::npos);
+    size_t end = xml.find('"', start+23);
+    xml.erase(start, end-start+1);
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT(!copy->getReciprocalExclusions());
+    delete copy;
+}
+
 int main() {
     try {
         testSerialization();
         testMissingUseCuFFT();
+        testMissingReciprocalExclusions();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;
