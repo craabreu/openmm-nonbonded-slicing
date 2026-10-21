@@ -402,7 +402,7 @@ public:
      *         the index of a particle subset.  Legal values are between 0 and the result of
      *         :func:`getNumSubsets` minus 1
      *     alpha : float
-     *         the soft-core parameter :math:`\alpha`, typically 0.5.  Zero turns the soft-core
+     *         the soft-core parameter :math:`\\alpha`, typically 0.5.  Zero turns the soft-core
      *         potential off for this slice
      */
     void setUseSoftcorePotential(int subset1, int subset2, double alpha);
