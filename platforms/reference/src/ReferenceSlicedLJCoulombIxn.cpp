@@ -591,7 +591,7 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
      @param sliceLambda      Coulomb and LJ scaling parameters for each slice
      @param forces           force array (forces added)
      @param sliceEnergies    the energy of each slice
-   @param sliceDerivCorrections  the correction to add to the vdW energy of each slice to obtain its derivative
+     @param sliceDerivCorrections  the correction to add to the vdW energy of each slice to obtain its derivative
 
      --------------------------------------------------------------------------------------- */
 
