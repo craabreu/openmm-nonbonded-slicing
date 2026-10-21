@@ -17,9 +17,25 @@ Changelog
 
 **Bug fixes**
 
+* GPU platforms: a ``SlicedNonbondedForce`` without energy parameter derivatives no longer fails to
+  compile with PME or LJPME when another force in the same context requests derivatives.
+* GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
+  their own slice instead of those of slice 0.
 * OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
   using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
   excluded pairs is now fixed to a valid value. Results were not affected.
+
+**Performance**
+
+* GPU platforms: PME force interpolation loads the slice scale factors once per atom rather than
+  once per grid point, and atoms are sorted every fourth step below 15,000 atoms and every second
+  step above, as in OpenMM. A step with 2 subsets in a 1,503-atom water box went from 110 to 64 µs
+  (``NonbondedForce``: 58 µs).
+
+**Documentation**
+
+* Benchmark tables in the theory section remeasured with the device-side reduction of energy
+  parameter derivatives proposed in `openmm/openmm#5520 <https://github.com/openmm/openmm/pull/5520>`_.
 
 0.4.0
 -----

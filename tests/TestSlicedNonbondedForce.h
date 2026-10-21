@@ -21,6 +21,7 @@
 #include "openmm/VerletIntegrator.h"
 #include "openmm/reference/SimTKOpenMMRealType.h"
 #include "sfmt/SFMT.h"
+#include <array>
 #include <cmath>
 #include <functional>
 
@@ -702,6 +703,91 @@ void testChangingParameters() {
     nonbonded->updateParametersInContext(context);
     sliced->updateParametersInContext(context);
     assertForcesAndEnergy(context, TOL);
+}
+
+void testExceptionSlicesAfterUpdate(SlicedNonbondedForce::NonbondedMethod method) {
+    const int numParticles = 12;
+    const double chargeProdChange = 1.7;
+    const double epsilonChange = 0.6;
+
+    // Particles 0-5 belong to subset 0 and 6-11 to subset 1. Exceptions (0,1), (6,7) and (8,9) have
+    // slices (0,0), (1,1) and (1,1), whereas (0,6) and (1,7) have slice (0,1).
+
+    const vector<array<int, 2>> exceptions = {{0, 1}, {6, 7}, {8, 9}, {0, 6}, {1, 7}};
+
+    auto createSystem = [&](bool modified, System& system, SlicedNonbondedForce*& sliced) {
+        for (int i = 0; i < numParticles; i++)
+            system.addParticle(1.0);
+        sliced = new SlicedNonbondedForce(2);
+        for (int i = 0; i < numParticles; i++) {
+            sliced->addParticle(i%2 == 0 ? 0.5 : -0.5, 0.25 + 0.01*i, 0.4 + 0.05*(i%3));
+            sliced->setParticleSubset(i, i < 6 ? 0 : 1);
+        }
+        for (int k = 0; k < (int) exceptions.size(); k++) {
+            double chargeProd = 0.3 + 0.1*k;
+            double epsilon = 0.5 + 0.1*k;
+            if (modified && k == 1) {
+                chargeProd *= chargeProdChange;
+                epsilon *= epsilonChange;
+            }
+            sliced->addException(exceptions[k][0], exceptions[k][1], chargeProd, 0.2 + 0.01*k, epsilon);
+        }
+        sliced->setNonbondedMethod(method);
+        sliced->setCutoffDistance(1.0);
+        sliced->addGlobalParameter("lambdaCross", 0.3);
+        sliced->addGlobalParameter("lambdaOne", 0.6);
+        sliced->addScalingParameter("lambdaCross", 0, 1, true, true);
+        sliced->addScalingParameter("lambdaOne", 1, 1, true, true);
+        sliced->addEnergyParameterDerivative("lambdaCross");
+        sliced->addEnergyParameterDerivative("lambdaOne");
+        system.addForce(sliced);
+    };
+
+    vector<Vec3> positions(numParticles);
+    for (int i = 0; i < numParticles; i++)
+        positions[i] = Vec3(0.3*(i%3) + 0.05*i, 0.3*((i/3)%2) + 0.02*i, 0.3*(i/6) + 0.03*i);
+
+    auto evaluate = [&](Context& context, State& state, map<string, double>& derivatives) {
+        state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
+        derivatives = state.getEnergyParameterDerivatives();
+    };
+
+    System system, modifiedSystem;
+    SlicedNonbondedForce *sliced, *modifiedSliced;
+    createSystem(false, system, sliced);
+    createSystem(true, modifiedSystem, modifiedSliced);
+    VerletIntegrator integrator1(0.001), integrator2(0.001);
+    Context context(system, integrator1, platform);
+    Context modifiedContext(modifiedSystem, integrator2, platform);
+    context.setPositions(positions);
+    modifiedContext.setPositions(positions);
+
+    State state1, state2;
+    map<string, double> derivatives1, derivatives2;
+    evaluate(context, state1, derivatives1);
+
+    // Updating the parameters without changing them must not alter anything.
+
+    sliced->updateParametersInContext(context);
+    evaluate(context, state2, derivatives2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
+    for (auto& entry : derivatives1)
+        ASSERT_EQUAL_TOL(entry.second, derivatives2[entry.first], TOL);
+
+    // Changing one exception must agree with a context created from scratch with that change.
+
+    int particle1, particle2;
+    double chargeProd, sigma, epsilon;
+    sliced->getExceptionParameters(1, particle1, particle2, chargeProd, sigma, epsilon);
+    sliced->setExceptionParameters(1, particle1, particle2, chargeProd*chargeProdChange, sigma, epsilon*epsilonChange);
+    sliced->updateParametersInContext(context);
+    evaluate(context, state1, derivatives1);
+    evaluate(modifiedContext, state2, derivatives2);
+    assertEnergy(state1, state2, TOL);
+    assertForces(state1, state2, TOL);
+    for (auto& entry : derivatives1)
+        ASSERT_EQUAL_TOL(entry.second, derivatives2[entry.first], TOL);
 }
 
 void testSwitchingFunction(SlicedNonbondedForce::NonbondedMethod method) {
@@ -1688,6 +1774,8 @@ int main(int argc, char* argv[]) {
         testLargeSystem();
         testDispersionCorrection();
         testChangingParameters();
+        testExceptionSlicesAfterUpdate(SlicedNonbondedForce::NoCutoff);
+        testExceptionSlicesAfterUpdate(SlicedNonbondedForce::CutoffNonPeriodic);
         testSwitchingFunction(SlicedNonbondedForce::CutoffNonPeriodic);
         testSwitchingFunction(SlicedNonbondedForce::PME);
         testTwoForces();

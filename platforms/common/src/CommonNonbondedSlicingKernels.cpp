@@ -233,6 +233,10 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeCode(string param, str
 
 string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign) {
     stringstream derivativeCode;
+    // Other forces may request derivatives, but if this one does not, its kernels have no buffer
+    // for them.
+    if (!hasDerivatives)
+        return derivativeCode.str();
     int numSlices = sliceScalingParams.size();
     const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
     for (int i = 0; i < allDerivParams.size(); i++) {
@@ -1245,19 +1249,26 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
         // Execute the reciprocal space kernels.
 
         if (hasCoulomb) {
-            setPeriodicBoxArgs(cc, pmeGridIndexKernel, 2);
-            if (cc.getUseDoublePrecision()) {
-                pmeGridIndexKernel->setArg(7, recipBoxVectors[0]);
-                pmeGridIndexKernel->setArg(8, recipBoxVectors[1]);
-                pmeGridIndexKernel->setArg(9, recipBoxVectors[2]);
+            // The atom order only affects cache performance, so in small systems it is not
+            // worth sorting at every step (as in OpenMM's NonbondedForce).
+            if (stepsToSort <= 0 || doLJPME) {
+                setPeriodicBoxArgs(cc, pmeGridIndexKernel, 2);
+                if (cc.getUseDoublePrecision()) {
+                    pmeGridIndexKernel->setArg(7, recipBoxVectors[0]);
+                    pmeGridIndexKernel->setArg(8, recipBoxVectors[1]);
+                    pmeGridIndexKernel->setArg(9, recipBoxVectors[2]);
+                }
+                else {
+                    pmeGridIndexKernel->setArg(7, recipBoxVectorsFloat[0]);
+                    pmeGridIndexKernel->setArg(8, recipBoxVectorsFloat[1]);
+                    pmeGridIndexKernel->setArg(9, recipBoxVectorsFloat[2]);
+                }
+                pmeGridIndexKernel->execute(cc.getNumAtoms());
+                sort->sort(pmeAtomGridIndex);
+                stepsToSort = (cc.getNumAtoms() > 15000) ? 1 : 3;
             }
-            else {
-                pmeGridIndexKernel->setArg(7, recipBoxVectorsFloat[0]);
-                pmeGridIndexKernel->setArg(8, recipBoxVectorsFloat[1]);
-                pmeGridIndexKernel->setArg(9, recipBoxVectorsFloat[2]);
-            }
-            pmeGridIndexKernel->execute(cc.getNumAtoms());
-            sort->sort(pmeAtomGridIndex);
+            else
+                stepsToSort--;
             setPeriodicBoxArgs(cc, pmeSpreadChargeKernel, 2);
             if (cc.getUseDoublePrecision()) {
                 pmeSpreadChargeKernel->setArg(7, recipBoxVectors[0]);
@@ -1519,7 +1530,9 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
             force.getExceptionParameters(exceptions[startIndex+i], particle1, particle2, chargeProd, sigma, epsilon);
             if (make_pair(particle1, particle2) != exceptionAtoms[i])
                 throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, 0);
+            union {int i; float f;} slice;
+            slice.i = sliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2));
+            baseExceptionParamsVec[i] = mm_float4(chargeProd, sigma, epsilon, slice.f);
         }
         baseExceptionParams.upload(baseExceptionParamsVec);
     }

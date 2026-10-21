@@ -139,12 +139,11 @@ def testCoulomb(platformName, precision):
     assert_forces_and_energy(context, tol)
 
 
-@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
-def testLargeSystem(platformName, precision):
+def _dipoleSystem():
+    """1200 particles in 600 dipoles, sliced into 3 subsets."""
     numMolecules = 600
     numParticles = numMolecules*2
     boxSize = 20.0
-    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
     nonbonded = mm.NonbondedForce()
     nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
     nonbonded.setCutoffDistance(2.0)
@@ -176,6 +175,13 @@ def testLargeSystem(platformName, precision):
         system.addParticle(1.0)
     system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
     system.addForce(force)
+    return system, positions
+
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testLargeSystem(platformName, precision):
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
 
     def compute(platform, properties):
         context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
@@ -194,6 +200,26 @@ def testLargeSystem(platformName, precision):
     for f0, f1 in zip(reference.getForces(), state.getForces()):
         ASSERT_EQUAL_VEC(f0, f1, tol)
 
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testForcesBetweenSorts(platformName, precision):
+    """In small systems, the atoms are sorted for PME only at some steps; the forces
+    must stay correct in the steps between."""
+    tol = 1e-4 if precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
+    platform = mm.Platform.getPlatformByName(platformName)
+    integrator = mm.VerletIntegrator(0.001)
+    context = mm.Context(system, integrator, platform, {"Precision": precision})
+    context.setPositions(positions)
+    reference = mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+    for _ in range(6):
+        integrator.step(1)
+        state = context.getState(getPositions=True, getEnergy=True, getForces=True)
+        reference.setPositions(state.getPositions())
+        expected = reference.getState(getEnergy=True, getForces=True)
+        ASSERT_EQUAL_TOL(expected.getPotentialEnergy(), state.getPotentialEnergy(), tol)
+        for f0, f1 in zip(expected.getForces(), state.getForces()):
+            ASSERT_EQUAL_VEC(f0, f1, tol)
 
 def testScalingParameterAccessors():
     force = plugin.SlicedNonbondedForce(3)
@@ -287,6 +313,53 @@ def testDerivatives():
         energy[scale] = value(context.getState(getEnergy=True).getPotentialEnergy())
     ASSERT_EQUAL_TOL(energy[1.0] - energy[0.0], derivative, 1e-6)
     assert abs(derivative) > 1.0
+
+
+@pytest.mark.parametrize("methodName", ["NoCutoff", "CutoffPeriodic", "Ewald", "PME", "LJPME"])
+@pytest.mark.parametrize("platformName, precision", cases)
+def testNoDerivativesWhileAnotherForceHasThem(platformName, precision, methodName):
+    """A force without derivatives must work in a context where another force has them."""
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(SLICE_METHODS[methodName])
+    nonbonded.setCutoffDistance(1.0)
+    positions = []
+    for i in range(4):
+        for j in range(4):
+            for k in range(2):
+                positions.append(mm.Vec3(0.8*i + 0.1*k, 0.8*j + 0.05*k, 0.4*k))
+                nonbonded.addParticle(0.5 if (i + j + k) % 2 else -0.5, 0.3, 0.5)
+    force = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(len(positions)):
+        force.setParticleSubset(i, i % 2)
+    force.addGlobalParameter("lambda", 0.5)
+    force.addScalingParameter("lambda", 0, 1, True, True)
+    bond = mm.CustomBondForce("k*r^2")
+    bond.addGlobalParameter("k", 1.0)
+    bond.addEnergyParameterDerivative("k")
+    bond.addBond(0, 1, [])
+    bond.setForceGroup(1)
+    system = mm.System()
+    for _ in positions:
+        system.addParticle(1.0)
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(3.2, 0, 0), mm.Vec3(0, 3.2, 0), mm.Vec3(0, 0, 3.2))
+    system.addForce(force)
+    system.addForce(bond)
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {"Precision": precision} if precision else {}
+    context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+    context.setPositions(positions)
+    state = context.getState(getEnergy=True, getParameterDerivatives=True)
+    derivatives = dict(state.getEnergyParameterDerivatives())
+    # As OpenMM does for every global parameter, an unrequested derivative is reported as zero
+    assert derivatives.get("lambda", 0.0) == 0.0
+    delta = positions[1] - positions[0]
+    r2 = delta[0]**2 + delta[1]**2 + delta[2]**2
+    ASSERT_EQUAL_TOL(r2, derivatives["k"], 1e-5)
+    reference = mm.Context(system, mm.VerletIntegrator(0.01), mm.Platform.getPlatformByName("Reference"))
+    reference.setPositions(positions)
+    expected = value(reference.getState(getEnergy=True, groups={0}).getPotentialEnergy())
+    found = value(context.getState(getEnergy=True, groups={0}).getPotentialEnergy())
+    ASSERT_EQUAL_TOL(expected, found, TOL_SLICE_SINGLE if precision == "single" else TOL_SLICE_DOUBLE)
 
 
 def testCastAndIsinstance():
