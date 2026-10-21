@@ -45,6 +45,8 @@
 <ul class="simple">
 <li><p>GPU platforms: a <code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code> without energy parameter derivatives no longer fails to
 compile with PME or LJPME when another force in the same context requests derivatives.</p></li>
+<li><p>GPU platforms: after <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, exceptions keep the scaling parameters of
+their own slice instead of those of slice 0.</p></li>
 </ul>
 <p><strong>Performance</strong></p>
 <ul class="simple">
