@@ -150,7 +150,8 @@ package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFF
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
 <p>The tables below compare <a class="reference internal" href="pythonapi/SlicedNonbondedForce.html#nonbondedslicing.SlicedNonbondedForce" title="nonbondedslicing.SlicedNonbondedForce"><code class="xref py py-class docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code></a> with the
 <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a> it replaces in two systems of about 50,000 atoms, using PME with a 1 nm
-cutoff on the CUDA platform in mixed precision (NVIDIA RTX 4090, OpenMM 8.6). With <em>n</em> subsets,
+cutoff on the CUDA platform in mixed precision (NVIDIA RTX 4090, OpenMM 8.6.1 with the reduction of
+parameter derivatives on the device from <a class="reference external" href="https://github.com/openmm/openmm/pull/5520">openmm/openmm#5520</a>). With <em>n</em> subsets,
 the interactions between subset 0 and each other subset are scaled by two parameters, one for
 Coulomb and one for Lennard-Jones, as one would do to decouple a ligand from its environment. A
 <em>step</em> is a <code class="docutils literal notranslate"><span class="pre">LangevinMiddleIntegrator</span></code> step of 2 fs, which computes only forces. An <em>evaluation</em> is
@@ -179,40 +180,40 @@ derivatives</p></th>
 <td><p>–</p></td>
 <td><p>0.26</p></td>
 <td><p>–</p></td>
-<td><p>0.57</p></td>
+<td><p>0.58</p></td>
 <td><p>–</p></td>
 </tr>
 <tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
 <td><p>1</p></td>
 <td><p>–</p></td>
-<td><p>0.29</p></td>
+<td><p>0.27</p></td>
 <td><p>–</p></td>
-<td><p>0.63</p></td>
+<td><p>0.59</p></td>
 <td><p>–</p></td>
 </tr>
 <tr class="row-even"><td><p>SlicedNonbondedForce</p></td>
 <td><p>2</p></td>
 <td><p>2</p></td>
-<td><p>0.36</p></td>
-<td><p>0.36</p></td>
-<td><p>0.70</p></td>
-<td><p>1.40</p></td>
+<td><p>0.31</p></td>
+<td><p>0.31</p></td>
+<td><p>0.62</p></td>
+<td><p>0.85</p></td>
 </tr>
 <tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
 <td><p>4</p></td>
 <td><p>6</p></td>
-<td><p>0.65</p></td>
-<td><p>0.65</p></td>
-<td><p>0.97</p></td>
-<td><p>2.27</p></td>
+<td><p>0.59</p></td>
+<td><p>0.60</p></td>
+<td><p>0.93</p></td>
+<td><p>1.47</p></td>
 </tr>
 <tr class="row-even"><td><p>SlicedNonbondedForce</p></td>
 <td><p>8</p></td>
 <td><p>14</p></td>
-<td><p>1.06</p></td>
-<td><p>1.14</p></td>
-<td><p>1.45</p></td>
-<td><p>4.33</p></td>
+<td><p>0.92</p></td>
+<td><p>1.00</p></td>
+<td><p>1.31</p></td>
+<td><p>2.44</p></td>
 </tr>
 </tbody>
 </table>
@@ -238,25 +239,27 @@ derivatives</p></th>
 <td><p>–</p></td>
 <td><p>0.27</p></td>
 <td><p>–</p></td>
-<td><p>0.61</p></td>
+<td><p>0.59</p></td>
 <td><p>–</p></td>
 </tr>
 <tr class="row-odd"><td><p>SlicedNonbondedForce</p></td>
 <td><p>3</p></td>
 <td><p>4</p></td>
-<td><p>0.41</p></td>
-<td><p>0.41</p></td>
-<td><p>0.74</p></td>
-<td><p>1.66</p></td>
+<td><p>0.34</p></td>
+<td><p>0.34</p></td>
+<td><p>0.68</p></td>
+<td><p>0.97</p></td>
 </tr>
 </tbody>
 </table>
 <p>The cost of a step grows sublinearly with the number of subsets: going from 1 to 8 subsets makes a
-step about 3.6 times as expensive. Since derivatives are only computed along with the energy,
-requesting them barely affects steps (8% with 14 derivatives). The cost of an evaluation with
+step about 3.4 times as expensive. Since derivatives are only computed along with the energy,
+requesting them barely affects steps (9% with 14 derivatives). The cost of an evaluation with
 derivatives grows with their number, not with the number of slices: a parameter that scales several
 slices adds a single derivative. Derivatives are best requested only for the parameters whose
-energies are needed, and only in the steps where they are reported.</p>
+energies are needed, and only in the steps where they are reported. With OpenMM releases that sum
+the derivatives on the host, each evaluation with derivatives costs about 0.5 ms more, regardless of
+the system size.</p>
 </section>
 </section>
 
@@ -322,7 +325,7 @@ energies are needed, and only in the steps where they are reported.</p>
       &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.1</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |
