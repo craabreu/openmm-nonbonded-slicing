@@ -220,6 +220,67 @@ def testSoftcore(platformName, precision):
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
+def testSoftcoreUpdate(platformName, precision):
+    """Soft-core parameters can be changed, but not enabled or misused, by updateParametersInContext."""
+    positions = [mm.Vec3(0, 0, 0), mm.Vec3(0.28, 0, 0), mm.Vec3(0, 0.6, 0.1)]
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+
+    def makeForce(alpha):
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+        for _ in range(3):
+            force.addParticle(0.0, 0.35, 1.0)
+        force.setParticleSubset(1, 1)
+        force.setParticleSubset(2, 1)
+        force.addGlobalParameter("lambda", 0.5)
+        force.addScalingParameter("lambda", 0, 1, False, True)
+        force.setUseSoftcorePotential(0, 1, alpha)
+        return force
+
+    def makeContext(force):
+        system = mm.System()
+        for _ in range(3):
+            system.addParticle(1.0)
+        system.addForce(force)
+        context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+        context.setPositions(positions)
+        return context
+
+    def energy(context):
+        return context.getState(getEnergy=True).getPotentialEnergy()
+
+    # Changing alpha in an existing Context matches a Context created with the new value.
+
+    force = makeForce(0.5)
+    context = makeContext(force)
+    before = energy(context)
+    force.setUseSoftcorePotential(0, 1, 1.5)
+    force.updateParametersInContext(context)
+    after = energy(context)
+    expected = energy(makeContext(makeForce(1.5)))
+    assert abs(after - before) > 1e-2*abs(before)
+    ASSERT_EQUAL_TOL(expected, after, tol)
+
+    # A soft-core slice needs a scaling parameter that applies to Lennard-Jones interactions.
+
+    force.setUseSoftcorePotential(1, 1, 0.5)
+    with pytest.raises(Exception):
+        force.updateParametersInContext(context)
+
+    # Soft-core cannot be enabled in a Context created without it.
+
+    force = makeForce(0.0)
+    context = makeContext(force)
+    original = energy(context)
+    force.setUseSoftcorePotential(0, 1, 0.5)
+    with pytest.raises(Exception, match="soft-core"):
+        force.updateParametersInContext(context)
+    ASSERT_EQUAL_TOL(original, energy(context), tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
 def testCoulomb(platformName, precision):
     system = mm.System()
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
