@@ -49,9 +49,11 @@ singularity at :math:`r = 0` that makes free-energy calculations hard to converg
    s = \frac{1}{\alpha (1 - \lambda) + (r/\sigma)^6},
 
 where :math:`\lambda` is the scaling parameter that multiplies the Lennard-Jones contributions of
-the slice (which therefore must be defined) and :math:`\alpha` is typically 0.5. The potential is finite
-at :math:`r = 0` whenever :math:`\lambda < 1` and :math:`\alpha > 0`, and it reduces to the usual one when
-:math:`\lambda = 1` or :math:`\alpha = 0`. Keep :math:`\lambda` between 0 and 1.
+the slice (which therefore must be defined) and :math:`\alpha` is typically 0.5. The potential remains
+finite as :math:`r \to 0` whenever :math:`\lambda < 1` and :math:`\alpha > 0`, and it reduces to the usual
+one when :math:`\lambda = 1` or :math:`\alpha = 0`. Keep :math:`\lambda` between 0 and 1: for
+:math:`\lambda > 1`, the term :math:`\alpha (1 - \lambda)` is negative and the potential becomes singular
+at :math:`r = \left[ \alpha (\lambda - 1) \right]^{1/6} \sigma`.
 
 Since the energy is no longer linear in :math:`\lambda`, its derivative gains a term,
 
@@ -63,7 +65,9 @@ which the plugin includes in the derivatives it reports. The soft-core form appl
 direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift
 at the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion
 correction are not softened, an approximation accurate to
-:math:`O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)`.
+:math:`O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)`. As with the usual potential, do not combine
+LJPME with a switching function: the Reference platform ignores it, while the GPU platforms apply it
+to the direct-space Lennard-Jones term.
 
 .. warning::
    For a soft-core slice, the derivative with respect to its Lennard-Jones scaling parameter is

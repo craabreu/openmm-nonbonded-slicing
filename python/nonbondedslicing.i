@@ -382,14 +382,19 @@ public:
      *     U(r) = 4 \\lambda \\epsilon \\left( s^2 - s \\right), \\quad
      *     s = \\frac{1}{\\alpha (1 - \\lambda) + (r/\\sigma)^6},
      *
-     * which is finite at :math:`r = 0` whenever :math:`\\lambda < 1` and :math:`\\alpha > 0`, and reduces to the usual
-     * potential when :math:`\\lambda = 1` or :math:`\\alpha = 0`. The slice must have a scaling
-     * parameter that applies to Lennard-Jones interactions, and :math:`\\lambda` must stay between
-     * 0 and 1. Derivatives with respect to :math:`\\lambda` account for the soft-core form, so
-     * for this slice they are not its van der Waals energy and they change with :math:`\\lambda`.
+     * which remains finite as :math:`r \\to 0` whenever :math:`\\lambda < 1` and :math:`\\alpha > 0`, and
+     * reduces to the usual potential when :math:`\\lambda = 1` or :math:`\\alpha = 0`. The slice must
+     * have a scaling parameter that applies to Lennard-Jones interactions, and :math:`\\lambda` must
+     * stay between 0 and 1: for :math:`\\lambda > 1`, the term :math:`\\alpha (1 - \\lambda)` is
+     * negative and the potential becomes singular at
+     * :math:`r = \\left[ \\alpha (\\lambda - 1) \\right]^{1/6} \\sigma`. Derivatives with respect to
+     * :math:`\\lambda` account for the soft-core form, so for this slice they are not its van der
+     * Waals energy and they change with :math:`\\lambda`.
      *
      * Soft-core applies to the direct-space Lennard-Jones term and to 1-4 exceptions; the
-     * dispersion correction and the reciprocal-space part of LJPME are not affected.
+     * dispersion correction and the reciprocal-space part of LJPME are not affected. As with the
+     * usual potential, do not combine LJPME with a switching function, which the platforms handle
+     * differently.
      * ``updateParametersInContext`` can change :math:`\\alpha` in a Context that already has
      * a soft-core slice, but cannot add soft-core slices to one created without any.
      *

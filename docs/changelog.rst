@@ -16,7 +16,8 @@ Changelog
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
 * ``setUseSoftcorePotential(subset1, subset2, alpha)`` switches a slice to the Beutler soft-core
   Lennard-Jones potential, with derivatives with respect to the slice's scaling parameter that
-  account for the non-linear form. Available on all platforms and with every nonbonded method.
+  account for the non-linear form. Available on all platforms and with every nonbonded method
+  (with LJPME, as for the usual potential, without a switching function).
   For such a slice, that derivative is no longer the slice's van der Waals energy.
 
 **Bug fixes**
