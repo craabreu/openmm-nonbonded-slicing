@@ -33,7 +33,7 @@ namespace NonbondedSlicing {
 class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKernel {
     public:
         CommonCalcSlicedNonbondedForceKernel(std::string name, const Platform& platform, ComputeContext& cc, const System& system) : CalcSlicedNonbondedForceKernel(name, platform),
-                hasInitializedKernel(false), cc(cc) {
+                hasInitializedKernel(false), cc(cc), stepsToSort(0) {
         }
         ~CommonCalcSlicedNonbondedForceKernel();
         /**
@@ -113,6 +113,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeContext& cc;
         ForceInfo* info;
         bool hasInitializedKernel;
+        int stepsToSort;
         ComputeArray charges;
         ComputeArray sigmaEpsilon;
         ComputeArray exceptionParams;

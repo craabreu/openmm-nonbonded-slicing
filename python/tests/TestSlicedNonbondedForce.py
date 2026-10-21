@@ -139,12 +139,11 @@ def testCoulomb(platformName, precision):
     assert_forces_and_energy(context, tol)
 
 
-@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
-def testLargeSystem(platformName, precision):
+def _dipoleSystem():
+    """1200 particles in 600 dipoles, sliced into 3 subsets."""
     numMolecules = 600
     numParticles = numMolecules*2
     boxSize = 20.0
-    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
     nonbonded = mm.NonbondedForce()
     nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
     nonbonded.setCutoffDistance(2.0)
@@ -176,6 +175,13 @@ def testLargeSystem(platformName, precision):
         system.addParticle(1.0)
     system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
     system.addForce(force)
+    return system, positions
+
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testLargeSystem(platformName, precision):
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
 
     def compute(platform, properties):
         context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
@@ -194,6 +200,26 @@ def testLargeSystem(platformName, precision):
     for f0, f1 in zip(reference.getForces(), state.getForces()):
         ASSERT_EQUAL_VEC(f0, f1, tol)
 
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testForcesBetweenSorts(platformName, precision):
+    """In small systems, the atoms are sorted for PME only at some steps; the forces
+    must stay correct in the steps between."""
+    tol = 1e-4 if precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
+    platform = mm.Platform.getPlatformByName(platformName)
+    integrator = mm.VerletIntegrator(0.001)
+    context = mm.Context(system, integrator, platform, {"Precision": precision})
+    context.setPositions(positions)
+    reference = mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+    for _ in range(6):
+        integrator.step(1)
+        state = context.getState(getPositions=True, getEnergy=True, getForces=True)
+        reference.setPositions(state.getPositions())
+        expected = reference.getState(getEnergy=True, getForces=True)
+        ASSERT_EQUAL_TOL(expected.getPotentialEnergy(), state.getPotentialEnergy(), tol)
+        for f0, f1 in zip(expected.getForces(), state.getForces()):
+            ASSERT_EQUAL_VEC(f0, f1, tol)
 
 def testScalingParameterAccessors():
     force = plugin.SlicedNonbondedForce(3)
