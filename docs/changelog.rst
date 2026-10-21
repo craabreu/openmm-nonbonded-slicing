@@ -2,6 +2,14 @@
 Changelog
 =========
 
+0.4.1 (unreleased)
+------------------
+
+**Bug fixes**
+
+* GPU platforms: a ``SlicedNonbondedForce`` without energy parameter derivatives no longer fails to
+  compile with PME or LJPME when another force in the same context requests derivatives.
+
 0.4.0
 -----
 

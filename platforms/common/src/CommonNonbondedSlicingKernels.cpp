@@ -233,6 +233,10 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeCode(string param, str
 
 string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeContext& cc, vector<ScalingParameterInfo>& sliceScalingParams, bool assign) {
     stringstream derivativeCode;
+    // Other forces may request derivatives, but if this one does not, its kernels have no buffer
+    // for them.
+    if (!hasDerivatives)
+        return derivativeCode.str();
     int numSlices = sliceScalingParams.size();
     const vector<string>& allDerivParams = cc.getEnergyParamDerivNames();
     for (int i = 0; i < allDerivParams.size(); i++) {
