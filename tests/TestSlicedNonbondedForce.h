@@ -1912,6 +1912,62 @@ void testSoftcoreOverlap() {
     assertEqualTo(derivative, state.getEnergyParameterDerivatives().at("lambda"), TOL);
 }
 
+void testSoftcoreFailedUpdateLeavesContextUntouched() {
+    // A rejected updateParametersInContext call must not apply any of the new parameters.
+
+    auto makeForce = [](int subset2, double alpha) {
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
+        force->addParticle(0.5, 0.3, 0.8);
+        force->addParticle(-0.5, 0.35, 0.6);
+        force->addParticle(0.25, 0.3, 0.7);
+        force->setParticleSubset(1, 1);
+        force->setParticleSubset(2, subset2);
+        force->addGlobalParameter("lambda", 0.5);
+        force->addScalingParameter("lambda", 0, 1, true, true);
+        force->addScalingParameter("lambda", 1, 1, true, true);
+        force->setUseSoftcorePotential(0, 1, alpha);
+        return force;
+    };
+    vector<Vec3> positions = {Vec3(0, 0, 0), Vec3(0.28, 0, 0), Vec3(0, 0.31, 0.05)};
+    auto makeSystem = [&](System& system, SlicedNonbondedForce* force) {
+        for (int i = 0; i < 3; i++)
+            system.addParticle(1.0);
+        system.addForce(force);
+    };
+    auto energy = [&](Context& context) {
+        context.setPositions(positions);
+        return context.getState(State::Energy).getPotentialEnergy();
+    };
+
+    System system;
+    SlicedNonbondedForce* force = makeForce(0, 0.0);
+    makeSystem(system, force);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+    double original = energy(context);
+
+    System changedSystem;
+    makeSystem(changedSystem, makeForce(1, 0.0));
+    VerletIntegrator changedIntegrator(0.01);
+    Context changedContext(changedSystem, changedIntegrator, platform);
+    double changed = energy(changedContext);
+    ASSERT(abs(changed-original) > 1e-3);
+
+    // Change a subset and enable soft-core in the same call: the call fails and changes nothing.
+
+    force->setParticleSubset(2, 1);
+    force->setUseSoftcorePotential(0, 1, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(original, energy(context), TOL);
+
+    // Without the soft-core request, the same update succeeds and gives the changed energy.
+
+    force->setUseSoftcorePotential(0, 1, 0.0);
+    force->updateParametersInContext(context);
+    assertEqualTo(changed, energy(context), TOL);
+}
+
 void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
     // A single pair with large sigma, so that the switching function and the LJPME potential shift
     // at the cutoff have a large effect on the soft-core minus hard-core differences, which are
@@ -2129,6 +2185,7 @@ int main(int argc, char* argv[]) {
                 testSoftcore(sfmt, method, exceptions, false);
         testSoftcore(sfmt, NonbondedForce::CutoffPeriodic, true, true);
         testSoftcore(sfmt, NonbondedForce::PME, true, true);
+        testSoftcoreFailedUpdateLeavesContextUntouched();
         testSoftcoreSinglePair(NonbondedForce::CutoffPeriodic, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);

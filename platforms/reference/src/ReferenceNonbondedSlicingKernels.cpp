@@ -289,6 +289,14 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
 
+    // Check the soft-core parameters before changing any state.
+
+    if (!hasSoftcore)
+        for (int i = 0; i < numSubsets; i++)
+            for (int j = i; j < numSubsets; j++)
+                if (force.getSoftcoreAlpha(i, j) > 0)
+                    throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
+
     // Get particle subsets.
 
     for (int i = 0; i < numParticles; i++)
@@ -297,12 +305,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     // Update the soft-core parameters.
 
     for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++) {
-            double alpha = force.getSoftcoreAlpha(i, j);
-            if (alpha > 0 && !hasSoftcore)
-                throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
-            sliceSoftcoreAlphas[sliceIndex(i, j)] = alpha;
-        }
+        for (int j = i; j < numSubsets; j++)
+            sliceSoftcoreAlphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
 
     // Identify which exceptions are 1-4 interactions.
 
