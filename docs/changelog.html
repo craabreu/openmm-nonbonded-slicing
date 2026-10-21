@@ -40,13 +40,26 @@
   <section id="changelog">
 <h1>Changelog<a class="headerlink" href="#changelog" title="Link to this heading">¶</a></h1>
 <section id="unreleased">
-<h2>0.4.1 (unreleased)<a class="headerlink" href="#unreleased" title="Link to this heading">¶</a></h2>
+<h2>0.5.0 (unreleased)<a class="headerlink" href="#unreleased" title="Link to this heading">¶</a></h2>
+<p><strong>New features</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> computes the terms that subtract the reciprocal-space
+interactions of excluded pairs and exceptions (Ewald, PME and LJPME) in the reciprocal-space
+force group instead of the direct-space one. They only cancel part of the reciprocal-space sum,
+so both should be evaluated together when they are integrated with different time steps
+(Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
+1798, 2010). With this option, these terms are also kept when <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>
+is used. The default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, keeps the behavior of OpenMM’s <code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code>.</p></li>
+</ul>
 <p><strong>Bug fixes</strong></p>
 <ul class="simple">
 <li><p>GPU platforms: a <code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code> without energy parameter derivatives no longer fails to
 compile with PME or LJPME when another force in the same context requests derivatives.</p></li>
 <li><p>GPU platforms: after <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, exceptions keep the scaling parameters of
 their own slice instead of those of slice 0.</p></li>
+<li><p>OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
+using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
+excluded pairs is now fixed to a valid value. Results were not affected.</p></li>
 </ul>
 <p><strong>Performance</strong></p>
 <ul class="simple">
@@ -159,7 +172,7 @@ wrapper; platform-specific CUDA and OpenCL tests run again.</p></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Changelog</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#unreleased">0.4.1 (unreleased)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#unreleased">0.5.0 (unreleased)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#id1">0.4.0</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#id2">0.3.0</a></li>
 </ul>

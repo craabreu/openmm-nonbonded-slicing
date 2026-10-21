@@ -65,6 +65,14 @@ and van der Waals contributions are scaled by <span class="math notranslate nohi
 values of the scaling parameters. For instance, a parameter that scales both contributions of a
 single slice <em>I, J</em> yields its full energy <span class="math notranslate nohighlight">\(E^{vdW}_{I,J}+E^{elec}_{I,J}\)</span>, while one that
 scales the electrostatic contributions of several slices yields their sum.</p>
+<p>With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
+calling <code class="docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code>, as in multiple time stepping. As in <a class="reference external" href="https://openmm.org">OpenMM</a>’s
+NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
+exceptions are computed in the direct-space force group by default. Since they only cancel part of
+the reciprocal-space sum, they should be integrated along with it whenever the two groups are
+evaluated at different times <span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id4" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">1</a>, <a class="reference internal" href="references.html#id5" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">2</a>]</span>. Calling
+<code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves them to the reciprocal-space force group, where they are
+also kept when direct space is turned off with <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
 <p>The plugin is distributed on <a class="reference external" href="https://anaconda.org/conda-forge/openmm-nonbonded-slicing">conda-forge</a>:</p>

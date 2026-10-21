@@ -54,6 +54,7 @@ SlicedNonbondedForce
         getParticleParameters
         getParticleSubset
         getReactionFieldDielectric
+        getReciprocalExclusions
         getReciprocalSpaceForceGroup
         getScalingParameter
         getSwitchingDistance
@@ -77,6 +78,7 @@ SlicedNonbondedForce
         setParticleParameters
         setParticleSubset
         setReactionFieldDielectric
+        setReciprocalExclusions
         setReciprocalSpaceForceGroup
         setScalingParameter
         setSwitchingDistance
