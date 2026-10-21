@@ -49,8 +49,8 @@ singularity at :math:`r = 0` that makes free-energy calculations hard to converg
    s = \frac{1}{\alpha (1 - \lambda) + (r/\sigma)^6},
 
 where :math:`\lambda` is the scaling parameter that multiplies the Lennard-Jones contributions of
-the slice (which therefore must exist) and :math:`\alpha` is typically 0.5. The potential is finite
-at :math:`r = 0` whenever :math:`\lambda < 1`, and it reduces to the usual one when
+the slice (which therefore must be defined) and :math:`\alpha` is typically 0.5. The potential is finite
+at :math:`r = 0` whenever :math:`\lambda < 1` and :math:`\alpha > 0`, and it reduces to the usual one when
 :math:`\lambda = 1` or :math:`\alpha = 0`. Keep :math:`\lambda` between 0 and 1.
 
 Since the energy is no longer linear in :math:`\lambda`, its derivative gains a term,
@@ -62,13 +62,17 @@ Since the energy is no longer linear in :math:`\lambda`, its derivative gains a 
 which the plugin includes in the derivatives it reports. The soft-core form applies to the
 direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift
 at the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion
-correction are unaffected, which is accurate to :math:`O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)`.
+correction are not softened, an approximation accurate to
+:math:`O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)`.
 
 .. warning::
    For a soft-core slice, the derivative with respect to its Lennard-Jones scaling parameter is
-   **not** the van der Waals energy of the slice, and it changes with :math:`\lambda`. To report
-   that energy, compute it at :math:`\lambda = 1`, where the two forms coincide, or evaluate the
-   slice in a separate force without the soft-core potential.
+   **not** the van der Waals energy of the slice, and it changes with :math:`\lambda`. This holds
+   even at :math:`\lambda = 1`: the potentials coincide there, but the derivative keeps a term
+   proportional to :math:`\alpha`. To obtain that energy, either evaluate the slice in a separate
+   force without the soft-core potential or, when that scaling parameter scales nothing else, take
+   the energy difference :math:`E(\lambda = 1) - E(\lambda = 0)`, since :math:`\lambda = 0` gives
+   zero soft-core Lennard-Jones energy for the slice and :math:`\lambda = 1` gives the usual one.
 
 With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
 calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. As in OpenMM_'s
