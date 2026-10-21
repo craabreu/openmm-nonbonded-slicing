@@ -1968,6 +1968,41 @@ void testSoftcoreFailedUpdateLeavesContextUntouched() {
     assertEqualTo(changed, energy(context), TOL);
 }
 
+void testSoftcoreUpdateUsesContextScaling() {
+    // A Context keeps the scaling parameters it was created with, so updateParametersInContext
+    // validates the soft-core slices against those, not against the current ones of the force.
+
+    System system;
+    for (int i = 0; i < 3; i++)
+        system.addParticle(1.0);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
+    force->addParticle(0.5, 0.3, 0.8);
+    force->addParticle(-0.5, 0.35, 0.6);
+    force->addParticle(0.25, 0.3, 0.7);
+    force->setParticleSubset(1, 1);
+    force->setParticleSubset(2, 1);
+    force->addGlobalParameter("lambda", 0.5);
+    force->addScalingParameter("lambda", 0, 1, false, true);
+    force->setUseSoftcorePotential(0, 1, 0.5);
+    system.addForce(force);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+
+    // The Context still scales the Lennard-Jones interactions of slice (0,1), so a new alpha is valid.
+
+    force->setScalingParameter(0, "lambda", 0, 1, true, false);
+    force->setUseSoftcorePotential(0, 1, 0.7);
+    force->updateParametersInContext(context);
+    force->setScalingParameter(0, "lambda", 0, 1, false, true);
+
+    // The Context does not scale slice (1,1), so it cannot become soft-core.
+
+    force->addScalingParameter("lambda", 1, 1, false, true);
+    force->setUseSoftcorePotential(1, 1, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+}
+
 void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
     // A single pair with large sigma, so that the switching function and the LJPME potential shift
     // at the cutoff have a large effect on the soft-core minus hard-core differences, which are
@@ -2186,6 +2221,7 @@ int main(int argc, char* argv[]) {
         testSoftcore(sfmt, NonbondedForce::CutoffPeriodic, true, true);
         testSoftcore(sfmt, NonbondedForce::PME, true, true);
         testSoftcoreFailedUpdateLeavesContextUntouched();
+        testSoftcoreUpdateUsesContextScaling();
         testSoftcoreSinglePair(NonbondedForce::CutoffPeriodic, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);

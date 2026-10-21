@@ -124,10 +124,13 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         owner.getExceptionParameterOffset(index, parameter, offset, charge, sigma, epsilon);
         offsetParams.insert(parameter);
     }
+    slicesWithLJScaling.clear();
     for (int index = 0; index < owner.getNumScalingParameters(); index++) {
         owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
+        if (includeLJ)
+            slicesWithLJScaling.insert(sliceIndex(subset1, subset2));
     }
     checkSoftcoreSlices();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
@@ -355,15 +358,9 @@ vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System&
 }
 
 void SlicedNonbondedForceImpl::checkSoftcoreSlices() const {
-    set<int> slicesWithLJScaling;
-    string parameter;
-    int subset1, subset2;
-    bool includeCoulomb, includeLJ;
-    for (int index = 0; index < owner.getNumScalingParameters(); index++) {
-        owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
-        if (includeLJ)
-            slicesWithLJScaling.insert(sliceIndex(subset1, subset2));
-    }
+    // The kernels keep the scaling parameters they were created with, so the soft-core slices are
+    // checked against the slices whose Lennard-Jones interactions were scaled at initialization.
+
     int numSubsets = owner.getNumSubsets();
     for (int i = 0; i < numSubsets; i++)
         for (int j = i; j < numSubsets; j++)
