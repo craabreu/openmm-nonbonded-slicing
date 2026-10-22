@@ -2389,6 +2389,121 @@ void testErrors() {
     Context context2(system2, integrator2, platform);
 }
 
+void testSoftcoreRoleCombinations(NonbondedForce::NonbondedMethod method) {
+    // Three subsets and scaling parameters that cover every role at once: "a" scales the LJ term of
+    // slice (0, 1) and softens slice (0, 2); "b" scales the Coulomb term of slice (0, 1) and softens
+    // slices (0, 1) and (1, 2); "d" scales and softens slice (2, 2). Each derivative must match a
+    // central finite difference of the energy. The same system with one parameter per role must
+    // give the same energy and forces, and derivatives whose sums match those of the shared ones.
+    // The GPU test binaries do not register the plugin's Reference kernels, so both checks use the
+    // tested platform.
+
+    const int numParticles = 48;
+    const int M = 4;
+    const double spacing = 1.3;
+    const double L = M*spacing;
+    const double cutoff = 2.5;
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
+
+    NonbondedForce nonbonded;
+    nonbonded.setNonbondedMethod(method);
+    nonbonded.setCutoffDistance(cutoff);
+    nonbonded.setUseDispersionCorrection(true);
+    nonbonded.setEwaldErrorTolerance(1e-5);
+    vector<Vec3> positions(numParticles);
+    auto q = [](int k) { return 0.2*(1-2*(k%2)); };
+    for (int k = 0; k < numParticles; k++) {
+        int iz = k/(M*M);
+        int iy = (k - iz*M*M)/M;
+        int ix = k - M*(iy + iz*M);
+        positions[k] = Vec3(ix+0.5, iy+0.5, iz+0.5)*spacing + Vec3(sin(1.7*k), sin(2.3*k+1), sin(3.1*k+2))*0.05;
+        nonbonded.addParticle(q(k), 1.0+0.05*(k%3), 0.8+0.1*(k%4));
+    }
+    // Exceptions between particles of different subsets (k, k+1) and of the same subset (k, k+3).
+    for (int k = 0; k < numParticles; k += 2)
+        nonbonded.addException(k, k+1, 0.5*q(k)*q(k+1), 1.0, 0.5);
+    for (int k = 1; k+3 < numParticles; k += 6)
+        nonbonded.addException(k, k+3, 0.5*q(k)*q(k+3), 1.0, 0.5);
+
+    struct Role {
+        string parameter;
+        int subset1, subset2;
+        bool includeCoulomb, includeLJ;
+        double alpha;
+    };
+    vector<Role> sharedRoles = {
+        {"a", 0, 1, false, true, 0.0},
+        {"a", 0, 2, false, false, 0.5},
+        {"b", 0, 1, true, false, 0.4},
+        {"b", 1, 2, false, false, 0.6},
+        {"d", 2, 2, true, true, 0.5}
+    };
+    vector<Role> splitRoles = {
+        {"aE", 0, 1, false, true, 0.0},
+        {"aS", 0, 2, false, false, 0.5},
+        {"bC", 0, 1, true, false, 0.0},
+        {"bS1", 0, 1, false, false, 0.4},
+        {"bS2", 1, 2, false, false, 0.6},
+        {"dE", 2, 2, true, true, 0.0},
+        {"dS", 2, 2, false, false, 0.5}
+    };
+    // Split parameters take the value of the shared parameter named by their first letter.
+    map<string, double> values = {{"a", 0.6}, {"b", 0.7}, {"d", 0.5}};
+    auto buildSystem = [&](System& system, const vector<Role>& roles) {
+        system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+        for (int k = 0; k < numParticles; k++)
+            system.addParticle(1.0);
+        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 3);
+        for (int k = 0; k < numParticles; k++)
+            sliced->setParticleSubset(k, k%3);
+        set<string> added;
+        for (auto& role : roles) {
+            if (added.insert(role.parameter).second)
+                sliced->addGlobalParameter(role.parameter, values[role.parameter.substr(0, 1)]);
+            sliced->addScalingParameter(role.parameter, role.subset1, role.subset2, role.includeCoulomb, role.includeLJ, role.alpha);
+        }
+        for (const string& parameter : added)
+            sliced->addEnergyParameterDerivative(parameter);
+        system.addForce(sliced);
+    };
+    System system, splitSystem;
+    buildSystem(system, sharedRoles);
+    buildSystem(splitSystem, splitRoles);
+
+    VerletIntegrator integrator(0.01), splitIntegrator(0.01);
+    Context context(system, integrator, platform);
+    Context splitContext(splitSystem, splitIntegrator, platform);
+    context.setPositions(positions);
+    splitContext.setPositions(positions);
+    int options = State::Energy | State::Forces | State::ParameterDerivatives;
+    State state = context.getState(options);
+    State splitState = splitContext.getState(options);
+    map<string, double> derivs = state.getEnergyParameterDerivatives();
+    map<string, double> splitDerivs = splitState.getEnergyParameterDerivatives();
+    assertEnergy(state, splitState, tol);
+    assertForces(state, splitState, tol);
+
+    // Finite differences: a small step on the Reference platform, a larger one elsewhere to keep
+    // the rounding errors of the energy small.
+    bool reference = platform.getName() == "Reference";
+    double h = reference ? 1e-4 : 1e-2;
+    double fdTol = reference ? 1e-5 : tol;
+    for (auto& entry : values) {
+        context.setParameter(entry.first, entry.second+h);
+        double energyPlus = context.getState(State::Energy).getPotentialEnergy();
+        context.setParameter(entry.first, entry.second-h);
+        double energyMinus = context.getState(State::Energy).getPotentialEnergy();
+        context.setParameter(entry.first, entry.second);
+        assertEqualTo((energyPlus-energyMinus)/(2*h), derivs[entry.first], fdTol);
+        double sum = 0.0;
+        for (auto& split : splitDerivs)
+            if (split.first[0] == entry.first[0])
+                sum += split.second;
+        assertEqualTo(derivs[entry.first], sum, tol);
+    }
+}
+
 void runPlatformTests();
 
 int main(int argc, char* argv[]) {
@@ -2458,6 +2573,8 @@ int main(int argc, char* argv[]) {
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
                 testSoftcoreSeparateParameters(sfmt, method, exceptions);
+        for (auto method : {NonbondedForce::CutoffPeriodic, NonbondedForce::PME, NonbondedForce::LJPME})
+            testSoftcoreRoleCombinations(method);
         runPlatformTests();
     }
     catch(const exception& e) {
