@@ -2013,6 +2013,90 @@ void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwit
     assertEqualTo(derivative, soft.getEnergyParameterDerivatives().at("lambda")-hard.getEnergyParameterDerivatives().at("lambda"), tol);
 }
 
+void testSoftcoreSinglePairSeparate(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
+    // Like testSoftcoreSinglePair, but with separate energy (lambdaE) and softness (lambdaS) parameters.
+
+    const double sigma = 3.0, epsilon = 10.0, alpha = 0.5, lambdaE = 0.4, lambdaS = 0.7;
+    const double cutoff = 3.5, switchDist = 2.8;
+    const bool ljpme = (method == NonbondedForce::LJPME);
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
+
+    NonbondedForce nonbonded;
+    nonbonded.setNonbondedMethod(method);
+    nonbonded.setCutoffDistance(cutoff);
+    nonbonded.setUseDispersionCorrection(false);
+    nonbonded.setEwaldErrorTolerance(1e-4);
+    nonbonded.setUseSwitchingFunction(useSwitch);
+    nonbonded.setSwitchingDistance(switchDist);
+    nonbonded.addParticle(0.0, sigma, epsilon);
+    nonbonded.addParticle(0.0, sigma, epsilon);
+
+    auto makeContext = [&](bool softcore, System& system, VerletIntegrator& integrator) {
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(10, 0, 0), Vec3(0, 10, 0), Vec3(0, 0, 10));
+        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
+        sliced->setParticleSubset(1, 1);
+        sliced->addGlobalParameter("lambdaE", lambdaE);
+        sliced->addScalingParameter("lambdaE", 0, 1, false, true);
+        sliced->addEnergyParameterDerivative("lambdaE");
+        if (softcore) {
+            sliced->addGlobalParameter("lambdaS", lambdaS);
+            sliced->addScalingParameter("lambdaS", 0, 1, false, false, alpha);
+            sliced->addEnergyParameterDerivative("lambdaS");
+        }
+        system.addForce(sliced);
+        return new Context(system, integrator, platform);
+    };
+    System systemSoft, systemHard;
+    VerletIntegrator integratorSoft(0.01), integratorHard(0.01);
+    unique_ptr<Context> contextSoft(makeContext(true, systemSoft, integratorSoft));
+    unique_ptr<Context> contextHard(makeContext(false, systemHard, integratorHard));
+    contextSoft->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+    contextHard->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+    int options = State::Energy | State::Forces | State::ParameterDerivatives;
+    State soft = contextSoft->getState(options);
+    State hard = contextHard->getState(options);
+
+    // U_softcore - U_LJ and the derivative of U_softcore with respect to lambdaS (divided by lambdaE)
+
+    auto unscaled = [&](double x, double& diff, double& softDeriv) {
+        double sig6 = pow(sigma/x, 6);
+        double s = sig6/(1 + alpha*(1-lambdaS)*sig6);
+        diff = 4*epsilon*((s*s - s) - (sig6*sig6 - sig6));
+        softDeriv = 4*epsilon*alpha*s*s*(2*s - 1);
+    };
+    double diffCut, softCut;
+    unscaled(cutoff, diffCut, softCut);
+    auto switchFunction = [&](double x) {
+        if (!useSwitch || x <= switchDist)
+            return 1.0;
+        double t = (x-switchDist)/(cutoff-switchDist);
+        return 1 - 10*t*t*t + 15*t*t*t*t - 6*t*t*t*t*t;
+    };
+    auto energyDifference = [&](double x) {
+        double diff, deriv;
+        unscaled(x, diff, deriv);
+        if (ljpme)
+            diff -= diffCut;
+        return lambdaE*switchFunction(x)*diff;
+    };
+    double diff, deriv;
+    unscaled(r, diff, deriv);
+    if (ljpme)
+        deriv -= softCut;
+    double softDerivative = lambdaE*switchFunction(r)*deriv;
+    const double h = 1e-5;
+    double force = -(energyDifference(r+h) - energyDifference(r-h))/(2*h);
+
+    assertEqualTo(energyDifference(r), soft.getPotentialEnergy()-hard.getPotentialEnergy(), tol);
+    assertEqualVec(Vec3(-force, 0, 0), soft.getForces()[0]-hard.getForces()[0], tol);
+    assertEqualVec(Vec3(force, 0, 0), soft.getForces()[1]-hard.getForces()[1], tol);
+    assertEqualTo(energyDifference(r)/lambdaE, soft.getEnergyParameterDerivatives().at("lambdaE")-hard.getEnergyParameterDerivatives().at("lambdaE"), tol);
+    assertEqualTo(softDerivative, soft.getEnergyParameterDerivatives().at("lambdaS"), tol);
+}
+
 void testSoftcoreSeparateParameters(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions) {
     // Slice (0, 1): "lambdaE" scales Coulomb and LJ, "lambdaS" softens. Soft-core minus hard-core
     // sliced forces are compared with Custom* forces computing lambdaE*(U_softcore - U_LJ), with
@@ -2365,6 +2449,10 @@ int main(int argc, char* argv[]) {
         testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);
         testSoftcoreSinglePair(NonbondedForce::NoCutoff, false, 3.2);
+        testSoftcoreSinglePairSeparate(NonbondedForce::CutoffPeriodic, true, 3.2);
+        testSoftcoreSinglePairSeparate(NonbondedForce::PME, true, 3.2);
+        testSoftcoreSinglePairSeparate(NonbondedForce::LJPME, false, 3.3);
+        testSoftcoreSinglePairSeparate(NonbondedForce::NoCutoff, false, 3.2);
         testSoftcoreOverlapSeparate();
         testSoftnessOnly();
         for (auto method : nonbondedMethods)
