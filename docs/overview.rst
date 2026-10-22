@@ -163,6 +163,12 @@ scaling parameters (a positive ``softcoreAlpha``). The inner force group, switch
 cutoff distance are fixed when a :OpenMM:`Context` is created; changing them afterwards takes
 effect only after the Context's ``reinitialize()`` method is called.
 
+On the CUDA and OpenCL platforms, all nonbonded interactions in one force group must use the same
+cutoff, so a Context fails to be created if the inner force group also contains another
+cutoff-based nonbonded force, such as a :OpenMM:`CustomNonbondedForce`, with a different cutoff.
+Put the inner force group in a group of its own, or in one whose other nonbonded forces use the
+inner cutoff.
+
 Installation
 ============
 

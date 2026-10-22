@@ -486,7 +486,10 @@ public:
      * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
      * the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
      * bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling
-     * parameters (see ``softcoreAlpha`` in :func:`addScalingParameter`).
+     * parameters (see ``softcoreAlpha`` in :func:`addScalingParameter`).  On the CUDA and OpenCL
+     * platforms, all nonbonded interactions in one force group must use the same cutoff, so the
+     * inner force group should be a group of its own or one whose other nonbonded forces (for
+     * instance, a :OpenMM:`CustomNonbondedForce`) use the inner cutoff distance.
      *
      * The inner force group, the inner cutoff distance and the inner switching distance are fixed
      * when a :OpenMM:`Context` is created: changing them afterwards has no effect on that Context

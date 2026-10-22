@@ -210,10 +210,15 @@ and the logarithm, the only elementary function in the family, requires the subt
 cancels for small :math:`Y`. Since the function does not depend on the switching range, the GPU
 kernels evaluate it from a fixed Chebyshev expansion on :math:`0 \le Y \le 0.8`, accurate to
 :math:`5 \times 10^{-10}`, and from the logarithm above that, where the subtraction loses at most one
-digit; the Reference platform sums the series. With these expressions, :math:`e_{12}` and :math:`e_6` are accurate to a
-few units in the last place and :math:`e_1` to about :math:`3 \times 10^{-6}` in single precision,
-for any switching range, and all three are exact to rounding in double precision. The Reference
-platform and the constants of the GPU kernels are computed by the same code, in ``InnerSplit.h``.
+digit. The Reference platform sums the series for :math:`Y < 0.7` and uses :math:`-\ln(1-Y)` minus
+the leading terms above that. With these expressions, :math:`e_{12}` and :math:`e_6` are accurate to
+a few units in the last place and :math:`e_1` to about :math:`3 \times 10^{-6}` in single precision,
+for any switching range. In double precision, :math:`e_{12}` and :math:`e_6` are exact to rounding
+on all platforms and :math:`e_1` on the Reference platform, while the Chebyshev expansion limits
+:math:`e_1` on the GPU platforms to an absolute error of about :math:`3 \times 10^{-10}` (about
+:math:`10^{-9}` relative). These errors affect only the energies: the inner force is computed
+directly as :math:`S(r)` times the bare force. The Reference platform and the constants of the GPU
+kernels are computed by the same code, in ``InnerSplit.h``.
 
 Performance
 ===========
