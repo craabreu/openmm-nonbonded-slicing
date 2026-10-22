@@ -13,6 +13,19 @@ where each slice is defined by subsets *I* and *J*, superscripts *vdW* and *elec
 der Waals and electrostatic contributions, :math:`E_{I,J}` is the potential energy of all particle pairs
 formed by one particle in subset *I* and one in subset *J*, and :math:`\lambda_{I,J}` is a scaling parameter.
 
+The nonbonded energy can be partitioned along a second, independent axis. Slicing by *subset*, above,
+decides which particle pairs a scaling parameter applies to. Slicing by *distance*, through an optional
+*inner force group* (see below), splits every pair interaction into a short-range part, switched off
+smoothly between an inner switching distance and an inner cutoff, and a remainder, so that a multiple
+time-step integrator can advance the two with different time steps. The two partitions compose exactly,
+
+.. math::
+   E = \sum_{I \le J} \sum_{t \in \{vdW, elec\}} \lambda^{t}_{I,J}
+   \left( E^{t,\mathrm{inner}}_{I,J} + E^{t,\mathrm{outer}}_{I,J} \right),
+
+because the inner part of a pair interaction is scaled by the same parameters as the rest of it, and
+each force group reports an energy consistent with its force.
+
 By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in :OpenMM:`Context` global parameters. Derivatives
 with respect to these variables can be requested and used, for instance, to report individual energy
@@ -72,7 +85,8 @@ is negative and the potential becomes singular at
 softened, scale the Coulomb contribution of the slice with its own parameter
 (``includeCoulomb=True, includeLJ=False``) and turn it off before softening the Lennard-Jones term.
 Like the other properties of a scaling parameter, :math:`\alpha` is fixed when a :OpenMM:`Context`
-is created, while :math:`\lambda_E` and :math:`\lambda_s` are its global parameters.
+is created, while :math:`\lambda_E` and :math:`\lambda_s` are its global parameters. Soft-core
+slices cannot be combined with an inner force group (see below).
 
 The derivatives with respect to the two parameters are
 
@@ -105,6 +119,55 @@ the reciprocal-space sum, they should be integrated along with it whenever the t
 evaluated at different times :cite:`Procacci_1998,Morrone_2010`. Calling
 ``setReciprocalExclusions(True)`` moves them to the reciprocal-space force group, where they are
 also kept when direct space is turned off with ``setIncludeDirectSpace(False)``.
+
+Force splitting for multiple time-step integration
+==================================================
+
+A SlicedNonbondedForce can place a short-range, force-switched copy of its direct-space pair
+interactions in a separate *inner* force group, so that a multiple time-step integrator can advance
+it with a small step while the remainder (the rest of direct space, the reciprocal-space sum and its
+exclusion corrections) is advanced with a large one. For a pair at distance :math:`r` with bare
+potential :math:`V(r)` (Lennard-Jones plus Coulomb, scaled by the slice's parameters), the inner
+force is
+
+.. math::
+   \mathbf{F}^\mathrm{inner}(r) = -S(r)\,V'(r)\,\hat{\mathbf{r}}, \qquad
+   S = 1 - 10 z^3 + 15 z^4 - 6 z^5, \quad z = \frac{r - r_s}{r_c - r_s},
+
+with :math:`S = 1` for :math:`r \le r_s` and :math:`S = 0` for :math:`r \ge r_c`, where
+:math:`r_s` and :math:`r_c` are the inner switching and cutoff distances. The inner energy is the
+potential :math:`\hat V` whose gradient is this force, shifted so that :math:`\hat V(r_c) = 0`
+:cite:`Abreu_2020`; the direct-space group reports :math:`V - \hat V` and the corresponding force.
+Every group therefore has an energy consistent with its force, and the groups add up to the
+unsplit result. The closed form of :math:`\hat V` used by all platforms is derived in the theory
+section. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
+parameter offsets apply to both parts.
+
+.. code-block:: python
+
+   force = nonbondedslicing.SlicedNonbondedForce(nonbonded, 2)
+   force.setForceGroup(2)               # direct-space remainder; reciprocal space goes there too
+   force.setInnerForceGroup(1)
+   force.setInnerSwitchingDistance(0.5*unit.nanometer)
+   force.setInnerCutoffDistance(0.8*unit.nanometer)
+   # bonded forces in group 0; steps of 90, 3 and 0.5 fs
+   integrator = openmm.MTSIntegrator(90*unit.femtoseconds, [(2, 1), (1, 30), (0, 180)])
+
+The inner force group must differ from the force group of the force and, with Ewald, PME or LJPME,
+from its reciprocal-space force group. It requires :math:`0 < r_s < r_c \le` cutoff distance and,
+when the Lennard-Jones switching function is used, :math:`r_c \le` switching distance: the inner
+force is the bare Lennard-Jones force times :math:`S(r)`, which beyond the switching distance would
+exceed the switched force and leave the remainder with a correction of opposite sign. Since the
+split assumes the bare Lennard-Jones potential, the inner force group cannot be used with soft-core
+scaling parameters (a positive ``softcoreAlpha``). The inner force group, switching distance and
+cutoff distance are fixed when a :OpenMM:`Context` is created; changing them afterwards takes
+effect only after the Context's ``reinitialize()`` method is called.
+
+On the CUDA and OpenCL platforms, all nonbonded interactions in one force group must use the same
+cutoff, so a Context fails to be created if the inner force group also contains another
+cutoff-based nonbonded force, such as a :OpenMM:`CustomNonbondedForce`, with a different cutoff.
+Put the inner force group in a group of its own, or in one whose other nonbonded forces use the
+inner cutoff.
 
 Installation
 ============

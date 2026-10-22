@@ -48,6 +48,16 @@ combination of contributions from pairs of subsets like</p>
 <p>where each slice is defined by subsets <em>I</em> and <em>J</em>, superscripts <em>vdW</em> and <em>elec</em> denote van
 der Waals and electrostatic contributions, <span class="math notranslate nohighlight">\(E_{I,J}\)</span> is the potential energy of all particle pairs
 formed by one particle in subset <em>I</em> and one in subset <em>J</em>, and <span class="math notranslate nohighlight">\(\lambda_{I,J}\)</span> is a scaling parameter.</p>
+<p>The nonbonded energy can be partitioned along a second, independent axis. Slicing by <em>subset</em>, above,
+decides which particle pairs a scaling parameter applies to. Slicing by <em>distance</em>, through an optional
+<em>inner force group</em> (see below), splits every pair interaction into a short-range part, switched off
+smoothly between an inner switching distance and an inner cutoff, and a remainder, so that a multiple
+time-step integrator can advance the two with different time steps. The two partitions compose exactly,</p>
+<div class="math notranslate nohighlight">
+\[E = \sum_{I \le J} \sum_{t \in \{vdW, elec\}} \lambda^{t}_{I,J}
+\left( E^{t,\mathrm{inner}}_{I,J} + E^{t,\mathrm{outer}}_{I,J} \right),\]</div>
+<p>because the inner part of a pair interaction is scaled by the same parameters as the rest of it, and
+each force group reports an energy consistent with its force.</p>
 <p>By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
 scaling parameters into variables and store their values in <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters. Derivatives
 with respect to these variables can be requested and used, for instance, to report individual energy
@@ -72,7 +82,7 @@ several slices yields their sum.</p>
 <p>Driving <span class="math notranslate nohighlight">\(\lambda^{vdW}_{I,J}\)</span> to zero with the usual Lennard-Jones potential leaves a
 singularity at <span class="math notranslate nohighlight">\(r = 0\)</span> that makes free-energy calculations hard to converge. A scaling
 parameter added with a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> switches its slice to the soft-core form of
-<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id6" title="Thomas C. Beutler, Alan E. Mark, René C. van Schaik, Paul R. Gerber, and Wilfred F. van Gunsteren. Avoiding singularities and numerical instabilities in free energy calculations based on molecular simulations. Chemical Physics Letters, 222(6):529–539, June 1994. doi:10.1016/0009-2614(94)00397-1.">1</a>]</span>, in which each pair interacts through</p>
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id7" title="Thomas C. Beutler, Alan E. Mark, René C. van Schaik, Paul R. Gerber, and Wilfred F. van Gunsteren. Avoiding singularities and numerical instabilities in free energy calculations based on molecular simulations. Chemical Physics Letters, 222(6):529–539, June 1994. doi:10.1016/0009-2614(94)00397-1.">1</a>]</span>, in which each pair interacts through</p>
 <div class="math notranslate nohighlight">
 \[U(r) = 4 \lambda_E \epsilon \left( s^2 - s \right), \qquad
 s = \frac{1}{\alpha (1 - \lambda_s) + (r/\sigma)^6},\]</div>
@@ -96,7 +106,8 @@ is negative and the potential becomes singular at
 softened, scale the Coulomb contribution of the slice with its own parameter
 (<code class="docutils literal notranslate"><span class="pre">includeCoulomb=True,</span> <span class="pre">includeLJ=False</span></code>) and turn it off before softening the Lennard-Jones term.
 Like the other properties of a scaling parameter, <span class="math notranslate nohighlight">\(\alpha\)</span> is fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>
-is created, while <span class="math notranslate nohighlight">\(\lambda_E\)</span> and <span class="math notranslate nohighlight">\(\lambda_s\)</span> are its global parameters.</p>
+is created, while <span class="math notranslate nohighlight">\(\lambda_E\)</span> and <span class="math notranslate nohighlight">\(\lambda_s\)</span> are its global parameters. Soft-core
+slices cannot be combined with an inner force group (see below).</p>
 <p>The derivatives with respect to the two parameters are</p>
 <div class="math notranslate nohighlight">
 \[\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
@@ -123,9 +134,52 @@ calling <code class="docutils literal notranslate"><span class="pre">setReciproc
 NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
 exceptions are computed in the direct-space force group by default. Since they only cancel part of
 the reciprocal-space sum, they should be integrated along with it whenever the two groups are
-evaluated at different times <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id4" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="references.html#id5" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
+evaluated at different times <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id5" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="references.html#id6" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
 <code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves them to the reciprocal-space force group, where they are
 also kept when direct space is turned off with <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>.</p>
+</section>
+<section id="force-splitting-for-multiple-time-step-integration">
+<h2>Force splitting for multiple time-step integration<a class="headerlink" href="#force-splitting-for-multiple-time-step-integration" title="Link to this heading">¶</a></h2>
+<p>A SlicedNonbondedForce can place a short-range, force-switched copy of its direct-space pair
+interactions in a separate <em>inner</em> force group, so that a multiple time-step integrator can advance
+it with a small step while the remainder (the rest of direct space, the reciprocal-space sum and its
+exclusion corrections) is advanced with a large one. For a pair at distance <span class="math notranslate nohighlight">\(r\)</span> with bare
+potential <span class="math notranslate nohighlight">\(V(r)\)</span> (Lennard-Jones plus Coulomb, scaled by the slice’s parameters), the inner
+force is</p>
+<div class="math notranslate nohighlight">
+\[\mathbf{F}^\mathrm{inner}(r) = -S(r)\,V'(r)\,\hat{\mathbf{r}}, \qquad
+S = 1 - 10 z^3 + 15 z^4 - 6 z^5, \quad z = \frac{r - r_s}{r_c - r_s},\]</div>
+<p>with <span class="math notranslate nohighlight">\(S = 1\)</span> for <span class="math notranslate nohighlight">\(r \le r_s\)</span> and <span class="math notranslate nohighlight">\(S = 0\)</span> for <span class="math notranslate nohighlight">\(r \ge r_c\)</span>, where
+<span class="math notranslate nohighlight">\(r_s\)</span> and <span class="math notranslate nohighlight">\(r_c\)</span> are the inner switching and cutoff distances. The inner energy is the
+potential <span class="math notranslate nohighlight">\(\hat V\)</span> whose gradient is this force, shifted so that <span class="math notranslate nohighlight">\(\hat V(r_c) = 0\)</span>
+<span class="bibtex-citation" id="id3">[<a class="reference internal" href="references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>; the direct-space group reports <span class="math notranslate nohighlight">\(V - \hat V\)</span> and the corresponding force.
+Every group therefore has an energy consistent with its force, and the groups add up to the
+unsplit result. The closed form of <span class="math notranslate nohighlight">\(\hat V\)</span> used by all platforms is derived in the theory
+section. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
+parameter offsets apply to both parts.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span> <span class="o">=</span> <span class="n">nonbondedslicing</span><span class="o">.</span><span class="n">SlicedNonbondedForce</span><span class="p">(</span><span class="n">nonbonded</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setForceGroup</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>               <span class="c1"># direct-space remainder; reciprocal space goes there too</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerForceGroup</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerSwitchingDistance</span><span class="p">(</span><span class="mf">0.5</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerCutoffDistance</span><span class="p">(</span><span class="mf">0.8</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
+<span class="c1"># bonded forces in group 0; steps of 90, 3 and 0.5 fs</span>
+<span class="n">integrator</span> <span class="o">=</span> <span class="n">openmm</span><span class="o">.</span><span class="n">MTSIntegrator</span><span class="p">(</span><span class="mi">90</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">femtoseconds</span><span class="p">,</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">180</span><span class="p">)])</span>
+</pre></div>
+</div>
+<p>The inner force group must differ from the force group of the force and, with Ewald, PME or LJPME,
+from its reciprocal-space force group. It requires <span class="math notranslate nohighlight">\(0 &lt; r_s &lt; r_c \le\)</span> cutoff distance and,
+when the Lennard-Jones switching function is used, <span class="math notranslate nohighlight">\(r_c \le\)</span> switching distance: the inner
+force is the bare Lennard-Jones force times <span class="math notranslate nohighlight">\(S(r)\)</span>, which beyond the switching distance would
+exceed the switched force and leave the remainder with a correction of opposite sign. Since the
+split assumes the bare Lennard-Jones potential, the inner force group cannot be used with soft-core
+scaling parameters (a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code>). The inner force group, switching distance and
+cutoff distance are fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created; changing them afterwards takes
+effect only after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is called.</p>
+<p>On the CUDA and OpenCL platforms, all nonbonded interactions in one force group must use the same
+cutoff, so a Context fails to be created if the inner force group also contains another
+cutoff-based nonbonded force, such as a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html">openmm.CustomNonbondedForce</a>, with a different cutoff.
+Put the inner force group in a group of its own, or in one whose other nonbonded forces use the
+inner cutoff.</p>
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
@@ -222,6 +276,7 @@ make<span class="w"> </span>PythonInstall
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#soft-core-lennard-jones-potential">Soft-core Lennard-Jones Potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#force-splitting-for-multiple-time-step-integration">Force splitting for multiple time-step integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#building-from-source">Building from Source</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#test-cases">Test Cases</a></li>

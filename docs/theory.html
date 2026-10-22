@@ -49,10 +49,10 @@ the class API follows Python’s 0-based indexing.</p>
 subsets or “colors”. This procedure results in <span class="math notranslate nohighlight">\(n(n+1)/2\)</span> slices, distinguished by order-invariant
 pairs of subset indices. Slice <em>I, J</em> comprises all pairs involving a particle in subset <em>I</em> and a
 particle in another (or the same) subset <em>J</em>.</p>
-<figure class="align-default" id="id3">
+<figure class="align-default" id="id4">
 <img alt="_images/logo.png" src="_images/logo.png" />
 <figcaption>
-<p><span class="caption-text">Example: three particle subsets (<span class="subset1">●</span><span class="subset2">●</span><span class="subset3">●</span>) form six energy slices</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Example: three particle subsets (<span class="subset1">●</span><span class="subset2">●</span><span class="subset3">●</span>) form six energy slices</span><a class="headerlink" href="#id4" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
 <p>It is straightforward to slice pairwise Lennard-Jones interactions, as well as the direct-space,
@@ -63,7 +63,7 @@ focuses on the reciprocal-space and background energy parts.</p>
 <h2>Sliced Background Energy<a class="headerlink" href="#sliced-background-energy" title="Link to this heading">¶</a></h2>
 <p>In the case of systems with non-zero net charge, it is necessary to add the energy of
 interaction with a neutralizing background charge. The background energy is given by
-<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">4</a>]</span></p>
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">5</a>]</span></p>
 <div class="math notranslate nohighlight">
 \[E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.\]</div>
 <p>where <span class="math notranslate nohighlight">\(Q = \sum_{i=1}^N q_i\)</span> is the total charge of the system.
@@ -139,12 +139,63 @@ S_I(\mathbf k) \cdot S_J(\mathbf k).\]</div>
 <section id="sliced-pme-implementation">
 <h2>Sliced PME Implementation<a class="headerlink" href="#sliced-pme-implementation" title="Link to this heading">¶</a></h2>
 <p>Each subset-specific structure factor <span class="math notranslate nohighlight">\(S(\mathbf k)\)</span> can be calculated using the smooth
-Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">5</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
+Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">6</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
 all slices. In the case of forces, <em>n</em> additional inverse FFT calculations are necessary.
 Therefore, in a single processor and for a fixed number of particles, the computational effort
 scales approximately linearly with the number of subsets (not the number of slices). In a GPU, as
 with the OpenCL and CUDA instances of <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Platform.html">openmm.Platform</a>, we take advantage the capability of either
 package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFFT</a> or <a class="reference external" href="https://docs.nvidia.com/cuda/cufft">cuFFT</a> to speed-up parallel FFT calculations via batched transforms.</p>
+</section>
+<section id="inner-force-group-energy">
+<h2>Inner Force Group Energy<a class="headerlink" href="#inner-force-group-energy" title="Link to this heading">¶</a></h2>
+<p>When an inner force group is enabled, the inner force of a pair is <span class="math notranslate nohighlight">\(S(r)\)</span> times the bare
+Lennard-Jones plus Coulomb force, where <span class="math notranslate nohighlight">\(S\)</span> is the quintic switch of the force-directed
+switching scheme of <span class="bibtex-citation" id="id3">[<a class="reference internal" href="references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>. Writing the bare potential as <span class="math notranslate nohighlight">\(V(r) = \sum_n c_n r^{-n}\)</span>
+with <span class="math notranslate nohighlight">\(n \in \{12, 6, 1\}\)</span>, the energy whose gradient is that force, shifted to vanish at the
+inner cutoff <span class="math notranslate nohighlight">\(r_c\)</span>, is <span class="math notranslate nohighlight">\(\hat V(r) = \sum_n c_n e_n(r)\)</span> with</p>
+<div class="math notranslate nohighlight">
+\[e_n(r) = n \int_r^{r_c} S(s)\, s^{-(n+1)}\, ds \quad (r_s &lt; r &lt; r_c), \qquad
+e_n(r) = r^{-n} - K_n \quad (r \le r_s), \qquad K_n = r_s^{-n} - e_n(r_s),\]</div>
+<p>where <span class="math notranslate nohighlight">\(r_s\)</span> is the inner switching distance. Expanding <span class="math notranslate nohighlight">\(S\)</span> in powers of <span class="math notranslate nohighlight">\(s\)</span>
+and integrating term by term gives a closed form whose terms are much larger than their sum:
+the expansion coefficients grow like <span class="math notranslate nohighlight">\((r_s/h)^k\)</span> with <span class="math notranslate nohighlight">\(h = r_c - r_s\)</span>, and the
+integration constants involve integrals from <span class="math notranslate nohighlight">\(r_s\)</span>. In single precision this loses most of
+the significant digits even for a 0.5–0.8 nm switching range, and in double precision it fails for
+narrow ranges or small <span class="math notranslate nohighlight">\(r_s\)</span>.</p>
+<p>The switch is the smoothstep polynomial <span class="math notranslate nohighlight">\(P(u) = 10u^3 - 15u^4 + 6u^5\)</span> of
+<span class="math notranslate nohighlight">\(u = (r_c - s)/h\)</span>. In the variable <span class="math notranslate nohighlight">\(y = 1 - s/r_c\)</span>, that is <span class="math notranslate nohighlight">\(S = P(\gamma y)\)</span>
+with <span class="math notranslate nohighlight">\(\gamma = r_c/h\)</span>, and <span class="math notranslate nohighlight">\(s^{-(n+1)} ds = -r_c^{-n} (1-y)^{-(n+1)} dy\)</span>, so that</p>
+<div class="math notranslate nohighlight">
+\[e_n(r) = n\, r_c^{-n} \left( 10\gamma^3 J_3 - 15\gamma^4 J_4 + 6\gamma^5 J_5 \right), \qquad
+J_k = \int_0^Y y^k (1-y)^{-(n+1)}\, dy, \qquad Y = 1 - \frac{r}{r_c}.\]</div>
+<p>The only cancellation left is the alternation of the three smoothstep coefficients, which is
+bounded by a factor of about 30 because <span class="math notranslate nohighlight">\(\gamma y \le 1\)</span> over the integration range. For the
+Lennard-Jones powers, <span class="math notranslate nohighlight">\(n \ge 6\)</span>, the substitution <span class="math notranslate nohighlight">\(x = y/(1-y)\)</span> turns each
+<span class="math notranslate nohighlight">\(J_k\)</span> into a polynomial with positive coefficients in <span class="math notranslate nohighlight">\(x = (r_c - r)/r\)</span>,</p>
+<div class="math notranslate nohighlight">
+\[J_k = \int_0^x t^k (1+t)^{n-k-1}\, dt = \sum_{j=0}^{n-k-1} \binom{n-k-1}{j} \frac{x^{k+j+1}}{k+j+1},\]</div>
+<p>so that <span class="math notranslate nohighlight">\(e_{12}\)</span> and <span class="math notranslate nohighlight">\(e_6\)</span> are <span class="math notranslate nohighlight">\(x^4\)</span> times polynomials of degrees 8 and 2. For
+the Coulomb power, <span class="math notranslate nohighlight">\(n = 1\)</span>, the integral has a logarithm, and the three <span class="math notranslate nohighlight">\(J_k\)</span> share it:</p>
+<div class="math notranslate nohighlight">
+\[e_1(r) = \frac{\gamma^3}{r_c} \left[ \frac{Y^4 (10 - 15\gamma Y + 6\gamma^2 Y^2)}{1-Y}
+- 30 \left( (\gamma-1)^2 L_6(Y) + (1-2\gamma)\frac{Y^5}{5} + \frac{Y^4}{4} \right) \right],
+\qquad L_6(Y) = \sum_{j \ge 6} \frac{Y^j}{j} = -\ln(1-Y) - \sum_{j=1}^{5} \frac{Y^j}{j}.\]</div>
+<p>The function <span class="math notranslate nohighlight">\(L_6(Y)/Y^6 = \sum_{m \ge 0} Y^m/(m+6)\)</span> is the Lerch transcendent
+<span class="math notranslate nohighlight">\(\Phi(Y, 1, 6)\)</span>, equivalently <span class="math notranslate nohighlight">\({}_2F_1(1, 6; 7; Y)/6\)</span>, and <span class="math notranslate nohighlight">\(L_6(Y)\)</span> itself is the
+incomplete beta function <span class="math notranslate nohighlight">\(B_Y(6, 0)\)</span>. None of these is available in the GPU math libraries,
+and the logarithm, the only elementary function in the family, requires the subtraction above, which
+cancels for small <span class="math notranslate nohighlight">\(Y\)</span>. Since the function does not depend on the switching range, the GPU
+kernels evaluate it from a fixed Chebyshev expansion on <span class="math notranslate nohighlight">\(0 \le Y \le 0.8\)</span>, accurate to
+<span class="math notranslate nohighlight">\(5 \times 10^{-10}\)</span>, and from the logarithm above that, where the subtraction loses at most one
+digit. The Reference platform sums the series for <span class="math notranslate nohighlight">\(Y &lt; 0.7\)</span> and uses <span class="math notranslate nohighlight">\(-\ln(1-Y)\)</span> minus
+the leading terms above that. With these expressions, <span class="math notranslate nohighlight">\(e_{12}\)</span> and <span class="math notranslate nohighlight">\(e_6\)</span> are accurate to
+a few units in the last place and <span class="math notranslate nohighlight">\(e_1\)</span> to about <span class="math notranslate nohighlight">\(3 \times 10^{-6}\)</span> in single precision,
+for any switching range. In double precision, <span class="math notranslate nohighlight">\(e_{12}\)</span> and <span class="math notranslate nohighlight">\(e_6\)</span> are exact to rounding
+on all platforms and <span class="math notranslate nohighlight">\(e_1\)</span> on the Reference platform, while the Chebyshev expansion limits
+<span class="math notranslate nohighlight">\(e_1\)</span> on the GPU platforms to an absolute error of about <span class="math notranslate nohighlight">\(3 \times 10^{-10}\)</span> (about
+<span class="math notranslate nohighlight">\(10^{-9}\)</span> relative). These errors affect only the energies: the inner force is computed
+directly as <span class="math notranslate nohighlight">\(S(r)\)</span> times the bare force. The Reference platform and the constants of the GPU
+kernels are computed by the same code, in <code class="docutils literal notranslate"><span class="pre">InnerSplit.h</span></code>.</p>
 </section>
 <section id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
@@ -297,6 +348,7 @@ the system size.</p>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-background-energy">Sliced Background Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-reciprocal-space-energy">Sliced Reciprocal-Space Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sliced-pme-implementation">Sliced PME Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inner-force-group-energy">Inner Force Group Energy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#performance">Performance</a></li>
 </ul>
 </li>

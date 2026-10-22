@@ -34,6 +34,9 @@ SlicedNonbondedForce
         getGlobalParameterDefaultValue
         getGlobalParameterName
         getIncludeDirectSpace
+        getInnerCutoffDistance
+        getInnerForceGroup
+        getInnerSwitchingDistance
         getLJPMEParameters
         getLJPMEParametersInContext
         getName
@@ -71,6 +74,9 @@ SlicedNonbondedForce
         setGlobalParameterDefaultValue
         setGlobalParameterName
         setIncludeDirectSpace
+        setInnerCutoffDistance
+        setInnerForceGroup
+        setInnerSwitchingDistance
         setLJPMEParameters
         setName
         setNonbondedMethod

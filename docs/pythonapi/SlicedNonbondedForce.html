@@ -222,116 +222,134 @@ parameter cannot be used simultaneously to apply offsets and scale energy terms.
 <tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace" title="nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getIncludeDirectSpace</span></code></a>(self)</p></td>
 <td><p>Get whether to include direct space interactions when calculating forces and energies.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParameters</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getInnerCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.getInnerCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getInnerCutoffDistance</span></code></a>()</p></td>
+<td><p>Get the inner cutoff distance, beyond which the inner part of an interaction is zero.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getInnerForceGroup" title="nonbondedslicing.SlicedNonbondedForce.getInnerForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getInnerForceGroup</span></code></a>()</p></td>
+<td><p>Get the force group of the inner part of the direct-space interactions, or -1 if the inner force group is disabled.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getInnerSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.getInnerSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getInnerSwitchingDistance</span></code></a>()</p></td>
+<td><p>Get the inner switching distance, where the inner part of an interaction begins to switch off.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParameters</span></code></a>(self)</p></td>
 <td><p>Get the parameters to use for dispersion term in LJ-PME calculations.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParametersInContext</span></code></a>(context)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getLJPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getLJPMEParametersInContext</span></code></a>(context)</p></td>
 <td><p>Get the PME parameters being used for the dispersion term for LJPME in a particular Context.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getName" title="nonbondedslicing.SlicedNonbondedForce.getName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getName</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getName" title="nonbondedslicing.SlicedNonbondedForce.getName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getName</span></code></a>(self)</p></td>
 <td><p>Get the name of this Force.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethod</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethod</span></code></a>(self)</p></td>
 <td><p>Get the method used for handling long range nonbonded interactions.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethodName</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName" title="nonbondedslicing.SlicedNonbondedForce.getNonbondedMethodName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNonbondedMethodName</span></code></a>()</p></td>
 <td><p>Get the name of the method used for handling long range nonbonded interactions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumEnergyParameterDerivatives" title="nonbondedslicing.SlicedNonbondedForce.getNumEnergyParameterDerivatives"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumEnergyParameterDerivatives</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumEnergyParameterDerivatives" title="nonbondedslicing.SlicedNonbondedForce.getNumEnergyParameterDerivatives"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumEnergyParameterDerivatives</span></code></a>()</p></td>
 <td><p>Get the number of requested scaling parameter derivatives.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptionParameterOffsets</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptionParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptionParameterOffsets</span></code></a>(self)</p></td>
 <td><p>Get the number of exception parameter offsets that have been added.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptions" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptions</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumExceptions" title="nonbondedslicing.SlicedNonbondedForce.getNumExceptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumExceptions</span></code></a>(self)</p></td>
 <td><p>Get the number of special interactions that should be calculated differently from other interactions.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumGlobalParameters</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumGlobalParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumGlobalParameters</span></code></a>(self)</p></td>
 <td><p>Get the number of global parameters that have been added.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticleParameterOffsets</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets" title="nonbondedslicing.SlicedNonbondedForce.getNumParticleParameterOffsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticleParameterOffsets</span></code></a>(self)</p></td>
 <td><p>Get the number of particles parameter offsets that have been added.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticles" title="nonbondedslicing.SlicedNonbondedForce.getNumParticles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticles</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumParticles" title="nonbondedslicing.SlicedNonbondedForce.getNumParticles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumParticles</span></code></a>(self)</p></td>
 <td><p>Get the number of particles for which force field parameters have been defined.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumScalingParameters</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters" title="nonbondedslicing.SlicedNonbondedForce.getNumScalingParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumScalingParameters</span></code></a>()</p></td>
 <td><p>Get the number of scaling parameters.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSlices" title="nonbondedslicing.SlicedNonbondedForce.getNumSlices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSlices</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSlices" title="nonbondedslicing.SlicedNonbondedForce.getNumSlices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSlices</span></code></a>()</p></td>
 <td><p>Get the number of slices determined by the specified number of particle subsets.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSubsets</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getNumSubsets" title="nonbondedslicing.SlicedNonbondedForce.getNumSubsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumSubsets</span></code></a>()</p></td>
 <td><p>Get the specified number of particle subsets.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParameters</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.getPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParameters</span></code></a>(self)</p></td>
 <td><p>Get the parameters to use for PME calculations.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParametersInContext</span></code></a>(context)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext" title="nonbondedslicing.SlicedNonbondedForce.getPMEParametersInContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getPMEParametersInContext</span></code></a>(context)</p></td>
 <td><p>Get the parameters being used for PME in a particular Context.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameterOffset</span></code></a>(self, index)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameterOffset</span></code></a>(self, index)</p></td>
 <td><p>Get the offset added to the per-particle parameters of a particular particle, based on a global parameter.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameters</span></code></a>(self, index)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleParameters" title="nonbondedslicing.SlicedNonbondedForce.getParticleParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleParameters</span></code></a>(self, index)</p></td>
 <td><p>Get the nonbonded force parameters for a particle.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.getParticleSubset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleSubset</span></code></a>(index)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getParticleSubset" title="nonbondedslicing.SlicedNonbondedForce.getParticleSubset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getParticleSubset</span></code></a>(index)</p></td>
 <td><p>Get the subset to which a particle belongs.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric" title="nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReactionFieldDielectric</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric" title="nonbondedslicing.SlicedNonbondedForce.getReactionFieldDielectric"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReactionFieldDielectric</span></code></a>(self)</p></td>
 <td><p>Get the dielectric constant to use for the solvent in the reaction field approximation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalExclusions" title="nonbondedslicing.SlicedNonbondedForce.getReciprocalExclusions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReciprocalExclusions</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalExclusions" title="nonbondedslicing.SlicedNonbondedForce.getReciprocalExclusions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReciprocalExclusions</span></code></a>()</p></td>
 <td><p>Get whether the terms that subtract the reciprocal space interactions of excluded pairs and exceptions are computed in the reciprocal space force group.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup" title="nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReciprocalSpaceForceGroup</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup" title="nonbondedslicing.SlicedNonbondedForce.getReciprocalSpaceForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getReciprocalSpaceForceGroup</span></code></a>(self)</p></td>
 <td><p>Get the force group that reciprocal space interactions for Ewald or PME are included in.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameter</span></code></a>(index)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameter</span></code></a>(index)</p></td>
 <td><p>Get the scaling parameter applied to a particular nonbonded slice.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameterSoftcoreAlpha" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameterSoftcoreAlpha"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameterSoftcoreAlpha</span></code></a>(index)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getScalingParameterSoftcoreAlpha" title="nonbondedslicing.SlicedNonbondedForce.getScalingParameterSoftcoreAlpha"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getScalingParameterSoftcoreAlpha</span></code></a>(index)</p></td>
 <td><p>Get the soft-core parameter alpha of a scaling parameter, or zero if that parameter does not soften its slice (see <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getSwitchingDistance</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.getSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getSwitchingDistance</span></code></a>(self)</p></td>
 <td><p>Get the distance at which the switching function begins to reduce the Lennard-Jones interaction.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseCuFFT" title="nonbondedslicing.SlicedNonbondedForce.getUseCuFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseCuFFT</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseCuFFT" title="nonbondedslicing.SlicedNonbondedForce.getUseCuFFT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseCuFFT</span></code></a>()</p></td>
 <td><p>Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseDispersionCorrection</span></code></a>(self)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection" title="nonbondedslicing.SlicedNonbondedForce.getUseDispersionCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseDispersionCorrection</span></code></a>(self)</p></td>
 <td><p>Get whether to add a contribution to the energy that approximately represents the effect of Lennard-Jones interactions beyond the cutoff distance.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseSwitchingFunction</span></code></a>(self)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.getUseSwitchingFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getUseSwitchingFunction</span></code></a>(self)</p></td>
 <td><p>Get whether a switching function is applied to the Lennard-Jones interaction.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.setCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setCutoffDistance</span></code></a>(self, distance)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.setCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setCutoffDistance</span></code></a>(self, distance)</p></td>
 <td><p>Set the cutoff distance (in nm) being used for nonbonded interactions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance" title="nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setEwaldErrorTolerance</span></code></a>(self, tol)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance" title="nonbondedslicing.SlicedNonbondedForce.setEwaldErrorTolerance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setEwaldErrorTolerance</span></code></a>(self, tol)</p></td>
 <td><p>Set the error tolerance for Ewald summation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameterOffset</span></code></a>(self, index, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameterOffset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameterOffset</span></code></a>(self, index, ...)</p></td>
 <td><p>Set the offset added to the parameters of a particular exception, based on a global parameter.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameters" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameters</span></code></a>(self, index, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionParameters" title="nonbondedslicing.SlicedNonbondedForce.setExceptionParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionParameters</span></code></a>(self, index, ...)</p></td>
 <td><p>Set the force field parameters for an interaction that should be calculated differently from others.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions" title="nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionsUsePeriodicBoundaryConditions</span></code></a>(...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions" title="nonbondedslicing.SlicedNonbondedForce.setExceptionsUsePeriodicBoundaryConditions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setExceptionsUsePeriodicBoundaryConditions</span></code></a>(...)</p></td>
 <td><p>Set whether periodic boundary conditions should be applied to exceptions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setForceGroup</span></code></a>(self, group)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setForceGroup</span></code></a>(self, group)</p></td>
 <td><p>Set the force group this Force belongs to.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterDefaultValue</span></code></a>(self, index, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterDefaultValue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterDefaultValue</span></code></a>(self, index, ...)</p></td>
 <td><p>Set the default value of a global parameter.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterName</span></code></a>(self, index, name)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName" title="nonbondedslicing.SlicedNonbondedForce.setGlobalParameterName"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setGlobalParameterName</span></code></a>(self, index, name)</p></td>
 <td><p>Set the name of a global parameter.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace" title="nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setIncludeDirectSpace</span></code></a>(include)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace" title="nonbondedslicing.SlicedNonbondedForce.setIncludeDirectSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setIncludeDirectSpace</span></code></a>(include)</p></td>
 <td><p>Set whether to include direct space interactions when calculating forces and energy.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setInnerCutoffDistance" title="nonbondedslicing.SlicedNonbondedForce.setInnerCutoffDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInnerCutoffDistance</span></code></a>(distance)</p></td>
+<td><p>Set the inner cutoff distance.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInnerForceGroup</span></code></a>(group)</p></td>
+<td><p>Set the force group of the inner part of the direct-space interactions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setInnerSwitchingDistance" title="nonbondedslicing.SlicedNonbondedForce.setInnerSwitchingDistance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInnerSwitchingDistance</span></code></a>(distance)</p></td>
+<td><p>Set the inner switching distance.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters" title="nonbondedslicing.SlicedNonbondedForce.setLJPMEParameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setLJPMEParameters</span></code></a>(self, alpha, nx, ny, nz)</p></td>
 <td><p>Set the parameters to use for the dispersion term in LJPME calculations.</p></td>
@@ -599,7 +617,8 @@ are <span class="math notranslate nohighlight">\(4 \lambda_E \epsilon \alpha s^2
 when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
 added to the usual derivative when the same parameter also scales the Lennard-Jones
 energy. This setting is fixed
-at Context creation, like the other arguments of this method.</p></li>
+at Context creation, like the other arguments of this method. Soft-core scaling
+parameters cannot be used with an inner force group (see <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup"><code class="xref py py-func docutils literal notranslate"><span class="pre">setInnerForceGroup()</span></code></a>).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -738,6 +757,35 @@ derivative.</p>
 <dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace">
 <span class="sig-name descname"><span class="pre">getIncludeDirectSpace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getIncludeDirectSpace" title="Link to this definition">¶</a></dt>
 <dd><p>Get whether to include direct space interactions when calculating forces and energies. This is useful if you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that computes it in a nonstandard way, while still using this object for the reciprocal space calculation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getInnerCutoffDistance">
+<span class="sig-name descname"><span class="pre">getInnerCutoffDistance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getInnerCutoffDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Get the inner cutoff distance, beyond which the inner part of an interaction is zero.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>distance</strong> (<em>Quantity</em>) – the inner cutoff distance, in nm</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getInnerForceGroup">
+<span class="sig-name descname"><span class="pre">getInnerForceGroup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getInnerForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Get the force group of the inner part of the direct-space interactions, or -1 if the inner
+force group is disabled.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.getInnerSwitchingDistance">
+<span class="sig-name descname"><span class="pre">getInnerSwitchingDistance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.getInnerSwitchingDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Get the inner switching distance, where the inner part of an interaction begins to switch off.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>distance</strong> (<em>Quantity</em>) – the inner switching distance, in nm</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -1132,6 +1180,64 @@ or they will be counted twice.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>include</strong> (<em>bool</em>) – whether to include direct space interactions</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setInnerCutoffDistance">
+<span class="sig-name descname"><span class="pre">setInnerCutoffDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distance</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setInnerCutoffDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Set the inner cutoff distance.  It must not exceed the cutoff distance nor, if a switching
+function is used, the switching distance (see <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup" title="nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup"><code class="xref py py-func docutils literal notranslate"><span class="pre">setInnerForceGroup()</span></code></a>).  Like the inner
+force group, it is fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created and only changes in an existing
+one when its <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is called.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>distance</strong> (<em>double</em>) – the inner cutoff distance, measured in nm</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup">
+<span class="sig-name descname"><span class="pre">setInnerForceGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setInnerForceGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Set the force group of the inner part of the direct-space interactions.  When enabled, every
+direct-space pair interaction, including 1-4 exceptions, is split into a short-range part and
+a remainder.  The short-range part is the bare Lennard-Jones plus Coulomb force multiplied by
+a quintic switching function that goes from 1 at the inner switching distance to 0 at the
+inner cutoff distance; its energy is the potential whose gradient is that force, shifted to
+vanish at the inner cutoff.  The remainder stays in the force group of this force.  Slice
+scaling parameters and parameter offsets apply to both parts.  This is the force splitting
+used for multiple time-step integration in <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>.</p>
+<p>The inner force group must differ from the force group of this force and, with the Ewald, PME
+and LJPME methods, from the reciprocal space force group.  It requires 0 &lt; inner switching
+distance &lt; inner cutoff distance &lt;= cutoff distance and, if a switching function is used
+(see <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction" title="nonbondedslicing.SlicedNonbondedForce.setUseSwitchingFunction"><code class="xref py py-func docutils literal notranslate"><span class="pre">setUseSwitchingFunction()</span></code></a>), inner cutoff distance &lt;= switching distance, so that
+the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
+bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling
+parameters (see <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> in <a class="reference internal" href="#nonbondedslicing.SlicedNonbondedForce.addScalingParameter" title="nonbondedslicing.SlicedNonbondedForce.addScalingParameter"><code class="xref py py-func docutils literal notranslate"><span class="pre">addScalingParameter()</span></code></a>).  On the CUDA and OpenCL
+platforms, all nonbonded interactions in one force group must use the same cutoff, so the
+inner force group should be a group of its own or one whose other nonbonded forces (for
+instance, a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html">openmm.CustomNonbondedForce</a>) use the inner cutoff distance.</p>
+<p>The inner force group, the inner cutoff distance and the inner switching distance are fixed
+when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created: changing them afterwards has no effect on that Context
+until its <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is called.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>group</strong> (<em>int</em>) – the force group, between 0 and 31, or -1 to disable the inner force group</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nonbondedslicing.SlicedNonbondedForce.setInnerSwitchingDistance">
+<span class="sig-name descname"><span class="pre">setInnerSwitchingDistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distance</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nonbondedslicing.SlicedNonbondedForce.setInnerSwitchingDistance" title="Link to this definition">¶</a></dt>
+<dd><p>Set the inner switching distance.  Like the inner force group, it is fixed when a
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created and only changes in an existing one when its <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code>
+method is called.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>distance</strong> (<em>double</em>) – the inner switching distance, measured in nm</p>
 </dd>
 </dl>
 </dd></dl>

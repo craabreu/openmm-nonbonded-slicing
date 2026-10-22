@@ -23,6 +23,11 @@ Changelog
   scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
   When one parameter plays both roles, its derivative also contains the derivative with respect to
   the softening parameter and is not an energy, even when its value is 1.
+* Inner force group: a force-switched short-range copy of the direct-space interactions (particle
+  pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
+  integration, with an energy consistent with its force (``setInnerForceGroup``,
+  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``). It cannot be combined with soft-core
+  scaling parameters.
 
 **Bug fixes**
 
@@ -35,6 +40,9 @@ Changelog
 * OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
   using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
   excluded pairs is now fixed to a valid value. Results were not affected.
+* OpenCL: the PME/LJPME FFT passed VkFFT a pointer to the command queue handle of a temporary
+  object, which could be overwritten before use and then corrupt memory (undefined behavior that
+  depended on the compiler and on the surrounding code).
 
 **Performance**
 
