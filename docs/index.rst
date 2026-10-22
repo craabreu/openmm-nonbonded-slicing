@@ -21,6 +21,7 @@ Contents
 
    overview
    theory
+   performance
    pythonapi/index
    contributing
    authors
