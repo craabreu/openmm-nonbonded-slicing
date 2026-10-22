@@ -26,6 +26,8 @@ Changelog
   compile with PME or LJPME when another force in the same context requests derivatives.
 * GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
   their own slice instead of those of slice 0.
+* OpenCL on non-NVIDIA devices: LJPME with no charges and a requested energy parameter derivative
+  no longer fails with ``ComputeArray has not been initialized``.
 * OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
   using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
   excluded pairs is now fixed to a valid value. Results were not affected.

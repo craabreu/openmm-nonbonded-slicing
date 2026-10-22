@@ -1394,8 +1394,11 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionEvalEnergyKernel->setArg(7, recipBoxVectorsFloat[2]);
             }
             if (!hasCoulomb) {
+                // Without charges the Coulomb kernels never ran, so the buffers they would have filled are
+                // cleared here. The private derivative buffer only exists when the PME queue is in use;
+                // otherwise the derivatives go to the context's buffer, which is cleared by the context.
                 cc.clearBuffer(pmeEnergyBuffer);
-                if (hasDerivatives)
+                if (hasDerivatives && usePmeQueue)
                     cc.clearBuffer(pmeEnergyParamDerivBuffer);
             }
             if (includeEnergy)

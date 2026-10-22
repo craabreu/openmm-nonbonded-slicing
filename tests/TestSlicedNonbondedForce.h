@@ -1019,6 +1019,40 @@ void testEwaldExceptions() {
     assertEqualTo(expectedChange, e2-e1, 1e-4);
 }
 
+void testLJPMEDerivativesWithoutCharges() {
+    // LJPME with no charges and a requested derivative. The Coulomb PME kernels never run, so the
+    // buffers they would have filled are cleared instead; on OpenCL devices without a PME queue the
+    // derivative buffer belongs to the context and must not be touched. The energy is linear in the
+    // scaling parameter, so its derivative is the difference between the energies at 1 and 0.
+
+    const double lambda = 0.4;
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(10, 0, 0), Vec3(0, 10, 0), Vec3(0, 0, 10));
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(2);
+    sliced->setNonbondedMethod(SlicedNonbondedForce::LJPME);
+    sliced->setCutoffDistance(3.5);
+    sliced->addParticle(0.0, 3.0, 10.0);
+    sliced->addParticle(0.0, 3.0, 10.0);
+    sliced->setParticleSubset(1, 1);
+    sliced->addGlobalParameter("lambda", lambda);
+    sliced->addScalingParameter("lambda", 0, 1, false, true);
+    sliced->addEnergyParameterDerivative("lambda");
+    system.addForce(sliced);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(3.2, 0, 0)});
+    double derivative = context.getState(State::Energy | State::ParameterDerivatives).getEnergyParameterDerivatives().at("lambda");
+    context.setParameter("lambda", 1.0);
+    double energyOne = context.getState(State::Energy).getPotentialEnergy();
+    context.setParameter("lambda", 0.0);
+    double energyZero = context.getState(State::Energy).getPotentialEnergy();
+    assertEqualTo(energyOne-energyZero, derivative, tol);
+}
+
 void testDirectAndReciprocal() {
     // Create a minimal system with direct space and reciprocal space in different force groups.
 
@@ -2250,6 +2284,7 @@ int main(int argc, char* argv[]) {
         testParameterOffsets();
         testEwaldExceptions();
         testDirectAndReciprocal();
+        testLJPMEDerivativesWithoutCharges();
         testExclusionsInReciprocalGroup(NonbondedForce::Ewald);
         testExclusionsInReciprocalGroup(NonbondedForce::PME);
         for (auto method : nonbondedMethods)
