@@ -37,6 +37,7 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setIntProperty("exceptionsUsePeriodic", force.getExceptionsUsePeriodicBoundaryConditions());
     node.setBoolProperty("includeDirectSpace", force.getIncludeDirectSpace());
     node.setBoolProperty("useCuFFT", force.getUseCuFFT());
+    node.setBoolProperty("reciprocalExclusions", force.getReciprocalExclusions());
     double alpha;
     int nx, ny, nz;
     force.getPMEParameters(alpha, nx, ny, nz);
@@ -97,7 +98,7 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
         int subset1, subset2;
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(i, parameter, subset1, subset2, includeCoulomb, includeLJ);
-        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ);
+        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ).setDoubleProperty("softcoreAlpha", force.getScalingParameterSoftcoreAlpha(i));
     }
     SerializationNode& energyParameterDerivatives = node.createChildNode("energyParameterDerivatives");
     for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
@@ -122,6 +123,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         if (node.hasProperty("includeDirectSpace"))
             force->setIncludeDirectSpace(node.getBoolProperty("includeDirectSpace"));
         force->setUseCuFFT(node.getBoolProperty("useCuFFT", true));
+        force->setReciprocalExclusions(node.getBoolProperty("reciprocalExclusions", false));
         double alpha = node.getDoubleProperty("alpha", 0.0);
         int nx = node.getIntProperty("nx", 0);
         int ny = node.getIntProperty("ny", 0);
@@ -157,7 +159,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
             force->setParticleSubset(subset.getIntProperty("index"), subset.getIntProperty("subset"));
         const SerializationNode& scalingParameters = node.getChildNode("scalingParameters");
         for (auto& param : scalingParameters.getChildren())
-            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"));
+            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"), param.getDoubleProperty("softcoreAlpha", 0.0));
         const SerializationNode& energyParameterDerivatives = node.getChildNode("energyParameterDerivatives");
         for (auto& param : energyParameterDerivatives.getChildren())
             force->addEnergyParameterDerivative(param.getStringProperty("parameter"));

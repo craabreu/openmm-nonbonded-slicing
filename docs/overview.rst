@@ -34,18 +34,90 @@ slice contributions or sums thereof via :OpenMM:`Context`'s ``getState`` method 
 the energy: without ``getEnergy=True``, they are NaN.
 
 A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
-both, of any number of slices. Since the energy is linear in the scaling parameters, the derivative
-with respect to a parameter :math:`\lambda` is the sum of the unscaled contributions it multiplies:
+both, of any number of slices. Unless a slice uses the soft-core potential (see below), the energy
+is linear in the scaling parameters, and the derivative with respect to a parameter
+:math:`\lambda` is the sum of the unscaled contributions it multiplies:
 
 .. math::
    \frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
    + \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J},
 
 where :math:`S^{elec}_\lambda` and :math:`S^{vdW}_\lambda` are the sets of slices whose electrostatic
-and van der Waals contributions are scaled by :math:`\lambda`. This derivative does not depend on the
-values of the scaling parameters. For instance, a parameter that scales both contributions of a
-single slice *I, J* yields its full energy :math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`, while one that
-scales the electrostatic contributions of several slices yields their sum.
+and van der Waals contributions are scaled by :math:`\lambda`. Without soft-core slices, this
+derivative does not depend on the values of the scaling parameters. For instance, a parameter that
+scales both contributions of a single slice *I, J* yields its full energy
+:math:`E^{vdW}_{I,J}+E^{elec}_{I,J}`, while one that scales the electrostatic contributions of
+several slices yields their sum.
+
+Soft-core Lennard-Jones Potential
+=================================
+
+Driving :math:`\lambda^{vdW}_{I,J}` to zero with the usual Lennard-Jones potential leaves a
+singularity at :math:`r = 0` that makes free-energy calculations hard to converge. A scaling
+parameter added with a positive ``softcoreAlpha`` switches its slice to the soft-core form of
+:cite:`Beutler_1994`, in which each pair interacts through
+
+.. math::
+   U(r) = 4 \lambda_E \epsilon \left( s^2 - s \right), \qquad
+   s = \frac{1}{\alpha (1 - \lambda_s) + (r/\sigma)^6},
+
+where :math:`\lambda_E` is the scaling parameter that multiplies the Lennard-Jones contributions of
+the slice (1 if there is none), :math:`\lambda_s` is the softening parameter and :math:`\alpha` is
+``softcoreAlpha``, typically 0.5. The two parameters can be the same,
+
+.. code-block:: python
+
+    force.addScalingParameter("lambda", 0, 1, False, True, 0.5)
+
+or different,
+
+.. code-block:: python
+
+    force.addScalingParameter("lambdaE", 0, 1, False, True)
+    force.addScalingParameter("lambdaS", 0, 1, False, False, 0.5)
+
+and a slice can be softened without scaling its energy at all (only the second line above). The
+potential remains finite as :math:`r \to 0` whenever :math:`\lambda_s < 1` and :math:`\alpha > 0`,
+and it reduces to the usual one when :math:`\lambda_s = 1` or :math:`\alpha = 0`. Keep
+:math:`\lambda_s` between 0 and 1: for :math:`\lambda_s > 1`, the term :math:`\alpha (1 - \lambda_s)`
+is negative and the potential becomes singular at
+:math:`r = \left[ \alpha (\lambda_s - 1) \right]^{1/6} \sigma`. Since only the Lennard-Jones term is
+softened, scale the Coulomb contribution of the slice with its own parameter
+(``includeCoulomb=True, includeLJ=False``) and turn it off before softening the Lennard-Jones term.
+Like the other properties of a scaling parameter, :math:`\alpha` is fixed when a :OpenMM:`Context`
+is created, while :math:`\lambda_E` and :math:`\lambda_s` are its global parameters.
+
+The derivatives with respect to the two parameters are
+
+.. math::
+   \frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
+   \frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
+
+and a parameter that plays both roles gets their sum. The soft-core form applies to the
+direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift at
+the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion correction
+are not softened, an approximation accurate to
+:math:`O\left(\alpha (1-\lambda_s) (\sigma/r_c)^6\right)`. As with the usual potential, do not
+combine LJPME with a switching function: the Reference platform ignores the switching function,
+while the CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
+``NonbondedForce`` does on each platform.
+
+.. warning::
+   For a softened slice, :math:`\partial U / \partial \lambda_E` is the soft-core van der Waals
+   energy of the slice, which differs from the usual one whenever :math:`\lambda_s < 1`, and
+   :math:`\partial U / \partial \lambda_s` is not an energy. For a parameter that plays both roles,
+   the reported derivative is the sum of the two, which is not an energy even at
+   :math:`\lambda = 1`, where the soft-core and usual potentials coincide. To obtain the usual van der
+   Waals energy of the slice, evaluate it in a separate force without the soft-core potential.
+
+With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
+calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. As in OpenMM_'s
+NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
+exceptions are computed in the direct-space force group by default. Since they only cancel part of
+the reciprocal-space sum, they should be integrated along with it whenever the two groups are
+evaluated at different times :cite:`Procacci_1998,Morrone_2010`. Calling
+``setReciprocalExclusions(True)`` moves them to the reciprocal-space force group, where they are
+also kept when direct space is turned off with ``setIncludeDirectSpace(False)``.
 
 Force splitting for multiple time-step integration
 ==================================================

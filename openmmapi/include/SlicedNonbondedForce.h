@@ -14,6 +14,7 @@
 #include "internal/windowsExportNonbondedSlicing.h"
 #include "openmm/NonbondedForce.h"
 #include "openmm/internal/AssertionUtilities.h"
+#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
@@ -44,9 +45,10 @@ public:
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    double getScalingParameterSoftcoreAlpha(int index) const;
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     int addEnergyParameterDerivative(const std::string& parameter);
     const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
@@ -54,6 +56,12 @@ public:
     };
     void setUseCuFFT(bool use) {
         useCuFFT = use;
+    };
+    bool getReciprocalExclusions() const {
+        return reciprocalExclusions;
+    };
+    void setReciprocalExclusions(bool reciprocal) {
+        reciprocalExclusions = reciprocal;
     };
     /**
      * Get the force group of the inner part of the direct-space interactions, or -1 if the inner
@@ -84,7 +92,7 @@ private:
     std::map<int, int> subsets;
     std::vector<ScalingParameterInfo> scalingParameters;
     std::vector<int> energyParameterDerivatives;
-    bool useCuFFT;
+    bool useCuFFT, reciprocalExclusions;
     int innerForceGroup;
     double innerCutoff, innerSwitchingDistance;
 };
@@ -97,21 +105,29 @@ class SlicedNonbondedForce::ScalingParameterInfo {
 public:
     int globalParamIndex, subset1, subset2, slice;
     bool includeCoulomb, includeLJ;
+    double softcoreAlpha;
     ScalingParameterInfo() {
         globalParamIndex = subset1 = subset2 = -1;
         includeCoulomb = includeLJ = false;
+        softcoreAlpha = 0.0;
     }
-    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeCoulomb, bool includeLJ) :
+    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha) :
             globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
-            includeCoulomb(includeCoulomb), includeLJ(includeLJ) {
-        if (!(includeCoulomb || includeLJ))
-            OpenMM::throwException(__FILE__, __LINE__, "Keywords 'includeCoulomb' and 'includeLJ' cannot be both false");
+            includeCoulomb(includeCoulomb), includeLJ(includeLJ), softcoreAlpha(softcoreAlpha) {
+        if (!(softcoreAlpha >= 0) || !std::isfinite(softcoreAlpha))
+            OpenMM::throwException(__FILE__, __LINE__, "The soft-core parameter alpha must be finite and non-negative");
+        if (!(includeCoulomb || includeLJ || softcoreAlpha > 0))
+            OpenMM::throwException(__FILE__, __LINE__, "A scaling parameter must apply to Coulomb interactions, to Lennard-Jones interactions, or to the soft-core potential");
     }
     int getSlice() const {
         return sliceIndex(subset1, subset2);
     }
+    bool includesSoftcore() const {
+        return softcoreAlpha > 0;
+    }
     bool clashesWith(const ScalingParameterInfo& info) {
-        return getSlice() == info.getSlice() && ((includeCoulomb && info.includeCoulomb) || (includeLJ && info.includeLJ));
+        return getSlice() == info.getSlice() && ((includeCoulomb && info.includeCoulomb) || (includeLJ && info.includeLJ)
+                || (includesSoftcore() && info.includesSoftcore()));
     }
 };
 

@@ -7,6 +7,22 @@ Changelog
 
 **New features**
 
+* ``setReciprocalExclusions(True)`` computes the terms that subtract the reciprocal-space
+  interactions of excluded pairs and exceptions (Ewald, PME and LJPME) in the reciprocal-space
+  force group instead of the direct-space one. They only cancel part of the reciprocal-space sum,
+  so both should be evaluated together when they are integrated with different time steps
+  (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
+  1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
+  is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
+* A scaling parameter added with a positive ``softcoreAlpha`` (sixth argument of
+  ``addScalingParameter``) softens its slice with the Beutler soft-core Lennard-Jones potential.
+  The softening parameter can be the one that scales the slice's Lennard-Jones energy or a
+  separate one, and derivatives with respect to both are reported. Available on all platforms and
+  with every nonbonded method (with LJPME, as for the usual potential, without a switching
+  function). With a separate softening parameter, the derivative with respect to the Lennard-Jones
+  scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
+  When one parameter plays both roles, its derivative also contains the derivative with respect to
+  the softening parameter and is not an energy, even when its value is 1.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,
@@ -14,12 +30,30 @@ Changelog
 
 **Bug fixes**
 
-* LJPME with no charged particles and a requested scaling parameter derivative threw
-  "ComputeArray has not been initialized" on devices without a separate PME queue, such as CPU
-  OpenCL devices.
+* GPU platforms: a ``SlicedNonbondedForce`` without energy parameter derivatives no longer fails to
+  compile with PME or LJPME when another force in the same context requests derivatives.
+* GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
+  their own slice instead of those of slice 0.
+* OpenCL on non-NVIDIA devices: LJPME with no charges and a requested energy parameter derivative
+  no longer fails with ``ComputeArray has not been initialized``.
+* OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
+  using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
+  excluded pairs is now fixed to a valid value. Results were not affected.
 * OpenCL: the PME/LJPME FFT passed VkFFT a pointer to the command queue handle of a temporary
   object, which could be overwritten before use and then corrupt memory (undefined behavior that
   depended on the compiler and on the surrounding code).
+
+**Performance**
+
+* GPU platforms: PME force interpolation loads the slice scale factors once per atom rather than
+  once per grid point, and atoms are sorted every fourth step below 15,000 atoms and every second
+  step above, as in OpenMM. A step with 2 subsets in a 1,503-atom water box went from 110 to 64 µs
+  (``NonbondedForce``: 58 µs).
+
+**Documentation**
+
+* Benchmark tables in the theory section remeasured with the device-side reduction of energy
+  parameter derivatives proposed in `openmm/openmm#5520 <https://github.com/openmm/openmm/pull/5520>`_.
 
 0.4.0
 -----

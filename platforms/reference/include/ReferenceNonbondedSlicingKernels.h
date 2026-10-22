@@ -77,6 +77,7 @@ public:
 private:
     static const int Coul = 0;
     static const int vdW = 1;
+    static const int soft = 2;
     class ScalingParameterInfo;
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
@@ -88,7 +89,7 @@ private:
     double nonbondedCutoff, switchingDistance, rfDielectric, ewaldAlpha, ewaldDispersionAlpha;
     vector<double> dispersionCoefficients;
     int kmax[3], gridSize[3], dispersionGridSize[3];
-    bool useSwitchingFunction, exceptionsArePeriodic;
+    bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
     InnerSplit innerSplit;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
@@ -98,6 +99,7 @@ private:
     vector<int> subsets;
     vector<vector<double>> sliceLambdas;
     vector<vector<ScalingParameterInfo>> sliceScalingParams;
+    vector<double> sliceSoftcoreAlphas;
 };
 
 class ReferenceCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

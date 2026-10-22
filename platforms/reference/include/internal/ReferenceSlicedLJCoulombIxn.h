@@ -26,7 +26,7 @@ class ReferenceSlicedLJCoulombIxn {
 
       bool cutoff;
       bool useSwitch;
-      bool periodic, periodicExceptions;
+      bool periodic, periodicExceptions, reciprocalExclusions;
       bool ewald;
       bool pme, ljpme;
       const OpenMM::NeighborList* neighborList;
@@ -37,6 +37,7 @@ class ReferenceSlicedLJCoulombIxn {
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
       int meshDim[3], dispersionMeshDim[3];
+      vector<double> sliceSoftcoreAlphas;
 
       // parameter indices
 
@@ -46,6 +47,7 @@ class ReferenceSlicedLJCoulombIxn {
 
       static const int   Coul = 0;
       static const int   vdW = 1;
+      static const int   soft = 2;
 
       /**---------------------------------------------------------------------------------------
 
@@ -59,12 +61,13 @@ class ReferenceSlicedLJCoulombIxn {
          @param sliceLambda      Coulomb and LJ scaling parameters for each slice
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
+         @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
 
          --------------------------------------------------------------------------------------- */
 
       void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
-                           vector<vector<double>>& sliceEnergies) const;
+                           vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs) const;
 
       void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r,
                               double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy) const;
@@ -168,6 +171,26 @@ class ReferenceSlicedLJCoulombIxn {
 
       /**---------------------------------------------------------------------------------------
 
+         Set whether the Ewald exclusion corrections go with the reciprocal space calculation
+         instead of the direct space one.
+
+         --------------------------------------------------------------------------------------- */
+
+      void setReciprocalExclusions(bool reciprocal);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set the soft-core parameter of each slice (0 for hard-core slices).  Must be called
+         before calculatePairIxn.
+
+         @param alphas    the soft-core parameter of each slice
+
+         --------------------------------------------------------------------------------------- */
+
+      void setSoftcoreAlphas(const vector<double>& alphas);
+
+      /**---------------------------------------------------------------------------------------
+
          Set the inner force group split.  When enabled, the direct-space interactions computed by
          calculatePairIxn exclude their inner part, which is computed by calculateInnerIxn instead.
 
@@ -210,6 +233,7 @@ class ReferenceSlicedLJCoulombIxn {
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
+         @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -217,7 +241,7 @@ class ReferenceSlicedLJCoulombIxn {
 
       void calculatePairIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
-                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
+                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs, bool includeDirect, bool includeReciprocal) const;
 
 private:
       /**---------------------------------------------------------------------------------------
@@ -233,6 +257,7 @@ private:
                                  exclusions[atomIndex] contains the list of exclusions for that atom
          @param forces           force array (forces added)
          @param sliceEnergies    the energy of each slice
+         @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
          @param includeDirect      true if direct space interactions should be included
          @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -240,7 +265,7 @@ private:
 
       void calculateEwaldIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int> >& exclusions,
-                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal) const;
+                           vector<OpenMM::Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs, bool includeDirect, bool includeReciprocal) const;
 };
 
 } // namespace OpenMM

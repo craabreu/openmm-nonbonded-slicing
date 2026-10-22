@@ -67,7 +67,7 @@ def testErrors():
         force.addGlobalParameter(name, 1.0)
     with pytest.raises(Exception, match="out of range"):
         force.setParticleSubset(0, 3)
-    with pytest.raises(Exception, match="cannot be both false"):
+    with pytest.raises(Exception, match="must apply to Coulomb interactions"):
         force.addScalingParameter("a", 0, 1, False, False)
     with pytest.raises(Exception, match="There is no global parameter called"):
         force.addScalingParameter("unknown", 0, 1, True, False)
@@ -96,6 +96,174 @@ def testParameterClash():
     platform = mm.Platform.getPlatformByName("Reference")
     with pytest.raises(Exception, match="Cannot use a global parameter for both"):
         mm.Context(system, mm.VerletIntegrator(0.01), platform)
+
+
+def testSoftcoreAPI():
+    force = plugin.SlicedNonbondedForce(3)
+    force.addParticle(0.0, 1.0, 1.0)
+    force.addGlobalParameter("lambda", 1.0)
+    index = force.addScalingParameter("lambda", 0, 1, False, True)
+    assert force.getScalingParameterSoftcoreAlpha(index) == 0.0
+    assert force.getScalingParameter(index) == ["lambda", 0, 1, False, True]
+    force.setScalingParameter(index, "lambda", 1, 0, False, True, 0.5)
+    assert force.getScalingParameterSoftcoreAlpha(index) == 0.5
+    assert force.getScalingParameter(index) == ["lambda", 1, 0, False, True]
+    for bad in (-1.0, float("nan"), float("inf")):
+        with pytest.raises(Exception):
+            force.addScalingParameter("lambda", 0, 2, False, False, bad)
+    with pytest.raises(Exception):
+        force.addScalingParameter("lambda", 0, 2, False, False)
+    with pytest.raises(Exception):
+        force.addScalingParameter("lambda", 0, 1, True, False, 0.3)
+    soft = force.addScalingParameter("lambda", 0, 2, False, False, 0.25)
+    with pytest.raises(Exception):
+        force.getScalingParameterSoftcoreAlpha(force.getNumScalingParameters())
+    clone = copy.deepcopy(force)
+    assert clone.getScalingParameterSoftcoreAlpha(index) == 0.5
+    assert clone.getScalingParameterSoftcoreAlpha(soft) == 0.25
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testSoftcore(platformName, precision):
+    """Soft-core minus hard-core sliced energies match a CustomNonbondedForce."""
+    random.seed(1)
+    numMolecules = 100
+    numParticles = 2*numMolecules
+    boxSize = 10.0
+    cutoff = 3.5
+    alpha, lam = 0.5, 0.4
+
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(cutoff)
+    nonbonded.setEwaldErrorTolerance(1e-4)
+    positions = []
+    M = int(numMolecules**(1.0/3.0))
+    if M*M*M < numMolecules:
+        M += 1
+    for k in range(numMolecules):
+        iz = k//(M*M)
+        iy = (k - iz*M*M)//M
+        ix = k - M*(iy + iz*M)
+        center = mm.Vec3(ix + 0.5, iy + 0.5, iz + 0.5)*(boxSize/M)
+        delta = mm.Vec3(0.5 - ix%2, 0.5 - iy%2, 0.5 - iz%2)/2
+        positions += [center + delta, center - delta]
+        nonbonded.addParticle(0.2, 1.0, 1.0)
+        nonbonded.addParticle(-0.2, 1.0, 1.0)
+        nonbonded.addException(2*k, 2*k+1, -0.04, 1.0, 1.0)
+    subsets = [random.randint(0, 1) for _ in range(numParticles)]
+
+    def makeSystem(*forces):
+        system = mm.System()
+        for _ in range(numParticles):
+            system.addParticle(1.0)
+        system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
+        for force in forces:
+            system.addForce(force)
+        return system
+
+    def makeSliced(softcore):
+        sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
+        for i, s in enumerate(subsets):
+            sliced.setParticleSubset(i, s)
+        sliced.addGlobalParameter("lambda", lam)
+        sliced.addScalingParameter("lambda", 0, 1, True, True, alpha if softcore else 0.0)
+        sliced.addEnergyParameterDerivative("lambda")
+        return sliced
+
+    expression = ("lambda*4*eps*(ssc*(ssc-1) - sig6*(sig6-1));"
+                  "ssc=sig6/(1+alpha*(1-lambda)*sig6); sig6=(sigma/r)^6;")
+    custom = mm.CustomNonbondedForce(expression + "sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)")
+    custom.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
+    custom.setCutoffDistance(cutoff)
+    custom.addPerParticleParameter("sigma")
+    custom.addPerParticleParameter("eps")
+    custom.addGlobalParameter("lambda", lam)
+    custom.addGlobalParameter("alpha", alpha)
+    custom.addEnergyParameterDerivative("lambda")
+    for _ in range(numParticles):
+        custom.addParticle([1.0, 1.0])
+    custom.addInteractionGroup({i for i, s in enumerate(subsets) if s == 0}, {i for i, s in enumerate(subsets) if s == 1})
+    bonds = mm.CustomBondForce(expression)
+    bonds.addPerBondParameter("sigma")
+    bonds.addPerBondParameter("eps")
+    bonds.addGlobalParameter("lambda", lam)
+    bonds.addGlobalParameter("alpha", alpha)
+    bonds.addEnergyParameterDerivative("lambda")
+    for k in range(numMolecules):
+        i, j = 2*k, 2*k+1
+        custom.addExclusion(i, j)
+        if subsets[i] != subsets[j]:
+            bonds.addBond(i, j, [1.0, 1.0])
+
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    contexts = []
+    for system in (makeSystem(makeSliced(True)), makeSystem(makeSliced(False)), makeSystem(custom, bonds)):
+        context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+        context.setPositions(positions)
+        contexts.append(context)
+    if platformName == "Reference" or precision == "double":
+        tol = 1e-4
+    else:
+        tol = 1e-3 if precision == "mixed" else 5e-3
+    for value in (lam, 0.0, 1.0):
+        states = []
+        for context in contexts:
+            context.setParameter("lambda", value)
+            states.append(context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True))
+        soft, hard, diff = states
+        ASSERT_EQUAL_TOL(diff.getPotentialEnergy(), soft.getPotentialEnergy() - hard.getPotentialEnergy(), tol)
+        for fs, fh, fd in zip(soft.getForces(), hard.getForces(), diff.getForces()):
+            ASSERT_EQUAL_VEC(fd, fs - fh, tol)
+        derivs = [state.getEnergyParameterDerivatives()["lambda"] for state in states]
+        ASSERT_EQUAL_TOL(derivs[2], derivs[0] - derivs[1], tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testSoftcoreSeparateParameters(platformName, precision):
+    """Different energy and softness parameters: energy, forces and both derivatives vs closed forms."""
+    sigma, epsilon, alpha, lambdaE, lambdaS, r = 1.0, 1.0, 0.5, 0.3, 0.6, 0.9
+    system = mm.System()
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    force = plugin.SlicedNonbondedForce(2)
+    force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+    force.addParticle(0.0, sigma, epsilon)
+    force.addParticle(0.0, sigma, epsilon)
+    force.setParticleSubset(1, 1)
+    force.addGlobalParameter("lambdaE", lambdaE)
+    force.addGlobalParameter("lambdaS", lambdaS)
+    force.addScalingParameter("lambdaE", 0, 1, False, True)
+    force.addScalingParameter("lambdaS", 0, 1, False, False, alpha)
+    force.addEnergyParameterDerivative("lambdaE")
+    force.addEnergyParameterDerivative("lambdaS")
+    system.addForce(force)
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+    context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(r, 0, 0)])
+    state = context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+
+    sig6 = (sigma/r)**6
+    s = sig6/(1 + alpha*(1 - lambdaS)*sig6)
+    energy = lambdaE*4*epsilon*(s*s - s)
+    fx = lambdaE*4*epsilon*(2*s - 1)*s*s*6*r**5/sigma**6
+    ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), tol)
+    ASSERT_EQUAL_VEC(mm.Vec3(-fx, 0, 0), state.getForces()[0], tol)
+    ASSERT_EQUAL_VEC(mm.Vec3(fx, 0, 0), state.getForces()[1], tol)
+    derivs = state.getEnergyParameterDerivatives()
+    ASSERT_EQUAL_TOL(4*epsilon*(s*s - s), derivs["lambdaE"], tol)
+    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*alpha*s*s*(2*s - 1), derivs["lambdaS"], tol)
+
+    # Changing the softness parameter alone changes the energy; the energy parameter alone scales it.
+
+    context.setParameter("lambdaS", 1.0)
+    hard = context.getState(getEnergy=True).getPotentialEnergy()
+    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*(sig6*sig6 - sig6), hard, tol)
+    context.setParameter("lambdaE", 0.0)
+    ASSERT_EQUAL_TOL(0.0, context.getState(getEnergy=True).getPotentialEnergy(), tol)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
@@ -139,12 +307,11 @@ def testCoulomb(platformName, precision):
     assert_forces_and_energy(context, tol)
 
 
-@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
-def testLargeSystem(platformName, precision):
+def _dipoleSystem():
+    """1200 particles in 600 dipoles, sliced into 3 subsets."""
     numMolecules = 600
     numParticles = numMolecules*2
     boxSize = 20.0
-    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
     nonbonded = mm.NonbondedForce()
     nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
     nonbonded.setCutoffDistance(2.0)
@@ -176,6 +343,13 @@ def testLargeSystem(platformName, precision):
         system.addParticle(1.0)
     system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
     system.addForce(force)
+    return system, positions
+
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testLargeSystem(platformName, precision):
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
 
     def compute(platform, properties):
         context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
@@ -194,6 +368,26 @@ def testLargeSystem(platformName, precision):
     for f0, f1 in zip(reference.getForces(), state.getForces()):
         ASSERT_EQUAL_VEC(f0, f1, tol)
 
+
+@pytest.mark.parametrize("platformName, precision", [case for case in cases if case.id != "Reference"])
+def testForcesBetweenSorts(platformName, precision):
+    """In small systems, the atoms are sorted for PME only at some steps; the forces
+    must stay correct in the steps between."""
+    tol = 1e-4 if precision == "double" else 1e-3
+    system, positions = _dipoleSystem()
+    platform = mm.Platform.getPlatformByName(platformName)
+    integrator = mm.VerletIntegrator(0.001)
+    context = mm.Context(system, integrator, platform, {"Precision": precision})
+    context.setPositions(positions)
+    reference = mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+    for _ in range(6):
+        integrator.step(1)
+        state = context.getState(getPositions=True, getEnergy=True, getForces=True)
+        reference.setPositions(state.getPositions())
+        expected = reference.getState(getEnergy=True, getForces=True)
+        ASSERT_EQUAL_TOL(expected.getPotentialEnergy(), state.getPotentialEnergy(), tol)
+        for f0, f1 in zip(expected.getForces(), state.getForces()):
+            ASSERT_EQUAL_VEC(f0, f1, tol)
 
 def testScalingParameterAccessors():
     force = plugin.SlicedNonbondedForce(3)
@@ -215,6 +409,7 @@ def _sampleForce():
     force.addScalingParameter("a", 2, 1, True, False)
     force.addEnergyParameterDerivative("a")
     force.setUseCuFFT(False)
+    force.setReciprocalExclusions(True)
     return force
 
 
@@ -233,6 +428,7 @@ def testCopyAndPickle(duplicate):
     assert list(other.getScalingParameter(0)) == ["a", 2, 1, True, False]
     assert other.getEnergyParameterDerivativeName(0) == "a"
     assert other.getUseCuFFT() is False
+    assert other.getReciprocalExclusions() is True
     other.setParticleSubset(0, 1)
     assert force.getParticleSubset(0) == 0
 
@@ -247,6 +443,12 @@ def testSystemSerialization():
     assert force.getNumSubsets() == 3
     assert force.getParticleSubset(1) == 2
     assert force.getUseCuFFT() is False
+    assert force.getReciprocalExclusions() is True
+
+
+def testReciprocalExclusionsDefault():
+    assert plugin.SlicedNonbondedForce(2).getReciprocalExclusions() is False
+    assert plugin.SlicedNonbondedForce(mm.NonbondedForce(), 2).getReciprocalExclusions() is False
 
 
 def testDerivatives():
@@ -279,6 +481,53 @@ def testDerivatives():
         energy[scale] = value(context.getState(getEnergy=True).getPotentialEnergy())
     ASSERT_EQUAL_TOL(energy[1.0] - energy[0.0], derivative, 1e-6)
     assert abs(derivative) > 1.0
+
+
+@pytest.mark.parametrize("methodName", ["NoCutoff", "CutoffPeriodic", "Ewald", "PME", "LJPME"])
+@pytest.mark.parametrize("platformName, precision", cases)
+def testNoDerivativesWhileAnotherForceHasThem(platformName, precision, methodName):
+    """A force without derivatives must work in a context where another force has them."""
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(SLICE_METHODS[methodName])
+    nonbonded.setCutoffDistance(1.0)
+    positions = []
+    for i in range(4):
+        for j in range(4):
+            for k in range(2):
+                positions.append(mm.Vec3(0.8*i + 0.1*k, 0.8*j + 0.05*k, 0.4*k))
+                nonbonded.addParticle(0.5 if (i + j + k) % 2 else -0.5, 0.3, 0.5)
+    force = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(len(positions)):
+        force.setParticleSubset(i, i % 2)
+    force.addGlobalParameter("lambda", 0.5)
+    force.addScalingParameter("lambda", 0, 1, True, True)
+    bond = mm.CustomBondForce("k*r^2")
+    bond.addGlobalParameter("k", 1.0)
+    bond.addEnergyParameterDerivative("k")
+    bond.addBond(0, 1, [])
+    bond.setForceGroup(1)
+    system = mm.System()
+    for _ in positions:
+        system.addParticle(1.0)
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(3.2, 0, 0), mm.Vec3(0, 3.2, 0), mm.Vec3(0, 0, 3.2))
+    system.addForce(force)
+    system.addForce(bond)
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {"Precision": precision} if precision else {}
+    context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+    context.setPositions(positions)
+    state = context.getState(getEnergy=True, getParameterDerivatives=True)
+    derivatives = dict(state.getEnergyParameterDerivatives())
+    # As OpenMM does for every global parameter, an unrequested derivative is reported as zero
+    assert derivatives.get("lambda", 0.0) == 0.0
+    delta = positions[1] - positions[0]
+    r2 = delta[0]**2 + delta[1]**2 + delta[2]**2
+    ASSERT_EQUAL_TOL(r2, derivatives["k"], 1e-5)
+    reference = mm.Context(system, mm.VerletIntegrator(0.01), mm.Platform.getPlatformByName("Reference"))
+    reference.setPositions(positions)
+    expected = value(reference.getState(getEnergy=True, groups={0}).getPotentialEnergy())
+    found = value(context.getState(getEnergy=True, groups={0}).getPotentialEnergy())
+    ASSERT_EQUAL_TOL(expected, found, TOL_SLICE_SINGLE if precision == "single" else TOL_SLICE_DOUBLE)
 
 
 def testCastAndIsinstance():
@@ -545,3 +794,79 @@ def testInnerGroupMTSIntegration(platformName, precision):
     parts = sum(value(context.getState(getEnergy=True, groups={g}).getPotentialEnergy()) for g in (0, 1, 2))
     tol = 1e-5 if platformName == "Reference" or precision == "double" else 1e-4
     ASSERT_EQUAL_TOL(total, parts, tol)
+
+
+@pytest.mark.parametrize("methodName", ["Ewald", "PME"])
+@pytest.mark.parametrize("platformName, precision", cases)
+def testDirectSpaceWithExclusions(platformName, precision, methodName):
+    # With reciprocal exclusions, the Ewald exclusion corrections are in the reciprocal space force
+    # group, so the direct space force group and its derivatives match a CustomNonbondedForce with the
+    # same exclusions
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    tol = TOL_SLICE_DOUBLE if platformName == "Reference" or precision == "double" else TOL_SLICE_SINGLE
+    rng = random.Random(11)
+    n, length, cutoff = 3, 2.4, 1.0
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(SLICE_METHODS[methodName])
+    nonbonded.setCutoffDistance(cutoff)
+    nonbonded.setUseDispersionCorrection(False)
+    positions = []
+    for k in range(n**3):
+        center = mm.Vec3(*[(i + 0.5 + 0.2*rng.random())*length/n for i in (k % n, k//n % n, k//n**2)])
+        positions += [center, center + mm.Vec3(0.1, 0, 0), center + mm.Vec3(-0.0333, 0.0943, 0)]
+        for q, sigma, epsilon in [(-0.834, 0.315, 0.636), (0.417, 1, 0), (0.417, 1, 0)]:
+            nonbonded.addParticle(q, sigma, epsilon)
+        for i, j in [(0, 1), (0, 2), (1, 2)]:
+            nonbonded.addException(3*k+i, 3*k+j, 0, 1, 0)
+    data = dict(box=[mm.Vec3(length, 0, 0), mm.Vec3(0, length, 0), mm.Vec3(0, 0, length)], positions=positions)
+
+    sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(sliced.getNumParticles()):
+        sliced.setParticleSubset(i, (i//3) % 2)
+    sliced.setReciprocalSpaceForceGroup(1)
+    sliced.setReciprocalExclusions(True)
+    scaling = {"lambdaCross": (0, 1, True, True), "lambdaCoul11": (1, 1, True, False)}
+    for name, (subset1, subset2, includeCoulomb, includeLJ) in scaling.items():
+        sliced.addGlobalParameter(name, 0.5)
+        sliced.addScalingParameter(name, subset1, subset2, includeCoulomb, includeLJ)
+        sliced.addEnergyParameterDerivative(name)
+    _, context2 = _sliceContext(data, sliced, platform, properties)
+
+    if methodName == "PME":
+        alpha = value(sliced.getPMEParametersInContext(context2)[0])
+    else:
+        alpha = math.sqrt(-math.log(2*nonbonded.getEwaldErrorTolerance()))/cutoff
+    direct = mm.CustomNonbondedForce(
+        "scaleCoul*ONE_4PI_EPS0*q1*q2*erfc(alpha*r)/r + scaleLJ*4*eps*((sig/r)^12-(sig/r)^6);"
+        "scaleCoul=select(subset1+subset2-1, select(subset1+subset2-2, 1, lambdaCoul11), lambdaCross);"
+        "scaleLJ=select(subset1+subset2-1, 1, lambdaCross);"
+        "sig=0.5*(sigma1+sigma2); eps=sqrt(epsilon1*epsilon2)"
+    )
+    direct.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
+    direct.setCutoffDistance(cutoff)
+    # 1/(4 pi epsilon0) in kJ nm/(mol e^2), as in OpenMM
+    direct.addGlobalParameter("ONE_4PI_EPS0", 1/(4*math.pi*8.8541878128e-18/(1.602176634e-19**2*6.02214076e23)))
+    direct.addGlobalParameter("alpha", alpha)
+    for name in scaling:
+        direct.addGlobalParameter(name, 0.5)
+        direct.addEnergyParameterDerivative(name)
+    for parameter in ("q", "sigma", "epsilon", "subset"):
+        direct.addPerParticleParameter(parameter)
+    for i in range(nonbonded.getNumParticles()):
+        q, sigma, epsilon = map(value, nonbonded.getParticleParameters(i))
+        direct.addParticle([q, sigma, epsilon, sliced.getParticleSubset(i)])
+    for i in range(nonbonded.getNumExceptions()):
+        direct.addExclusion(*nonbonded.getExceptionParameters(i)[:2])
+    _, context1 = _sliceContext(data, direct, platform, properties)
+
+    state1 = context1.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+    state2 = context2.getState(getEnergy=True, getForces=True, getParameterDerivatives=True, groups={0})
+    ASSERT_EQUAL_TOL(state1.getPotentialEnergy(), state2.getPotentialEnergy(), tol)
+    for force1, force2 in zip(state1.getForces(), state2.getForces()):
+        ASSERT_EQUAL_VEC(force1, force2, tol)
+    derivatives1 = state1.getEnergyParameterDerivatives()
+    derivatives2 = state2.getEnergyParameterDerivatives()
+    for name in scaling:
+        assert derivatives1[name] != 0
+        ASSERT_EQUAL_TOL(derivatives1[name], derivatives2[name], tol)

@@ -315,6 +315,18 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
         if (q == 0)
             continue;
 
+        // The scale factor of each grid for this atom's subset
+
+        real sliceScale[NUM_SUBSETS];
+        for (int sj = 0; sj < NUM_SUBSETS; sj++) {
+            int slice = (sj < si ? si*(si+1)/2+sj : sj*(sj+1)/2+si);
+#ifdef USE_LJPME
+            sliceScale[sj] = sliceLambdas[slice].y;
+#else
+            sliceScale[sj] = sliceLambdas[slice].x;
+#endif
+        }
+
         // Since we need the full set of thetas, it's faster to compute them here than load them
         // from global memory.
 
@@ -357,18 +369,9 @@ KERNEL void gridInterpolateForce(GLOBAL const real4* RESTRICT posq, GLOBAL mm_ul
                     int zindex = gridIndex.z+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int index = ybase + zindex;
-                    real gridvalue = 0.0;
-#ifdef USE_LJPME
-                    for (int sj = 0; sj < si; sj++)
-                        gridvalue += sliceLambdas[si*(si+1)/2+sj].y*pmeGrid[sj*gridSize+index];
-                    for (int sj = si; sj < NUM_SUBSETS; sj++)
-                        gridvalue += sliceLambdas[sj*(sj+1)/2+si].y*pmeGrid[sj*gridSize+index];
-#else
-                    for (int sj = 0; sj < si; sj++)
-                        gridvalue += sliceLambdas[si*(si+1)/2+sj].x*pmeGrid[sj*gridSize+index];
-                    for (int sj = si; sj < NUM_SUBSETS; sj++)
-                        gridvalue += sliceLambdas[sj*(sj+1)/2+si].x*pmeGrid[sj*gridSize+index];
-#endif
+                    real gridvalue = 0;
+                    for (int sj = 0; sj < NUM_SUBSETS; sj++)
+                        gridvalue += sliceScale[sj]*pmeGrid[sj*gridSize+index];
                     force.x += ddx*dy*data[iz].z*gridvalue;
                     force.y += dx*ddy*data[iz].z*gridvalue;
                     force.z += dx*dy*ddata[iz].z*gridvalue;

@@ -86,7 +86,10 @@ namespace NonbondedSlicing {
  * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
  * a new Context parameter, then pass its name to :func:`addScalingParameter`.  The same scaling parameter
  * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
- * multiply the Coulomb and Lennard-Jones parts of that slice separately.
+ * multiply the Coulomb and Lennard-Jones parts of that slice separately.  A scaling parameter can also
+ * soften the Lennard-Jones interactions of its slice (see ``softcoreAlpha`` in :func:`addScalingParameter`),
+ * so a slice can have up to three scaling parameters: one for Coulomb, one for Lennard-Jones and one
+ * softening parameter.
  *
  * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
@@ -126,6 +129,13 @@ namespace NonbondedSlicing {
  * the effect of all Lennard-Jones interactions beyond the cutoff in a periodic system.  When running a simulation
  * at constant pressure, this can improve the quality of the result.  Call :func:`setUseDispersionCorrection` to set whether
  * this should be used.
+ *
+ * With Ewald, PME, or LJPME, you can call :func:`setReciprocalSpaceForceGroup` to compute the reciprocal space
+ * part in a different force group than the direct space part, as in multiple time stepping.  As in
+ * :OpenMM:`NonbondedForce`, the terms that subtract the reciprocal space interactions of excluded pairs and
+ * exceptions are computed in the direct space force group by default.  Since they only cancel part of the
+ * reciprocal space sum, you can call :func:`setReciprocalExclusions` to compute them in the reciprocal space
+ * force group instead.
  *
  * In some applications, it is useful to be able to inexpensively change the parameters of small groups of particles.
  * Usually this is done to interpolate between two sets of parameters.  For example, a titratable group might have
@@ -243,6 +253,23 @@ public:
      */
     std::string getNonbondedMethodName() const;
     /**
+     * Set whether to include direct space interactions when calculating forces and energy.  This is useful if
+     * you want to completely replace the direct space calculation, typically with a CustomNonbondedForce that
+     * computes it in a nonstandard way.
+     *
+     * With Ewald, PME, or LJPME, turning off direct space also removes the terms that subtract the reciprocal
+     * space interactions of excluded pairs and exceptions, as in :OpenMM:`NonbondedForce`, unless
+     * :func:`setReciprocalExclusions` has been called with `True`.  In that case, these terms are kept in the
+     * reciprocal space force group, and a replacement for the direct space calculation must not include them,
+     * or they will be counted twice.
+     *
+     * Parameters
+     * ----------
+     *     include : bool
+     *         whether to include direct space interactions
+     */
+    void setIncludeDirectSpace(bool include);
+    /**
      * Get the specified number of particle subsets.
      */
     int getNumSubsets() const;
@@ -272,7 +299,8 @@ public:
     void setParticleSubset(int index, int subset);
     /**
      * Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
-     * particular slice. Its value will scale the interactions between particles of a subset 1
+     * particular slice. A scaling parameter can also soften the Lennard-Jones interactions of its
+     * slice, see ``softcoreAlpha``. Its value will scale the interactions between particles of a subset 1
      * with those of another (or the same) subset 2. The order of subset definition is irrelevant.
      *
      * Parameters
@@ -291,14 +319,37 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions.  At least one
-     *         of includeCoulomb and includeLJ must be true
+     *         of includeCoulomb, includeLJ and softcoreAlpha > 0 must hold
+     *     softcoreAlpha : float, default=0
+     *         if positive, this parameter also softens the Lennard-Jones interactions of the slice
+     *         with the Beutler soft-core potential: each pair interacts through
+     *         :math:`U(r) = 4 \\lambda_E \\epsilon (s^2 - s)` with
+     *         :math:`s = 1/[\\alpha (1 - \\lambda_s) + (r/\\sigma)^6]`, where :math:`\\lambda_E` is
+     *         the slice's Lennard-Jones scaling parameter (1 if there is none), :math:`\\lambda_s` is
+     *         this parameter and :math:`\\alpha` is ``softcoreAlpha`` (typically 0.5). Keep
+     *         :math:`\\lambda_s` between 0 and 1: for :math:`\\lambda_s > 1`, the potential becomes
+     *         singular at :math:`r = [\\alpha (\\lambda_s - 1)]^{1/6} \\sigma`. The potential remains
+     *         finite as :math:`r \\to 0` whenever :math:`\\lambda_s < 1`. Only one scaling parameter
+     *         per slice can soften it. Since only the Lennard-Jones term is softened, scale the
+     *         Coulomb contribution of the slice with its own parameter and turn it off before
+     *         softening the Lennard-Jones term. Soft-core applies to the direct-space Lennard-Jones
+     *         term and to 1-4 exceptions; the dispersion correction and the reciprocal-space part of
+     *         LJPME are not affected. As with the usual potential, do not combine LJPME with a
+     *         switching function: the Reference platform ignores the switching function, while the
+     *         CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
+     *         ``NonbondedForce`` does on each platform. Derivatives with respect to this parameter
+     *         are :math:`4 \\lambda_E \\epsilon \\alpha s^2 (2 s - 1)`, times the switching function
+     *         when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
+     *         added to the usual derivative when the same parameter also scales the Lennard-Jones
+     *         energy. This setting is fixed
+     *         at Context creation, like the other arguments of this method.
      *
      * Returns
      * -------
      *     index : int
      *         the index of scaling parameter that was added
      */
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     /**
      * Get the number of scaling parameters.
      */
@@ -335,6 +386,16 @@ public:
         }
     }
     /**
+     * Get the soft-core parameter alpha of a scaling parameter, or zero if that parameter does not
+     * soften its slice (see :func:`addScalingParameter`).
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the scaling parameter, as returned by :func:`addScalingParameter`
+     */
+    double getScalingParameterSoftcoreAlpha(int index) const;
+    /**
      * Modify an added scaling parameter.
      *
      * Parameters
@@ -356,14 +417,21 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions
+     *     softcoreAlpha : float, default=0
+     *         the soft-core parameter of the slice, see :func:`addScalingParameter`
      */
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
-     * can be used to obtain the value of an energy slice or a sum thereof. The parameter must
-     * have already been added with :func:`addGlobalParameter` and :func:`addScalingParameter`.
-     * Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
-     * or Coulomb contributions. Requesting the derivative with respect to non-scaling global
+     * can be used to obtain the value of an energy slice or a sum thereof. For a slice that uses the
+     * soft-core potential (see the ``softcoreAlpha`` argument of :func:`addScalingParameter`) with a
+     * separate softening parameter, the derivative with respect to its Lennard-Jones scaling parameter
+     * is the slice's unscaled soft-core Lennard-Jones energy. The derivative with respect to a
+     * softening parameter, or to a parameter that also softens the slice, is not an energy. The
+     * parameter must have already been added with
+     * :func:`addGlobalParameter` and :func:`addScalingParameter`.
+     * Derivatives are only calculated for scaling parameters (those that multiply the Lennard-Jones
+     * or Coulomb contributions, or soften a slice). Requesting the derivative with respect to non-scaling global
      * parameters will raise an exception.
      *
      * Derivatives are only computed along with the energy: pass both ``getEnergy=True`` and
@@ -473,6 +541,26 @@ public:
      *         whether to use the cuFFT library
      */
     void setUseCuFFT(bool use);
+    /**
+     * Get whether the terms that subtract the reciprocal space interactions of excluded pairs and exceptions
+     * are computed in the reciprocal space force group.  The default value is `False`.
+     */
+    bool getReciprocalExclusions() const;
+    /**
+     * Set whether the terms that subtract the reciprocal space interactions of excluded pairs and exceptions
+     * are computed in the reciprocal space force group, rather than in the direct space force group as in
+     * :OpenMM:`NonbondedForce`.  This only matters with Ewald, PME, or LJPME, when the reciprocal space force
+     * group differs from the direct space one (see :func:`setReciprocalSpaceForceGroup`).  These terms only
+     * cancel part of the reciprocal space sum, so they should be computed along with it whenever both are
+     * evaluated at different times, as in multiple time stepping.  Otherwise, the cancellation is incomplete
+     * and the slow force acquires a fast, intramolecular component.
+     *
+     * Parameters
+     * ----------
+     *     reciprocal : bool
+     *         whether to compute these terms in the reciprocal space force group
+     */
+    void setReciprocalExclusions(bool reciprocal);
 
     %newobject _deserialize;
     %extend {

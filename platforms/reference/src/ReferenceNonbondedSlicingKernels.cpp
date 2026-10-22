@@ -61,8 +61,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
     numSlices = force.getNumSlices();
-    sliceLambdas.resize(numSlices, vector<double>(2));
-    sliceScalingParams.resize(numSlices, vector<ScalingParameterInfo>(2));
+    sliceLambdas.resize(numSlices, vector<double>(3, 1.0));
+    sliceScalingParams.resize(numSlices, vector<ScalingParameterInfo>(3));
+    sliceSoftcoreAlphas.assign(numSlices, 0.0);
 
     subsets.resize(numParticles);
     for (int i = 0; i < numParticles; i++)
@@ -77,6 +78,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         int i, j;
         bool includeCoulomb, includeLJ;
         force.getScalingParameter(index, name, i, j, includeCoulomb, includeLJ);
+        double alpha = force.getScalingParameterSoftcoreAlpha(index);
         int slice = sliceIndex(i, j);
         bool hasDerivative = requestedDerivatives.find(name) != requestedDerivatives.end();
         ScalingParameterInfo info = ScalingParameterInfo(name, hasDerivative);
@@ -84,6 +86,10 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
             sliceScalingParams[slice][Coul] = info;
         if (includeLJ)
             sliceScalingParams[slice][vdW] = info;
+        if (alpha > 0) {
+            sliceScalingParams[slice][soft] = info;
+            sliceSoftcoreAlphas[slice] = alpha;
+        }
     }
 
     // Identify which exceptions are 1-4 interactions.
@@ -178,6 +184,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         exceptionsArePeriodic = false;
     else
         exceptionsArePeriodic = force.getExceptionsUsePeriodicBoundaryConditions();
+    reciprocalExclusions = force.getReciprocalExclusions();
     rfDielectric = force.getReactionFieldDielectric();
     if (force.getInnerForceGroup() >= 0)
         innerSplit = InnerSplit(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
@@ -208,6 +215,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setPeriodic(boxVectors);
         clj.setPeriodicExceptions(exceptionsArePeriodic);
     }
+    clj.setReciprocalExclusions(reciprocalExclusions);
     if (ewald)
         clj.setUseEwald(ewaldAlpha, kmax[0], kmax[1], kmax[2]);
     if (pme)
@@ -217,6 +225,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUseLJPME(ewaldDispersionAlpha, dispersionGridSize);
     }
     vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
+    vector<double> sliceSoftDerivs(numSlices, 0.0);
+    clj.setSoftcoreAlphas(sliceSoftcoreAlphas);
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
     clj.setInnerSplit(innerSplit);
@@ -230,6 +240,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         exclusions,
         forceData,
         sliceEnergies,
+        sliceSoftDerivs,
         includeDirect,
         includeReciprocal
     );
@@ -252,7 +263,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
             for (int k = 0; k < num14; k++) {
                 int slice = bonded14SliceArray[k];
                 nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
-                                             forceData, sliceLambdas[slice], sliceEnergies[slice], mode);
+                                             forceData, sliceLambdas[slice], sliceEnergies[slice],
+                                             sliceSoftcoreAlphas[slice], sliceSoftDerivs[slice], mode);
             }
         if (includeDirect && (periodic || ewald || pme)) {
             Vec3* boxVectors = extractBoxVectors(context);
@@ -271,11 +283,13 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
 
     map<string, double>& energyParamDerivs = extractEnergyParameterDerivatives(context);
     for (int slice = 0; slice < numSlices; slice++)
-        for (int term = 0; term < 2; term++) {
+        for (int term = 0; term < 3; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
-            if (info.hasDerivative)
+            if (info.hasDerivative) {
                 // As on the GPU platforms, derivatives are only computed along with the energy
-                energyParamDerivs[info.name] += includeEnergy ? sliceEnergies[slice][term] : numeric_limits<double>::quiet_NaN();
+                double derivative = term == soft ? sliceSoftDerivs[slice] : sliceEnergies[slice][term];
+                energyParamDerivs[info.name] += includeEnergy ? derivative : numeric_limits<double>::quiet_NaN();
+            }
         }
 
     return energy;
@@ -355,7 +369,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& con
     // Compute scaling parameter values.
 
     for (int slice = 0; slice < numSlices; slice++)
-        for (int term = 0; term < 2; term++) {
+        for (int term = 0; term < 3; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
             sliceLambdas[slice][term] = info.name == "" ? 1.0 : context.getParameter(info.name);
         }

@@ -39,6 +39,7 @@ void testSerialization() {
     force.setInnerCutoffDistance(0.8);
     force.setInnerSwitchingDistance(0.5);
     force.setUseCuFFT(false);
+    force.setReciprocalExclusions(true);
     double alpha = 0.5;
     int nx = 3, ny = 5, nz = 7;
     force.setPMEParameters(alpha, nx, ny, nz);
@@ -60,6 +61,8 @@ void testSerialization() {
     force.addScalingParameter("lambda", 0, 1, true, true);
     force.addScalingParameter("lambda", 1, 1, false, true);
     force.addEnergyParameterDerivative("lambda");
+    force.addScalingParameter("scale1", 1, 2, false, false, 0.5);
+    force.addScalingParameter("lambda", 0, 0, false, true, 0.25);
 
     // Serialize and then deserialize it.
 
@@ -92,6 +95,9 @@ void testSerialization() {
     ASSERT_EQUAL(force.getNumSubsets(), force2.getNumSubsets());
     ASSERT_EQUAL(force.getReciprocalSpaceForceGroup(), force2.getReciprocalSpaceForceGroup());
     ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
+    ASSERT_EQUAL(force.getReciprocalExclusions(), force2.getReciprocalExclusions());
+    for (int i = 0; i < force.getNumScalingParameters(); i++)
+        ASSERT_EQUAL(force.getScalingParameterSoftcoreAlpha(i), force2.getScalingParameterSoftcoreAlpha(i));
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -195,10 +201,119 @@ void testMissingUseCuFFT() {
     delete copy;
 }
 
+void testMissingReciprocalExclusions() {
+    SlicedNonbondedForce force(2);
+    force.setReciprocalExclusions(true);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t start = xml.find(" reciprocalExclusions=\"");
+    ASSERT(start != string::npos);
+    size_t end = xml.find('"', start+23);
+    xml.erase(start, end-start+1);
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT(!copy->getReciprocalExclusions());
+    delete copy;
+}
+
+int eraseAttribute(string& xml, const string& name) {
+    // Remove every occurrence of an attribute from an XML string and return how many were removed.
+    string key = " "+name+"=\"";
+    int removed = 0;
+    size_t pos;
+    while ((pos = xml.find(key)) != string::npos) {
+        xml.erase(pos, xml.find('"', pos+key.size()) - pos + 1);
+        removed++;
+    }
+    return removed;
+}
+
+void testMissingInnerForceGroup() {
+    // Version-2 files written without the inner force group load with it disabled.
+
+    SlicedNonbondedForce force(2);
+    force.addParticle(1, 0.1, 0.01);
+    force.addParticle(-1, 0.2, 0.02);
+    force.setInnerForceGroup(3);
+    force.setInnerCutoffDistance(0.8);
+    force.setInnerSwitchingDistance(0.5);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    ASSERT(xml.find("version=\"2\"") != string::npos);
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
+    ASSERT_EQUAL(-1, copy->getInnerForceGroup());
+    ASSERT_EQUAL(0.0, copy->getInnerCutoffDistance());
+    ASSERT_EQUAL(0.0, copy->getInnerSwitchingDistance());
+    delete copy;
+}
+
+void testDeserializeVersion1() {
+    // Files written before the soft-core potential and the inner force group have version 1, no
+    // alpha on scaling parameters, and no inner force group properties.
+
+    SlicedNonbondedForce force(2);
+    force.addParticle(1, 0.1, 0.01);
+    force.addParticle(-1, 0.2, 0.02);
+    force.setParticleSubset(1, 1);
+    force.addGlobalParameter("lambda", 0.5);
+    force.addScalingParameter("lambda", 0, 1, true, true);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t pos = xml.find("version=\"2\"");
+    ASSERT(pos != string::npos);
+    xml.replace(pos, 11, "version=\"1\"");
+    ASSERT_EQUAL(1, eraseAttribute(xml, "softcoreAlpha"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
+    ASSERT_EQUAL(force.getParticleSubset(1), copy->getParticleSubset(1));
+    ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
+    ASSERT_EQUAL(0.0, copy->getScalingParameterSoftcoreAlpha(0));
+    ASSERT_EQUAL(-1, copy->getInnerForceGroup());
+    delete copy;
+}
+
+void testIgnoresSoftcoreSlicesNode() {
+    // Files written by pre-release builds had a SoftcoreSlices node, which is ignored.
+
+    SlicedNonbondedForce force(2);
+    force.addParticle(1, 0.1, 0.01);
+    force.addParticle(-1, 0.2, 0.02);
+    force.setParticleSubset(1, 1);
+    force.addGlobalParameter("lambda", 0.5);
+    force.addScalingParameter("lambda", 0, 1, true, true);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t pos = xml.rfind("</Force>");
+    ASSERT(pos != string::npos);
+    xml.insert(pos, "<SoftcoreSlices><Slice subset1=\"0\" subset2=\"1\" alpha=\"0.5\"/></SoftcoreSlices>");
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT_EQUAL(1, copy->getNumScalingParameters());
+    ASSERT_EQUAL(0.0, copy->getScalingParameterSoftcoreAlpha(0));
+    delete copy;
+}
+
 int main() {
     try {
         testSerialization();
+        testDeserializeVersion1();
+        testIgnoresSoftcoreSlicesNode();
         testMissingUseCuFFT();
+        testMissingReciprocalExclusions();
+        testMissingInnerForceGroup();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;
