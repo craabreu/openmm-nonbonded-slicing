@@ -45,6 +45,7 @@ private:
     static double evalIntegral(double r, double rs, double rc, double sigma);
     const SlicedNonbondedForce& owner;
     Kernel kernel;
+    int innerForceGroup;
 };
 
 } // namespace NonbondedSlicing

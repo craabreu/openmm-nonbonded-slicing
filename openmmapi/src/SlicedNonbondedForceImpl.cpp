@@ -24,7 +24,7 @@ using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
 
-SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : NonbondedForceImpl(owner), owner(owner) {
+SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : NonbondedForceImpl(owner), owner(owner), innerForceGroup(-1) {
 }
 
 SlicedNonbondedForceImpl::~SlicedNonbondedForceImpl() {
@@ -129,6 +129,31 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
     }
+    if (owner.getInnerForceGroup() >= 0) {
+        SlicedNonbondedForce::NonbondedMethod method = owner.getNonbondedMethod();
+        double innerSwitch = owner.getInnerSwitchingDistance();
+        double innerCutoff = owner.getInnerCutoffDistance();
+        if (!(innerSwitch > 0.0 && innerSwitch < innerCutoff))
+            throw OpenMMException("SlicedNonbondedForce: the inner switching distance must satisfy 0 < r_switch < r_cutoff");
+        if (method != SlicedNonbondedForce::NoCutoff && innerCutoff > owner.getCutoffDistance())
+            throw OpenMMException("SlicedNonbondedForce: the inner cutoff distance cannot be greater than the cutoff distance");
+        // The inner force is the bare Lennard-Jones force times the inner switch, so it would exceed the
+        // switched Lennard-Jones force beyond the switching distance.
+        if (method != SlicedNonbondedForce::NoCutoff && owner.getUseSwitchingFunction() && innerCutoff > owner.getSwitchingDistance())
+            throw OpenMMException("SlicedNonbondedForce: the inner cutoff distance cannot be greater than the switching distance when the switching function is used");
+        if (owner.getInnerForceGroup() == owner.getForceGroup())
+            throw OpenMMException("SlicedNonbondedForce: the inner force group must differ from the direct-space and reciprocal-space force groups");
+        bool hasReciprocal = (method == SlicedNonbondedForce::Ewald || method == SlicedNonbondedForce::PME || method == SlicedNonbondedForce::LJPME);
+        if (hasReciprocal && owner.getInnerForceGroup() == owner.getReciprocalSpaceForceGroup())
+            throw OpenMMException("SlicedNonbondedForce: the inner force group must differ from the direct-space and reciprocal-space force groups");
+        if (!owner.getIncludeDirectSpace())
+            throw OpenMMException("SlicedNonbondedForce: the inner force group requires the direct space to be included");
+        for (int index = 0; index < owner.getNumScalingParameters(); index++)
+            if (owner.getScalingParameterSoftcoreAlpha(index) > 0.0)
+                throw OpenMMException("SlicedNonbondedForce: the inner force group cannot be used with soft-core scaling parameters");
+    }
+    // The split is set up once, at Context creation, so the inner force group is fixed from here on.
+    innerForceGroup = owner.getInnerForceGroup();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
 }
 
@@ -138,7 +163,8 @@ double SlicedNonbondedForceImpl::calcForcesAndEnergy(ContextImpl& context, bool 
     if (reciprocalGroup < 0)
         reciprocalGroup = owner.getForceGroup();
     bool includeReciprocal = ((groups&(1<<reciprocalGroup)) != 0);
-    return kernel.getAs<CalcSlicedNonbondedForceKernel>().execute(context, includeForces, includeEnergy, includeDirect, includeReciprocal);
+    bool includeInner = (innerForceGroup >= 0 && (groups&(1<<innerForceGroup)) != 0);
+    return kernel.getAs<CalcSlicedNonbondedForceKernel>().execute(context, includeForces, includeEnergy, includeDirect, includeReciprocal, includeInner);
 }
 
 std::vector<std::string> SlicedNonbondedForceImpl::getKernelNames() {

@@ -42,9 +42,10 @@ public:
      * @param includeEnergy  true if the energy should be calculated
      * @param includeReciprocal  true if reciprocal space interactions should be included
      * @param includeReciprocal  true if reciprocal space interactions should be included
+     * @param includeInner       true if the inner force group should be included
      * @return the potential energy due to the force
      */
-    double execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal);
+    double execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner);
     /**
      * Copy changed parameters over to a context.
      *

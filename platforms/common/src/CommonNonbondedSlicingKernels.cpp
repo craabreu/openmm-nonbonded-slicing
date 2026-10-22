@@ -8,6 +8,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
+#include "internal/InnerSplit.h"
 #include "CommonNonbondedSlicingKernels.h"
 #include "CommonNonbondedSlicingKernelSources.h"
 #include "SlicedNonbondedForce.h"
@@ -404,6 +405,31 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     defines["HAS_LENNARD_JONES"] = (hasLJ ? "1" : "0");
     defines["HAS_SOFTCORE"] = (hasSoftcore ? "1" : "0");
     defines["USE_LJ_SWITCH"] = (useCutoff && force.getUseSwitchingFunction() ? "1" : "0");
+    bool hasInner = (force.getInnerForceGroup() >= 0);
+    map<string, string> innerDefines;
+    innerDefines["INNER_GROUP"] = "0";
+    innerDefines["SUBTRACT_INNER"] = hasInner ? "1" : "0";
+    if (hasInner) {
+        InnerSplit split(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
+        innerDefines["INNER_CUTOFF_SQUARED"] = cc.doubleToString(split.rc*split.rc);
+        innerDefines["INNER_SWITCH"] = cc.doubleToString(split.rs);
+        innerDefines["INNER_SWITCH_SCALE"] = cc.doubleToString(1.0/(split.rc-split.rs));
+        innerDefines["INNER_CUTOFF"] = cc.doubleToString(split.rc);
+        innerDefines["INNER_INV_CUTOFF"] = cc.doubleToString(1.0/split.rc);
+        innerDefines["INNER_GAMMA"] = cc.doubleToString(split.gamma);
+        innerDefines["INNER_C1"] = cc.doubleToString(split.c1);
+        innerDefines["INNER_GAMMA1SQ"] = cc.doubleToString((split.gamma-1)*(split.gamma-1));
+        for (int m = 0; m <= 20; m++)
+            innerDefines["INNER_ELL_"+cc.intToString(m)] = cc.doubleToString(InnerSplit::ellChebyshev()[m]);
+        for (int m = 0; m <= 8; m++)
+            innerDefines["INNER_A12_"+cc.intToString(m)] = cc.doubleToString(split.a12[m]);
+        for (int m = 0; m <= 2; m++)
+            innerDefines["INNER_A6_"+cc.intToString(m)] = cc.doubleToString(split.a6[m]);
+        innerDefines["INNER_K12"] = cc.doubleToString(split.K[0]);
+        innerDefines["INNER_K6"] = cc.doubleToString(split.K[1]);
+        innerDefines["INNER_K1"] = cc.doubleToString(split.K[2]);
+    }
+    defines.insert(innerDefines.begin(), innerDefines.end());
     if (useCutoff) {
         // Compute the reaction field constants.
 
@@ -411,6 +437,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         double reactionFieldC = (1.0 / force.getCutoffDistance())*(3.0*force.getReactionFieldDielectric())/(2.0*force.getReactionFieldDielectric()+1.0);
         defines["REACTION_FIELD_K"] = cc.doubleToString(reactionFieldK);
         defines["REACTION_FIELD_C"] = cc.doubleToString(reactionFieldC);
+        if (hasInner) {
+            // The constant part of the reaction-field Coulomb remainder for r <= r_s, combined in double precision
+            InnerSplit split(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
+            defines["INNER_K1_MINUS_RF_C"] = cc.doubleToString(split.K[2]-reactionFieldC);
+        }
 
         // Compute the switching coefficients.
 
@@ -763,6 +794,14 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     source = cc.replaceStrings(source, replacements);
     if (force.getIncludeDirectSpace())
         cc.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getCutoffDistance(), exclusionList, source, force.getForceGroup(), numParticles > 3000, true);
+    if (hasInner) {
+        map<string, string> innerKernelDefines = defines;
+        innerKernelDefines["INNER_GROUP"] = "1";
+        innerKernelDefines["SUBTRACT_INNER"] = "0";
+        string innerSource = cc.replaceStrings(CommonNonbondedSlicingKernelSources::coulombLennardJones, innerKernelDefines);
+        innerSource = cc.replaceStrings(innerSource, replacements);
+        cc.getNonbondedUtilities().addInteraction(useCutoff, usePeriodic, true, force.getInnerCutoffDistance(), exclusionList, innerSource, force.getInnerForceGroup(), numParticles > 3000, true);
+    }
 
     // Initialize the exceptions.
 
@@ -803,8 +842,15 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             code<<getDerivativeCode(param, variableName, "", hasCoulomb, hasLJ, hasSoftcore);
         }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
+        replacements.insert(innerDefines.begin(), innerDefines.end());
         if (force.getIncludeDirectSpace())
             cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, replacements), force.getForceGroup());
+        if (hasInner) {
+            map<string, string> innerReplacements = replacements;
+            innerReplacements["INNER_GROUP"] = "1";
+            innerReplacements["SUBTRACT_INNER"] = "0";
+            cc.getBondedUtilities().addInteraction(atoms, cc.replaceStrings(CommonNonbondedSlicingKernelSources::nonbondedExceptions, innerReplacements), force.getInnerForceGroup());
+        }
     }
 
     // Initialize parameter offsets.
@@ -890,11 +936,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.addForce(info);
 }
 
-double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal) {
+double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner) {
     ContextSelector selector(cc);
     // Energy parameter derivatives are only computed along with the energy. Without it, they are
     // made NaN so that a request for derivatives alone cannot pass for a valid result.
-    if (hasDerivatives && !includeEnergy && (includeDirect || includeReciprocal)) {
+    if (hasDerivatives && !includeEnergy && (includeDirect || includeReciprocal || includeInner)) {
         map<string, double>& energyParamDerivs = cc.getEnergyParamDerivWorkspace();
         for (const string& param : requestedDerivatives)
             energyParamDerivs[param] = numeric_limits<double>::quiet_NaN();

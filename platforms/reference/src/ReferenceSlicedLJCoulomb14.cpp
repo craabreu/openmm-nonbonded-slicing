@@ -58,13 +58,18 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
        @param sliceEnergies    the energies of the slice
        @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
        @param sliceSoftDeriv  the derivative of the slice's energy with respect to its softness parameter
+       @param mode             which part of the interactions to compute
 
    --------------------------------------------------------------------------------------- */
+
+void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
+    innerSplit = split;
+}
 
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
                                      vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                                     double softcoreAlpha, double& sliceSoftDeriv) {
+                                     double softcoreAlpha, double& sliceSoftDeriv, Mode mode) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -81,12 +86,39 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    double energy, rdUdr, softDeriv;
-    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], sliceLambdas[soft], softcoreAlpha, energy, rdUdr, softDeriv);
-
-    double dEdR      = sliceLambdas[vdW]*rdUdr;
-           dEdR     += sliceLambdas[Coul]*ONE_4PI_EPS0*parameters[2]*inverseR;
-           dEdR     *= inverseR*inverseR;
+    // The full interaction, possibly soft-core. The inner part is that of the bare potential, since
+    // the inner force group cannot be used with soft-core slices.
+    double vdwEnergy, rdUdr, softDeriv;
+    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], sliceLambdas[soft], softcoreAlpha, vdwEnergy, rdUdr, softDeriv);
+    double r = deltaR[0][ReferenceForce::RIndex];
+    double innerVdwForce = 0.0, innerCoulForce = 0.0, innerVdwEnergy = 0.0, innerCoulEnergy = 0.0;
+    if (mode != Full && r < innerSplit.rc) {
+        double switchValue = innerSplit.switchValue(r);
+        innerVdwForce = switchValue*parameters[1]*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+        innerCoulForce = switchValue*ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
+        double sigma6 = pow(parameters[0], 6);
+        double e[3];
+        innerSplit.energyTerms(r, e);
+        innerVdwEnergy = parameters[1]*(sigma6*sigma6*e[0] - sigma6*e[1]);
+        innerCoulEnergy = ONE_4PI_EPS0*parameters[2]*e[2];
+    }
+    double vdwForce = rdUdr*inverseR*inverseR;
+    double coulForce = ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
+    double coulEnergy = ONE_4PI_EPS0*parameters[2]*inverseR;
+    if (mode == Inner) {
+        vdwForce = innerVdwForce;
+        coulForce = innerCoulForce;
+        vdwEnergy = innerVdwEnergy;
+        coulEnergy = innerCoulEnergy;
+        softDeriv = 0.0;
+    }
+    else if (mode == Remainder) {
+        vdwForce -= innerVdwForce;
+        coulForce -= innerCoulForce;
+        vdwEnergy -= innerVdwEnergy;
+        coulEnergy -= innerCoulEnergy;
+    }
+    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce;
 
     // accumulate forces
 
@@ -97,7 +129,7 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     }
 
     // accumulate energies
-    sliceEnergies[vdW] += energy;
+    sliceEnergies[vdW] += vdwEnergy;
     sliceSoftDeriv += softDeriv;
-    sliceEnergies[Coul] += ONE_4PI_EPS0*parameters[2]*inverseR;
+    sliceEnergies[Coul] += coulEnergy;
 }

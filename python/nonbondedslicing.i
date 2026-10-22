@@ -41,6 +41,15 @@ namespace NonbondedSlicing {
 %apply int& OUTPUT {int& ny};
 %apply int& OUTPUT {int& nz};
 
+%pythonappend SlicedNonbondedForce::getInnerCutoffDistance() const %{
+    from openmm import unit
+    val = unit.Quantity(val, unit.nanometer)
+%}
+%pythonappend SlicedNonbondedForce::getInnerSwitchingDistance() const %{
+    from openmm import unit
+    val = unit.Quantity(val, unit.nanometer)
+%}
+
 /**
  * This class implements sliced nonbonded interactions between particles, including a Coulomb force to represent
  * electrostatics and a Lennard-Jones force to represent van der Waals interactions.  It optionally supports
@@ -333,7 +342,8 @@ public:
      *         when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
      *         added to the usual derivative when the same parameter also scales the Lennard-Jones
      *         energy. This setting is fixed
-     *         at Context creation, like the other arguments of this method.
+     *         at Context creation, like the other arguments of this method. Soft-core scaling
+     *         parameters cannot be used with an inner force group (see :func:`setInnerForceGroup`).
      *
      * Returns
      * -------
@@ -455,6 +465,83 @@ public:
      *         :func:`getNumEnergyParameterDerivatives`
      */
     const std::string& getEnergyParameterDerivativeName(int index) const;
+    /**
+     * Get the force group of the inner part of the direct-space interactions, or -1 if the inner
+     * force group is disabled.
+     */
+    int getInnerForceGroup() const;
+    /**
+     * Set the force group of the inner part of the direct-space interactions.  When enabled, every
+     * direct-space pair interaction, including 1-4 exceptions, is split into a short-range part and
+     * a remainder.  The short-range part is the bare Lennard-Jones plus Coulomb force multiplied by
+     * a quintic switching function that goes from 1 at the inner switching distance to 0 at the
+     * inner cutoff distance; its energy is the potential whose gradient is that force, shifted to
+     * vanish at the inner cutoff.  The remainder stays in the force group of this force.  Slice
+     * scaling parameters and parameter offsets apply to both parts.  This is the force splitting
+     * used for multiple time-step integration in :cite:`Abreu_2020`.
+     *
+     * The inner force group must differ from the force group of this force and, with the Ewald, PME
+     * and LJPME methods, from the reciprocal space force group.  It requires 0 < inner switching
+     * distance < inner cutoff distance <= cutoff distance and, if a switching function is used
+     * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
+     * the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
+     * bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling
+     * parameters (see ``softcoreAlpha`` in :func:`addScalingParameter`).  On the CUDA and OpenCL
+     * platforms, all nonbonded interactions in one force group must use the same cutoff, so the
+     * inner force group should be a group of its own or one whose other nonbonded forces (for
+     * instance, a :OpenMM:`CustomNonbondedForce`) use the inner cutoff distance.
+     *
+     * The inner force group, the inner cutoff distance and the inner switching distance are fixed
+     * when a :OpenMM:`Context` is created: changing them afterwards has no effect on that Context
+     * until its ``reinitialize()`` method is called.
+     *
+     * Parameters
+     * ----------
+     *     group : int
+     *         the force group, between 0 and 31, or -1 to disable the inner force group
+     */
+    void setInnerForceGroup(int group);
+    /**
+     * Get the inner cutoff distance, beyond which the inner part of an interaction is zero.
+     *
+     * Returns
+     * -------
+     *     distance : Quantity
+     *         the inner cutoff distance, in nm
+     */
+    double getInnerCutoffDistance() const;
+    /**
+     * Set the inner cutoff distance.  It must not exceed the cutoff distance nor, if a switching
+     * function is used, the switching distance (see :func:`setInnerForceGroup`).  Like the inner
+     * force group, it is fixed when a :OpenMM:`Context` is created and only changes in an existing
+     * one when its ``reinitialize()`` method is called.
+     *
+     * Parameters
+     * ----------
+     *     distance : double
+     *         the inner cutoff distance, measured in nm
+     */
+    void setInnerCutoffDistance(double distance);
+    /**
+     * Get the inner switching distance, where the inner part of an interaction begins to switch off.
+     *
+     * Returns
+     * -------
+     *     distance : Quantity
+     *         the inner switching distance, in nm
+     */
+    double getInnerSwitchingDistance() const;
+    /**
+     * Set the inner switching distance.  Like the inner force group, it is fixed when a
+     * :OpenMM:`Context` is created and only changes in an existing one when its ``reinitialize()``
+     * method is called.
+     *
+     * Parameters
+     * ----------
+     *     distance : double
+     *         the inner switching distance, measured in nm
+     */
+    void setInnerSwitchingDistance(double distance);
     /**
      * Get whether to use CUDA Toolkit's cuFFT library when executing in the CUDA platform.
      * The default value is `True`.

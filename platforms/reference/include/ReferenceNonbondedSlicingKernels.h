@@ -11,6 +11,7 @@
  * https://github.com/craabreu/openmm-nonbonded-slicing                       *
  * -------------------------------------------------------------------------- */
 
+#include "internal/InnerSplit.h"
 #include "NonbondedSlicingKernels.h"
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
@@ -44,9 +45,10 @@ public:
      * @param includeForces  true if forces should be calculated
      * @param includeEnergy  true if the energy should be calculated
      * @param includeReciprocal  true if reciprocal space interactions should be included
+     * @param includeInner       true if the inner force group should be included
      * @return the potential energy due to the force
      */
-    double execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal);
+    double execute(ContextImpl& context, bool includeForces, bool includeEnergy, bool includeDirect, bool includeReciprocal, bool includeInner);
     /**
      * Copy changed parameters over to a context.
      *
@@ -88,6 +90,7 @@ private:
     vector<double> dispersionCoefficients;
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
+    InnerSplit innerSplit;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;

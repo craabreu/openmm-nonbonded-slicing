@@ -689,6 +689,136 @@ def testSliceEnergiesAndDerivatives(platformName, precision, methodName, variant
         ASSERT_EQUAL_TOL(total, withEnergy.getPotentialEnergy(), tol)
 
 
+def _innerGroupSystem(split):
+    # Lattice of charged LJ particles with 1-2 exclusions and scaled 1-4 exceptions, with neighbors (0.6 nm)
+    # and 1-4 pairs (0.69 nm) inside the switching range; group 0 is direct space, 1 the inner group (when
+    # split), 2 reciprocal space.
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(1.0)
+    positions = []
+    for i in range(4):
+        for j in range(4):
+            for k in range(2):
+                positions.append(mm.Vec3(0.6*i + 0.1*k, 0.6*j + 0.05*k, 0.4*k))
+                nonbonded.addParticle(0.5 if (i + j + k) % 2 else -0.5, 0.3, 0.5)
+    for i in range(0, len(positions), 2):
+        nonbonded.addException(i, i + 1, 0.0, 1.0, 0.0)
+    for i in range(1, len(positions) - 1, 4):
+        nonbonded.addException(i, i + 1, 0.1, 0.25, 0.2)
+    force = plugin.SlicedNonbondedForce(nonbonded, 2)
+    for i in range(len(positions)):
+        force.setParticleSubset(i, i % 2)
+    force.addGlobalParameter("lambda", 0.5)
+    force.addScalingParameter("lambda", 0, 1, True, True)
+    force.addEnergyParameterDerivative("lambda")
+    force.setReciprocalSpaceForceGroup(2)
+    if split:
+        force.setInnerForceGroup(1)
+        force.setInnerSwitchingDistance(0.5)
+        force.setInnerCutoffDistance(0.8)
+    system = mm.System()
+    for _ in positions:
+        system.addParticle(10.0)
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(3.2, 0, 0), mm.Vec3(0, 3.2, 0), mm.Vec3(0, 0, 3.2))
+    system.addForce(force)
+    return system, force, positions
+
+
+def testInnerGroupAccessors():
+    force = plugin.SlicedNonbondedForce(1)
+    assert force.getInnerForceGroup() == -1
+    force.setInnerForceGroup(3)
+    force.setInnerCutoffDistance(0.8*unit.nanometer)
+    force.setInnerSwitchingDistance(0.5*unit.nanometer)
+    assert force.getInnerForceGroup() == 3
+    # Distances come back as quantities in nanometers, like the inherited getters
+    for getter, expected in [(force.getInnerCutoffDistance, 0.8), (force.getInnerSwitchingDistance, 0.5)]:
+        distance = getter()
+        assert unit.is_quantity(distance)
+        ASSERT_EQUAL_TOL(expected, distance.value_in_unit(unit.nanometer), 1e-12)
+    force.setCutoffDistance(1.0*unit.nanometer)
+    assert force.getInnerSwitchingDistance() < force.getInnerCutoffDistance() < force.getCutoffDistance()
+    force.setInnerCutoffDistance(8*unit.angstrom)
+    ASSERT_EQUAL_TOL(0.8, force.getInnerCutoffDistance().value_in_unit(unit.nanometer), 1e-12)
+    with pytest.raises(Exception):
+        force.setInnerForceGroup(32)
+    copy_ = plugin.SlicedNonbondedForce._deserialize(mm.XmlSerializer.serialize(force))
+    assert copy_.getInnerForceGroup() == 3
+    ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance().value_in_unit(unit.nanometer), 1e-12)
+
+
+def testInnerGroupWithSoftcore():
+    # The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
+    def makeContext(softcoreAlpha):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        force = plugin.SlicedNonbondedForce(1)
+        force.addParticle(1.0, 0.3, 0.5)
+        force.addParticle(-1.0, 0.3, 0.5)
+        force.setInnerForceGroup(1)
+        force.setInnerSwitchingDistance(0.5)
+        force.setInnerCutoffDistance(0.8)
+        force.addGlobalParameter("lambda", 1.0)
+        force.addScalingParameter("lambda", 0, 0, False, True, softcoreAlpha)
+        system.addForce(force)
+        platform = mm.Platform.getPlatformByName("Reference")
+        return mm.Context(system, mm.VerletIntegrator(0.001), platform)
+
+    with pytest.raises(mm.OpenMMException, match="inner force group cannot be used with soft-core"):
+        makeContext(0.5)
+    makeContext(0.0)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testInnerGroupSplit(platformName, precision):
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    tol = 1e-5 if platformName == "Reference" or precision == "double" else 1e-4
+    contexts = {}
+    for split in (True, False):
+        system, force, positions = _innerGroupSystem(split)
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions(positions)
+        contexts[split] = context
+    whole = contexts[False].getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+    parts = [contexts[True].getState(getEnergy=True, getForces=True, getParameterDerivatives=True, groups={g}) for g in (0, 1, 2)]
+    ASSERT_EQUAL_TOL(whole.getPotentialEnergy(), sum(value(p.getPotentialEnergy()) for p in parts), tol)
+    ASSERT_EQUAL_TOL(whole.getEnergyParameterDerivatives()["lambda"], sum(p.getEnergyParameterDerivatives()["lambda"] for p in parts), tol)
+    for i, force in enumerate(whole.getForces()):
+        total = parts[0].getForces()[i] + parts[1].getForces()[i] + parts[2].getForces()[i]
+        ASSERT_EQUAL_VEC(force, total, tol)
+    inner = parts[1]
+    assert abs(value(inner.getPotentialEnergy())) > 1.0
+    # The inner group is linear in lambda: derivative equals E(1) - E(0).
+    contexts[True].setParameter("lambda", 1.0)
+    e1 = value(contexts[True].getState(getEnergy=True, groups={1}).getPotentialEnergy())
+    contexts[True].setParameter("lambda", 0.0)
+    e0 = value(contexts[True].getState(getEnergy=True, groups={1}).getPotentialEnergy())
+    ASSERT_EQUAL_TOL(e1 - e0, inner.getEnergyParameterDerivatives()["lambda"], 10*tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testInnerGroupMTSIntegration(platformName, precision):
+    # Wiring test: an MTSIntegrator stepping the inner group four times per outer step runs, and the
+    # group energies keep adding up to the total afterwards.
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    system, force, positions = _innerGroupSystem(True)
+    integrator = mm.MTSIntegrator(2*unit.femtoseconds, [(2, 1), (0, 1), (1, 4)])
+    context = mm.Context(system, integrator, platform, properties)
+    context.setPositions(positions)
+    context.setVelocitiesToTemperature(300*unit.kelvin, 1)
+    integrator.step(50)
+    state = context.getState(getEnergy=True)
+    total = value(state.getPotentialEnergy())
+    assert math.isfinite(total) and math.isfinite(value(state.getKineticEnergy()))
+    parts = sum(value(context.getState(getEnergy=True, groups={g}).getPotentialEnergy()) for g in (0, 1, 2))
+    tol = 1e-5 if platformName == "Reference" or precision == "double" else 1e-4
+    ASSERT_EQUAL_TOL(total, parts, tol)
+
+
 @pytest.mark.parametrize("methodName", ["Ewald", "PME"])
 @pytest.mark.parametrize("platformName, precision", cases)
 def testDirectSpaceWithExclusions(platformName, precision, methodName):

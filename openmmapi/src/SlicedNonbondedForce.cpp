@@ -28,13 +28,17 @@ using namespace NonbondedSlicing;
     } \
 }
 
-SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true), reciprocalExclusions(false) {
+SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true),
+        reciprocalExclusions(false), innerForceGroup(-1), innerCutoff(0.0), innerSwitchingDistance(0.0) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : NonbondedForce() {
     this->numSubsets = numSubsets;
     useCuFFT = true;
     reciprocalExclusions = false;
+    innerForceGroup = -1;
+    innerCutoff = 0.0;
+    innerSwitchingDistance = 0.0;
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
@@ -110,6 +114,20 @@ int SlicedNonbondedForce::getParticleSubset(int index) const {
     ASSERT_VALID("Index", index, getNumParticles());
     auto element = subsets.find(index);
     return element == subsets.end() ? 0 : element->second;
+}
+
+void SlicedNonbondedForce::setInnerForceGroup(int group) {
+    if (group < -1 || group > 31)
+        throw OpenMMException("SlicedNonbondedForce: the inner force group must be -1 (disabled) or between 0 and 31");
+    innerForceGroup = group;
+}
+
+void SlicedNonbondedForce::setInnerCutoffDistance(double distance) {
+    innerCutoff = distance;
+}
+
+void SlicedNonbondedForce::setInnerSwitchingDistance(double distance) {
+    innerSwitchingDistance = distance;
 }
 
 int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const {

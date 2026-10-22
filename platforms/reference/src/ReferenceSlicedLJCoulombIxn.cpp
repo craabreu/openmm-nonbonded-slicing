@@ -167,6 +167,77 @@ void ReferenceSlicedLJCoulombIxn::setSoftcoreAlphas(const vector<double>& alphas
     sliceSoftcoreAlphas = alphas;
 }
 
+void ReferenceSlicedLJCoulombIxn::setInnerSplit(const InnerSplit& split) {
+    innerSplit = split;
+}
+
+/**---------------------------------------------------------------------------------------
+
+   Compute the inner part of a pair interaction: the switched bare force factors (to be multiplied by
+   the slice scaling factors and by deltaR) and the shifted inner energies, all zero beyond the inner cutoff
+
+   --------------------------------------------------------------------------------------- */
+
+void ReferenceSlicedLJCoulombIxn::calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r,
+                                                     double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy) const {
+    forceFactorVdw = forceFactorCoul = vdwEnergy = coulEnergy = 0.0;
+    if (r >= innerSplit.rc)
+        return;
+    double inverseR = 1.0/r;
+    double sig = atomParameters[ii][SigIndex] + atomParameters[jj][SigIndex];
+    double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
+    double qq = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
+    double sig2 = inverseR*sig;
+    sig2 *= sig2;
+    double sig6 = sig2*sig2*sig2;
+    double switchValue = innerSplit.switchValue(r);
+    forceFactorVdw = switchValue*eps*(12.0*sig6 - 6.0)*sig6*inverseR*inverseR;
+    forceFactorCoul = switchValue*qq*inverseR*inverseR*inverseR;
+    double sigma6 = sig*sig;
+    sigma6 = sigma6*sigma6*sigma6;
+    double e[3];
+    innerSplit.energyTerms(r, e);
+    vdwEnergy = eps*(sigma6*sigma6*e[0] - sigma6*e[1]);
+    coulEnergy = qq*e[2];
+}
+
+void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(
+    int numberOfAtoms, vector<Vec3>& atomCoordinates, const vector<int>& atomSubsets,
+    const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies
+) const {
+    auto addPair = [&](int ii, int jj) {
+        int si = atomSubsets[ii];
+        int sj = atomSubsets[jj];
+        int slice = si > sj ? si*(si+1)/2+sj : sj*(sj+1)/2+si;
+        double deltaR[2][ReferenceForce::LastDeltaRIndex];
+        if (periodic)
+            ReferenceForce::getDeltaRPeriodic(atomCoordinates[jj], atomCoordinates[ii], periodicBoxVectors, deltaR[0]);
+        else
+            ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
+        double forceFactorVdw, forceFactorCoul, vdwEnergy, coulEnergy;
+        calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], forceFactorVdw, forceFactorCoul, vdwEnergy, coulEnergy);
+        double factor = sliceLambdas[slice][vdW]*forceFactorVdw + sliceLambdas[slice][Coul]*forceFactorCoul;
+        for (int kk = 0; kk < 3; kk++) {
+            double force = factor*deltaR[0][kk];
+            forces[ii][kk] += force;
+            forces[jj][kk] -= force;
+        }
+        sliceEnergies[slice][vdW] += vdwEnergy;
+        sliceEnergies[slice][Coul] += coulEnergy;
+    };
+    if (cutoff) {
+        for (auto& pair : *neighborList)
+            addPair(pair.first, pair.second);
+    }
+    else {
+        for (int ii = 0; ii < numberOfAtoms; ii++)
+            for (int jj = ii+1; jj < numberOfAtoms; jj++)
+                if (exclusions[jj].find(ii) == exclusions[jj].end())
+                    addPair(ii, jj);
+    }
+}
+
 /**---------------------------------------------------------------------------------------
 
    Calculate Ewald ixn
@@ -515,6 +586,17 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
             softDeriv *= switchValue;
         }
 
+        // The inner part is that of the bare potential, since the inner force group cannot be
+        // used with soft-core slices.
+        if (innerSplit.enabled) {
+            double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy;
+            calculateInnerPair(ii, jj, atomParameters, r, forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy);
+            dEdRvdW -= forceFactorVdw;
+            dEdRCoul -= forceFactorCoul;
+            sliceEnergies[slice][vdW] -= innerVdwEnergy;
+            sliceEnergies[slice][Coul] -= innerCoulEnergy;
+        }
+
         // accumulate forces
 
         double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul;
@@ -643,6 +725,16 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
         dEdRvdW -= energy*switchDeriv*inverseR;
         energy *= switchValue;
         softDeriv *= switchValue;
+    }
+    // The inner part is that of the bare potential, since the inner force group cannot be used
+    // with soft-core slices.
+    if (innerSplit.enabled) {
+        double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy;
+        calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy);
+        dEdRvdW -= forceFactorVdw;
+        dEdRCoul -= forceFactorCoul;
+        sliceEnergies[slice][vdW] -= innerVdwEnergy;
+        sliceEnergies[slice][Coul] -= innerCoulEnergy;
     }
     sliceEnergies[slice][vdW] += energy;
     sliceSoftDerivs[slice] += softDeriv;

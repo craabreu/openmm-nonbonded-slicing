@@ -26,6 +26,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <set>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
@@ -1740,6 +1741,555 @@ bool throwsException(const function<void()>& call) {
     return false;
 }
 
+void testLJPMEWithoutCharges() {
+    // LJPME with no charges and a requested derivative: the Coulomb part of PME is skipped, and the
+    // dispersion part must still find initialized energy and derivative buffers on every platform.
+
+    System system;
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::LJPME);
+    force->setCutoffDistance(1.0);
+    vector<Vec3> positions;
+    for (int i = 0; i < 16; i++) {
+        system.addParticle(1.0);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->setParticleSubset(i, i%2);
+        positions.push_back(Vec3(0.5*(i%4)+0.1*(i%2), 0.5*(i/4), 0.2*(i%3)));
+    }
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    force->addGlobalParameter("lambda", 0.5);
+    force->addScalingParameter("lambda", 0, 1, false, true);
+    force->addEnergyParameterDerivative("lambda");
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions(positions);
+    double derivative = context.getState(State::Energy | State::ParameterDerivatives).getEnergyParameterDerivatives().at("lambda");
+    context.setParameter("lambda", 1.0);
+    double e1 = context.getState(State::Energy).getPotentialEnergy();
+    context.setParameter("lambda", 0.0);
+    double e0 = context.getState(State::Energy).getPotentialEnergy();
+    assertEqualTo(e1-e0, derivative, 1e-4);
+    ASSERT(fabs(derivative) > 1e-3);
+}
+
+void testInnerGroupErrors() {
+    // Each configure() call should make Context creation fail; the unmodified setup must succeed.
+
+    auto build = [](function<void(SlicedNonbondedForce&)> configure, bool expectFailure) {
+        System system;
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+        force->setNonbondedMethod(SlicedNonbondedForce::PME);
+        force->setCutoffDistance(1.0);
+        force->addParticle(1.0, 0.3, 0.5);
+        force->addParticle(-1.0, 0.3, 0.5);
+        force->setInnerForceGroup(1);
+        force->setInnerSwitchingDistance(0.5);
+        force->setInnerCutoffDistance(0.8);
+        configure(*force);
+        system.addForce(force);
+        VerletIntegrator integrator(0.001);
+        bool threw = false;
+        try {
+            Context context(system, integrator, platform);
+        }
+        catch (const OpenMMException&) {
+            threw = true;
+        }
+        ASSERT_EQUAL(expectFailure, threw);
+    };
+    build([](SlicedNonbondedForce& f) {}, false);
+    build([](SlicedNonbondedForce& f) { f.setInnerSwitchingDistance(0.0); }, true);   // r_s must be > 0
+    build([](SlicedNonbondedForce& f) { f.setInnerSwitchingDistance(0.8); }, true);   // r_s must be < r_c
+    build([](SlicedNonbondedForce& f) { f.setInnerCutoffDistance(1.2); }, true);      // r_c must be <= cutoff
+    build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(0); }, true);            // same as direct group
+    build([](SlicedNonbondedForce& f) { f.setReciprocalSpaceForceGroup(1); }, true);  // same as reciprocal group
+    // Without reciprocal space, the reciprocal space force group is irrelevant
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic); f.setReciprocalSpaceForceGroup(1); }, false);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setReciprocalSpaceForceGroup(1); }, false);
+    // With a switching function, r_c must be <= the switching distance
+    build([](SlicedNonbondedForce& f) { f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, true);
+    build([](SlicedNonbondedForce& f) { f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.8); }, false);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, true);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, false);
+    build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
+    build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
+    // The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
+    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true); }, false);
+    bool threw = false;
+    try {
+        SlicedNonbondedForce force(1);
+        force.setInnerForceGroup(32);
+    }
+    catch (const OpenMMException&) {
+        threw = true;
+    }
+    ASSERT(threw);
+}
+
+void testInnerGroupPair(bool asException, double rs, double rc) {
+    // Two particles. The inner energy must equal the integral of the switched bare force from r to the
+    // inner cutoff (V-hat vanishes there), the inner force must be S(r) times the bare force, and the three
+    // groups must add up to the unsplit result, including across the inner cutoff. Narrow switching windows
+    // and tiny switching distances are the cases where a closed-form inner energy loses precision.
+
+    const double cutoff = 1.0, q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7;
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod(SlicedNonbondedForce::PME);
+    force->setCutoffDistance(cutoff);
+    force->setReciprocalSpaceForceGroup(2);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(rs);
+    force->setInnerCutoffDistance(rc);
+    if (asException) {
+        force->addParticle(0.0, sigma, 0.0);
+        force->addParticle(0.0, sigma, 0.0);
+        force->addException(0, 1, q1*q2, sigma, epsilon);
+    }
+    else {
+        force->addParticle(q1, sigma, epsilon);
+        force->addParticle(q2, sigma, epsilon);
+    }
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    auto bareForce = [&](double r) {
+        double s6 = pow(sigma/r, 6);
+        return 4*epsilon*(12*s6*s6-6*s6)/r + ONE_4PI_EPS0*q1*q2/(r*r);  // -dV/dr
+    };
+    auto switchValue = [&](double r) {
+        if (r <= rs)
+            return 1.0;
+        if (r >= rc)
+            return 0.0;
+        double z = (r-rs)/(rc-rs);
+        return 1+z*z*z*(-10+z*(15-z*6));
+    };
+    // The inner force is S(r) times the bare force, whose Lennard-Jones and Coulomb parts nearly cancel at
+    // some distances, so its absolute precision is set by the parts; the energy terms are each accurate to
+    // a few units in the last place.
+    bool precise = platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double";
+    double tol = precise ? 1e-6 : 1e-5, forceTol = precise ? 1e-6 : 1e-4;
+    for (double r : {0.3, 0.45, 0.5, 0.55, 0.65, 0.75, 0.785, 0.795, 0.7999, 0.8, 0.8001, 0.9}) {
+        context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+        State inner = context.getState(State::Energy | State::Forces, false, 1<<1);
+        assertEqualTo(switchValue(r)*bareForce(r), inner.getForces()[1][0], forceTol);
+        double expected = 0.0;
+        if (r < rc) {
+            const int n = 2000;
+            double h = (rc-r)/n;
+            for (int i = 0; i <= n; i++) {
+                double s = r+i*h;
+                double w = (i == 0 || i == n) ? 1 : (i%2 ? 4 : 2);
+                expected += w*switchValue(s)*bareForce(s);
+            }
+            expected *= h/3;
+        }
+        assertEqualTo(expected, inner.getPotentialEnergy(), tol);
+        State all = context.getState(State::Energy | State::Forces);
+        State direct = context.getState(State::Energy | State::Forces, false, 1<<0);
+        State recip = context.getState(State::Energy | State::Forces, false, 1<<2);
+        assertEqualTo(all.getPotentialEnergy(), direct.getPotentialEnergy()+inner.getPotentialEnergy()+recip.getPotentialEnergy(), tol);
+        for (int i = 0; i < 2; i++)
+            assertEqualVec(all.getForces()[i], direct.getForces()[i]+inner.getForces()[i]+recip.getForces()[i], tol);
+    }
+}
+
+// A box of three-site molecules (1-2/1-3 exclusions) with extra scaled 1-4 exceptions, subsets, slice
+// scaling parameters and parameter offsets, built either with the inner force group (split=true) or without.
+// Group 0 = direct space, 1 = inner, 2 = reciprocal space (for Ewald/PME/LJPME).
+class InnerTestSystem {
+public:
+    enum Kind {Both, LJOnly, CoulombOnly};
+    InnerTestSystem(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, int numSubsets, Kind kind, bool offsets, bool innerAtCutoff) :
+            method(method), numSubsets(numSubsets), kind(kind), offsets(offsets), rc(innerAtCutoff ? cutoff : 0.8) {
+        periodic = (method != NonbondedForce::NoCutoff && method != NonbondedForce::CutoffNonPeriodic);
+        // Molecules on a jittered lattice (spacing 0.75 nm): no overlaps, which would overflow the fixed-point
+        // force accumulators of the GPU platforms, and many pairs inside the switching range of the inner group.
+        for (int m = 0; m < numMolecules; m++) {
+            Vec3 site(0.375+0.75*(m%4), 0.375+0.75*((m/4)%4), 0.375+0.75*(m/16));
+            Vec3 center = site+Vec3(genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5, genrand_real2(sfmt)-0.5)*0.2;
+            positions.push_back(center);
+            positions.push_back(center+Vec3(0.1, 0, 0));
+            positions.push_back(center+Vec3(0, 0.1, 0));
+        }
+        for (int i = 0; i < numParticles; i++) {
+            bool oxygen = (i%3 == 0);
+            charge.push_back(kind == LJOnly ? 0.0 : (oxygen ? -0.8 : 0.4));
+            sigma.push_back(oxygen ? 0.31 : 0.2);
+            epsilon.push_back(kind == CoulombOnly ? 0.0 : (oxygen ? 0.6 : 0.1));
+            subset.push_back(i%numSubsets);
+        }
+        for (int m = 0; m < numMolecules; m++) {
+            exclusions.push_back({3*m, 3*m+1});
+            exclusions.push_back({3*m, 3*m+2});
+            exclusions.push_back({3*m+1, 3*m+2});
+        }
+        for (int m = 0; m+1 < numMolecules; m += 4)
+            exceptions14.push_back({(double) (3*m+2), (double) (3*m+4), kind == LJOnly ? 0.0 : 0.3, 0.25, kind == CoulombOnly ? 0.0 : 0.2});
+    }
+    System* build(bool split, SlicedNonbondedForce** forceOut) {
+        System* system = new System();
+        for (int i = 0; i < numParticles; i++)
+            system->addParticle(1.0);
+        system->setDefaultPeriodicBoxVectors(Vec3(boxSize, 0, 0), Vec3(0, boxSize, 0), Vec3(0, 0, boxSize));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(numSubsets);
+        force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+        force->setCutoffDistance(cutoff);
+        // The inner cutoff cannot exceed the switching distance, so a switching function is only used when
+        // the inner cutoff is inside it.
+        if ((method == NonbondedForce::CutoffPeriodic || method == NonbondedForce::PME || method == NonbondedForce::Ewald) && rc <= 0.9) {
+            force->setUseSwitchingFunction(true);
+            force->setSwitchingDistance(0.9);
+        }
+        if (periodic && method != NonbondedForce::CutoffPeriodic)
+            force->setReciprocalSpaceForceGroup(2);
+        for (int i = 0; i < numParticles; i++) {
+            force->addParticle(charge[i], sigma[i], epsilon[i]);
+            force->setParticleSubset(i, subset[i]);
+        }
+        for (auto& e : exclusions)
+            force->addException(e[0], e[1], 0.0, 1.0, 0.0);
+        for (auto& e : exceptions14)
+            force->addException((int) e[0], (int) e[1], e[2], e[3], e[4]);
+        force->addGlobalParameter("lambdaA", lambdaA);
+        force->addScalingParameter("lambdaA", 0, numSubsets-1, true, true);
+        force->addEnergyParameterDerivative("lambdaA");
+        if (numSubsets > 1) {
+            force->addGlobalParameter("lambdaB", lambdaB);
+            force->addScalingParameter("lambdaB", 1, 1, true, false);
+            force->addEnergyParameterDerivative("lambdaB");
+        }
+        if (offsets) {
+            force->addGlobalParameter("offset", offsetValue);
+            force->addParticleParameterOffset("offset", 0, 0.2, 0.0, 0.1);
+            force->addParticleParameterOffset("offset", 4, -0.1, 0.02, 0.0);
+            force->addExceptionParameterOffset("offset", (int) exclusions.size(), 0.1, 0.0, 0.05);
+        }
+        if (split) {
+            force->setInnerForceGroup(1);
+            force->setInnerSwitchingDistance(rs);
+            force->setInnerCutoffDistance(rc);
+        }
+        system->addForce(force);
+        *forceOut = force;
+        return system;
+    }
+    // Inner-group forces computed independently of the plugin: S(r) times the bare force, with the
+    // current values of the scaling parameters and offsets applied.
+    vector<Vec3> expectedInnerForces(double offsetNow) const {
+        vector<double> q = charge, sig = sigma, eps = epsilon;
+        vector<array<double, 5>> ex14 = exceptions14;
+        if (offsets) {
+            q[0] += offsetNow*0.2;
+            eps[0] += offsetNow*0.1;
+            q[4] += offsetNow*(-0.1);
+            sig[4] += offsetNow*0.02;
+            ex14[0][2] += offsetNow*0.1;
+            ex14[0][4] += offsetNow*0.05;
+        }
+        set<pair<int, int>> excluded;
+        for (auto& e : exclusions)
+            excluded.insert({min(e[0], e[1]), max(e[0], e[1])});
+        for (auto& e : ex14)
+            excluded.insert({min((int) e[0], (int) e[1]), max((int) e[0], (int) e[1])});
+        vector<Vec3> forces(numParticles, Vec3());
+        auto addPair = [&](int i, int j, Vec3 delta, double qq, double sigmaIJ, double epsIJ) {
+            double r = sqrt(delta.dot(delta));
+            if (r >= rc)
+                return;
+            double z = (r-rs)/(rc-rs);
+            double s = r <= rs ? 1.0 : 1+z*z*z*(-10+z*(15-z*6));
+            double s6 = pow(sigmaIJ/r, 6);
+            double f = lambdaVdw(i, j)*4*epsIJ*(12*s6*s6-6*s6)/r + lambdaCoul(i, j)*ONE_4PI_EPS0*qq/(r*r);
+            Vec3 force = delta*(s*f/r);
+            forces[i] += force;
+            forces[j] -= force;
+        };
+        for (int i = 0; i < numParticles; i++)
+            for (int j = i+1; j < numParticles; j++) {
+                if (excluded.count({i, j}))
+                    continue;
+                Vec3 delta = positions[i]-positions[j];
+                if (periodic)
+                    for (int k = 0; k < 3; k++)
+                        delta[k] -= boxSize*round(delta[k]/boxSize);
+                addPair(i, j, delta, q[i]*q[j], 0.5*(sig[i]+sig[j]), sqrt(eps[i]*eps[j]));
+            }
+        for (auto& e : ex14)
+            addPair((int) e[0], (int) e[1], positions[(int) e[0]]-positions[(int) e[1]], e[2], e[3], e[4]);
+        return forces;
+    }
+    // The sliceIndex macro does not parenthesize its arguments, so pass it plain variables only.
+    double lambdaVdw(int i, int j) const {
+        int last = numSubsets-1;
+        return sliceIndex(subset[i], subset[j]) == sliceIndex(0, last) ? lambdaA : 1.0;
+    }
+    double lambdaCoul(int i, int j) const {
+        int slice = sliceIndex(subset[i], subset[j]);
+        int last = numSubsets-1;
+        if (slice == sliceIndex(0, last))
+            return lambdaA;
+        if (numSubsets > 1 && slice == sliceIndex(1, 1))
+            return lambdaB;
+        return 1.0;
+    }
+    static constexpr int numMolecules = 20, numParticles = 60;
+    static constexpr double boxSize = 3.0, cutoff = 1.0, rs = 0.5, lambdaA = 0.7, lambdaB = 0.4, offsetValue = 0.5;
+    NonbondedForce::NonbondedMethod method;
+    int numSubsets;
+    Kind kind;
+    bool offsets, periodic;
+    double rc;
+    vector<Vec3> positions;
+    vector<double> charge, sigma, epsilon;
+    vector<int> subset;
+    vector<array<int, 2>> exclusions;
+    vector<array<double, 5>> exceptions14;
+};
+
+static double groupTolerance() {
+    return (platform.getName() == "Reference" || platform.getPropertyDefaultValue("Precision") == "double") ? 1e-6 : 1e-4;
+}
+
+void testInnerGroupForces(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, int numSubsets, InnerTestSystem::Kind kind, bool offsets, bool innerAtCutoff) {
+    InnerTestSystem data(sfmt, method, numSubsets, kind, offsets, innerAtCutoff);
+    SlicedNonbondedForce *splitForce, *plainForce;
+    System* splitSystem = data.build(true, &splitForce);
+    System* plainSystem = data.build(false, &plainForce);
+    VerletIntegrator integrator1(0.001), integrator2(0.001);
+    Context split(*splitSystem, integrator1, platform);
+    Context plain(*plainSystem, integrator2, platform);
+    split.setPositions(data.positions);
+    plain.setPositions(data.positions);
+    double tol = groupTolerance();
+
+    // The inner group alone against the independent reference.
+
+    State inner = split.getState(State::Forces | State::Energy, false, 1<<1);
+    vector<Vec3> expected = data.expectedInnerForces(InnerTestSystem::offsetValue);
+    for (int i = 0; i < data.numParticles; i++)
+        assertEqualVec(expected[i], inner.getForces()[i], tol);
+    ASSERT(inner.getPotentialEnergy() != 0.0);
+
+    // All groups together against the unsplit force: energy, forces and derivatives.
+
+    State all = split.getState(State::Forces | State::Energy | State::ParameterDerivatives);
+    State reference = plain.getState(State::Forces | State::Energy | State::ParameterDerivatives);
+    assertEnergy(reference, all, tol);
+    assertForces(reference, all, tol);
+    for (auto& entry : reference.getEnergyParameterDerivatives())
+        assertEqualTo(entry.second, all.getEnergyParameterDerivatives().at(entry.first), tol);
+
+    // The direct and inner groups are complementary: their sum is the unsplit direct group.
+
+    State direct = split.getState(State::Forces | State::Energy, false, 1<<0);
+    State plainDirect = plain.getState(State::Forces | State::Energy, false, 1<<0);
+    assertEqualTo(plainDirect.getPotentialEnergy(), direct.getPotentialEnergy()+inner.getPotentialEnergy(), tol);
+    for (int i = 0; i < data.numParticles; i++)
+        assertEqualVec(plainDirect.getForces()[i], direct.getForces()[i]+inner.getForces()[i], tol);
+    delete splitSystem;
+    delete plainSystem;
+}
+
+void testInnerGroupConsistency(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method) {
+    // Each group's force must be minus the gradient of that group's energy (central differences).
+
+    if (platform.getName() != "Reference" && platform.getPropertyDefaultValue("Precision") != "double")
+        return;
+    InnerTestSystem data(sfmt, method, 2, InnerTestSystem::Both, true, false);
+    SlicedNonbondedForce* force;
+    System* system = data.build(true, &force);
+    VerletIntegrator integrator(0.001);
+    Context context(*system, integrator, platform);
+    const double h = 1e-5;
+    for (int group : {0, 1}) {
+        context.setPositions(data.positions);
+        vector<Vec3> forces = context.getState(State::Forces, false, 1<<group).getForces();
+        for (int i : {0, 1, 2, 7, 23, 44})
+            for (int k = 0; k < 3; k++) {
+                vector<Vec3> displaced = data.positions;
+                displaced[i][k] += h;
+                context.setPositions(displaced);
+                double plus = context.getState(State::Energy, false, 1<<group).getPotentialEnergy();
+                displaced[i][k] -= 2*h;
+                context.setPositions(displaced);
+                double minus = context.getState(State::Energy, false, 1<<group).getPotentialEnergy();
+                assertEqualTo(-(plus-minus)/(2*h), forces[i][k], 1e-4);
+            }
+    }
+    delete system;
+}
+
+void testInnerGroupDerivatives(OpenMM_SFMT::SFMT& sfmt) {
+    // The energy of every group is linear in each scaling parameter, so dE/dlambda = E(1) - E(0) per group.
+
+    InnerTestSystem data(sfmt, NonbondedForce::PME, 2, InnerTestSystem::Both, false, false);
+    SlicedNonbondedForce* force;
+    System* system = data.build(true, &force);
+    VerletIntegrator integrator(0.001);
+    Context context(*system, integrator, platform);
+    context.setPositions(data.positions);
+    double tol = groupTolerance();
+    for (int group : {0, 1, 2})
+        for (string name : {"lambdaA", "lambdaB"}) {
+            context.setParameter(name, InnerTestSystem::lambdaA);
+            double derivative = context.getState(State::Energy | State::ParameterDerivatives, false, 1<<group).getEnergyParameterDerivatives().at(name);
+            context.setParameter(name, 1.0);
+            double e1 = context.getState(State::Energy, false, 1<<group).getPotentialEnergy();
+            context.setParameter(name, 0.0);
+            double e0 = context.getState(State::Energy, false, 1<<group).getPotentialEnergy();
+            context.setParameter(name, name == "lambdaA" ? InnerTestSystem::lambdaA : InnerTestSystem::lambdaB);
+            assertEqualTo(e1-e0, derivative, 10*tol);
+            if (group == 1)
+                ASSERT(fabs(derivative) > 1e-3);
+        }
+    delete system;
+}
+
+void testInnerGroupOffsets(OpenMM_SFMT::SFMT& sfmt) {
+    // Offsets changed through setParameter, and parameters changed through updateParametersInContext,
+    // must both reach the inner group.
+
+    InnerTestSystem data(sfmt, NonbondedForce::PME, 2, InnerTestSystem::Both, true, false);
+    SlicedNonbondedForce* force;
+    System* system = data.build(true, &force);
+    VerletIntegrator integrator(0.001);
+    Context context(*system, integrator, platform);
+    context.setPositions(data.positions);
+    double tol = groupTolerance();
+    context.setParameter("offset", 1.2);
+    vector<Vec3> expected = data.expectedInnerForces(1.2);
+    vector<Vec3> found = context.getState(State::Forces, false, 1<<1).getForces();
+    for (int i = 0; i < data.numParticles; i++)
+        assertEqualVec(expected[i], found[i], tol);
+    data.charge[3] = -0.5;
+    data.sigma[3] = 0.28;
+    data.epsilon[3] = 0.9;
+    force->setParticleParameters(3, data.charge[3], data.sigma[3], data.epsilon[3]);
+    data.exceptions14[1][2] = -0.2;
+    force->setExceptionParameters((int) data.exclusions.size()+1, (int) data.exceptions14[1][0], (int) data.exceptions14[1][1], -0.2, 0.25, 0.2);
+    force->updateParametersInContext(context);
+    expected = data.expectedInnerForces(1.2);
+    found = context.getState(State::Forces, false, 1<<1).getForces();
+    for (int i = 0; i < data.numParticles; i++)
+        assertEqualVec(expected[i], found[i], tol);
+    delete system;
+}
+
+void testInnerGroupCloseContact(NonbondedForce::NonbondedMethod method, bool asException) {
+    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
+    // is the constant sum_n c_n K_n. At close contact, where (sigma/r)^12 ~ 500, it must not be computed as
+    // the difference of two large, nearly equal energies, which loses digits in single precision.
+
+    const double q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7, rs = 0.5, rc = 0.8, cutoff = 1.0, r = 0.18;
+    bool lj = true, coulomb = (method != NonbondedForce::PME);
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+    force->setCutoffDistance(cutoff);
+    force->setUseDispersionCorrection(false);
+    force->setReciprocalSpaceForceGroup(2);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(rs);
+    force->setInnerCutoffDistance(rc);
+    double qq = coulomb ? q1*q2 : 0.0;
+    if (asException) {
+        force->addParticle(0.0, sigma, 0.0);
+        force->addParticle(0.0, sigma, 0.0);
+        force->addException(0, 1, qq, sigma, epsilon);
+    }
+    else {
+        force->addParticle(coulomb ? q1 : 0.0, sigma, epsilon);
+        force->addParticle(coulomb ? q2 : 0.0, sigma, epsilon);
+    }
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+
+    // K_n = rs^-n - e_n(rs), with e_n(rs) = n*integral(S(s)*s^-(n+1), s=rs..rc) by Simpson's rule
+    auto K = [&](int n) {
+        const int steps = 2000;
+        double h = (rc-rs)/steps, sum = 0.0;
+        for (int i = 0; i <= steps; i++) {
+            double s = rs+i*h, z = (s-rs)/(rc-rs);
+            double w = (i == 0 || i == steps) ? 1 : (i%2 ? 4 : 2);
+            sum += w*(1+z*z*z*(-10+z*(15-z*6)))*n*pow(s, -(n+1));
+        }
+        return pow(rs, -n)-sum*h/3;
+    };
+    double expected = 4*epsilon*(pow(sigma, 12)*K(12)-pow(sigma, 6)*K(6));
+    double coulombRemainder = K(1);
+    if (method == NonbondedForce::CutoffPeriodic && !asException) {
+        double eps = force->getReactionFieldDielectric();
+        double krf = pow(cutoff, -3.0)*(eps-1.0)/(2.0*eps+1.0);
+        double crf = (1.0/cutoff)*(3.0*eps)/(2.0*eps+1.0);
+        coulombRemainder += krf*r*r-crf;
+    }
+    expected += ONE_4PI_EPS0*qq*coulombRemainder;
+    assertEqualTo(expected, context.getState(State::Energy, false, 1<<0).getPotentialEnergy(), 1e-6);
+}
+
+void testInnerGroupFixedAtCreation() {
+    // The inner force group, inner cutoff and inner switching distance are fixed when the Context is
+    // created: changing them on the force afterwards must not change the Context's split.
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod(SlicedNonbondedForce::PME);
+    force->setCutoffDistance(1.0);
+    force->setReciprocalSpaceForceGroup(2);
+    force->addParticle(0.6, 0.3, 0.7);
+    force->addParticle(-0.4, 0.3, 0.7);
+    force->addParticle(0.2, 0.25, 0.5);
+    force->addException(0, 2, 0.1, 0.25, 0.3);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.5);
+    force->setInnerCutoffDistance(0.8);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.6, 0, 0), Vec3(0, 0.45, 0)});
+    auto energies = [&]() {
+        vector<double> result;
+        result.push_back(context.getState(State::Energy).getPotentialEnergy());
+        for (int group = 0; group < 4; group++)
+            result.push_back(context.getState(State::Energy, false, 1<<group).getPotentialEnergy());
+        return result;
+    };
+    vector<double> expected = energies();
+    ASSERT(fabs(expected[2]) > 1e-3);
+    double tol = groupTolerance();
+    for (int group : {-1, 3}) {
+        force->setInnerForceGroup(group);
+        vector<double> found = energies();
+        for (int i = 0; i < expected.size(); i++)
+            assertEqualTo(expected[i], found[i], tol);
+    }
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.3);
+    force->setInnerCutoffDistance(0.5);
+    vector<double> found = energies();
+    for (int i = 0; i < expected.size(); i++)
+        assertEqualTo(expected[i], found[i], tol);
+}
+
 void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool useSwitch) {
     // Two subsets. Slice (0, 1) is scaled by "lambda" (Coulomb and LJ) and uses the soft-core
     // potential. The difference between the soft-core and the hard-core sliced forces is compared
@@ -2520,6 +3070,29 @@ int main(int argc, char* argv[]) {
     try {
         initializeTests(argc, argv);
         testErrors();
+        testLJPMEWithoutCharges();
+        testInnerGroupErrors();
+        for (bool asException : {false, true}) {
+            testInnerGroupPair(asException, 0.5, 0.8);
+            testInnerGroupPair(asException, 0.79, 0.8);
+            testInnerGroupPair(asException, 0.001, 0.8);
+        }
+        // The inner group tests use their own generator, so the other tests keep their random systems.
+        OpenMM_SFMT::SFMT innerSfmt;
+        init_gen_rand(1, innerSfmt);
+        for (auto method : nonbondedMethods)
+            for (int numSubsets : {1, 3})
+                for (auto kind : {InnerTestSystem::Both, InnerTestSystem::LJOnly, InnerTestSystem::CoulombOnly})
+                    testInnerGroupForces(innerSfmt, method, numSubsets, kind, numSubsets == 3, false);
+        testInnerGroupForces(innerSfmt, NonbondedForce::PME, 2, InnerTestSystem::Both, true, true);
+        for (auto method : nonbondedMethods)
+            testInnerGroupConsistency(innerSfmt, method);
+        testInnerGroupDerivatives(innerSfmt);
+        testInnerGroupOffsets(innerSfmt);
+        testInnerGroupFixedAtCreation();
+        for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::CutoffPeriodic, NonbondedForce::PME})
+            testInnerGroupCloseContact(method, false);
+        testInnerGroupCloseContact(NonbondedForce::NoCutoff, true);
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();

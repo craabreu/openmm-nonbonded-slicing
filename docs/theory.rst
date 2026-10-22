@@ -159,6 +159,67 @@ package vkFFT_ or cuFFT_ to speed-up parallel FFT calculations via batched trans
 .. _cuFFT:                https://docs.nvidia.com/cuda/cufft
 
 
+Inner Force Group Energy
+========================
+
+When an inner force group is enabled, the inner force of a pair is :math:`S(r)` times the bare
+Lennard-Jones plus Coulomb force, where :math:`S` is the quintic switch of the force-directed
+switching scheme of :cite:`Abreu_2020`. Writing the bare potential as :math:`V(r) = \sum_n c_n r^{-n}`
+with :math:`n \in \{12, 6, 1\}`, the energy whose gradient is that force, shifted to vanish at the
+inner cutoff :math:`r_c`, is :math:`\hat V(r) = \sum_n c_n e_n(r)` with
+
+.. math::
+   e_n(r) = n \int_r^{r_c} S(s)\, s^{-(n+1)}\, ds \quad (r_s < r < r_c), \qquad
+   e_n(r) = r^{-n} - K_n \quad (r \le r_s), \qquad K_n = r_s^{-n} - e_n(r_s),
+
+where :math:`r_s` is the inner switching distance. Expanding :math:`S` in powers of :math:`s`
+and integrating term by term gives a closed form whose terms are much larger than their sum:
+the expansion coefficients grow like :math:`(r_s/h)^k` with :math:`h = r_c - r_s`, and the
+integration constants involve integrals from :math:`r_s`. In single precision this loses most of
+the significant digits even for a 0.5–0.8 nm switching range, and in double precision it fails for
+narrow ranges or small :math:`r_s`.
+
+The switch is the smoothstep polynomial :math:`P(u) = 10u^3 - 15u^4 + 6u^5` of
+:math:`u = (r_c - s)/h`. In the variable :math:`y = 1 - s/r_c`, that is :math:`S = P(\gamma y)`
+with :math:`\gamma = r_c/h`, and :math:`s^{-(n+1)} ds = -r_c^{-n} (1-y)^{-(n+1)} dy`, so that
+
+.. math::
+   e_n(r) = n\, r_c^{-n} \left( 10\gamma^3 J_3 - 15\gamma^4 J_4 + 6\gamma^5 J_5 \right), \qquad
+   J_k = \int_0^Y y^k (1-y)^{-(n+1)}\, dy, \qquad Y = 1 - \frac{r}{r_c}.
+
+The only cancellation left is the alternation of the three smoothstep coefficients, which is
+bounded by a factor of about 30 because :math:`\gamma y \le 1` over the integration range. For the
+Lennard-Jones powers, :math:`n \ge 6`, the substitution :math:`x = y/(1-y)` turns each
+:math:`J_k` into a polynomial with positive coefficients in :math:`x = (r_c - r)/r`,
+
+.. math::
+   J_k = \int_0^x t^k (1+t)^{n-k-1}\, dt = \sum_{j=0}^{n-k-1} \binom{n-k-1}{j} \frac{x^{k+j+1}}{k+j+1},
+
+so that :math:`e_{12}` and :math:`e_6` are :math:`x^4` times polynomials of degrees 8 and 2. For
+the Coulomb power, :math:`n = 1`, the integral has a logarithm, and the three :math:`J_k` share it:
+
+.. math::
+   e_1(r) = \frac{\gamma^3}{r_c} \left[ \frac{Y^4 (10 - 15\gamma Y + 6\gamma^2 Y^2)}{1-Y}
+   - 30 \left( (\gamma-1)^2 L_6(Y) + (1-2\gamma)\frac{Y^5}{5} + \frac{Y^4}{4} \right) \right],
+   \qquad L_6(Y) = \sum_{j \ge 6} \frac{Y^j}{j} = -\ln(1-Y) - \sum_{j=1}^{5} \frac{Y^j}{j}.
+
+The function :math:`L_6(Y)/Y^6 = \sum_{m \ge 0} Y^m/(m+6)` is the Lerch transcendent
+:math:`\Phi(Y, 1, 6)`, equivalently :math:`{}_2F_1(1, 6; 7; Y)/6`, and :math:`L_6(Y)` itself is the
+incomplete beta function :math:`B_Y(6, 0)`. None of these is available in the GPU math libraries,
+and the logarithm, the only elementary function in the family, requires the subtraction above, which
+cancels for small :math:`Y`. Since the function does not depend on the switching range, the GPU
+kernels evaluate it from a fixed Chebyshev expansion on :math:`0 \le Y \le 0.8`, accurate to
+:math:`5 \times 10^{-10}`, and from the logarithm above that, where the subtraction loses at most one
+digit. The Reference platform sums the series for :math:`Y < 0.7` and uses :math:`-\ln(1-Y)` minus
+the leading terms above that. With these expressions, :math:`e_{12}` and :math:`e_6` are accurate to
+a few units in the last place and :math:`e_1` to about :math:`3 \times 10^{-6}` in single precision,
+for any switching range. In double precision, :math:`e_{12}` and :math:`e_6` are exact to rounding
+on all platforms and :math:`e_1` on the Reference platform, while the Chebyshev expansion limits
+:math:`e_1` on the GPU platforms to an absolute error of about :math:`3 \times 10^{-10}` (about
+:math:`10^{-9}` relative). These errors affect only the energies: the inner force is computed
+directly as :math:`S(r)` times the bare force. The Reference platform and the constants of the GPU
+kernels are computed by the same code, in ``InnerSplit.h``.
+
 Performance
 ===========
 

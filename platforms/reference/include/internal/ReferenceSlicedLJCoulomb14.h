@@ -12,6 +12,7 @@
 
 #include "openmm/Vec3.h"
 #include "internal/windowsExportNonbondedSlicing.h"
+#include "internal/InnerSplit.h"
 #include <vector>
 
 using namespace std;
@@ -22,6 +23,11 @@ namespace NonbondedSlicing {
 class OPENMM_EXPORT_NONBONDED_SLICING ReferenceSlicedLJCoulomb14 {
 
 public:
+
+    /**
+     * Which part of an interaction to compute: all of it, only its inner part, or all but its inner part.
+     */
+    enum Mode {Full = 0, Inner = 1, Remainder = 2};
 
     /**---------------------------------------------------------------------------------------
 
@@ -51,6 +57,16 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
+       Set the inner force group split used by the Inner and Remainder modes.
+
+       @param split    the inner split
+
+       --------------------------------------------------------------------------------------- */
+
+    void setInnerSplit(const InnerSplit& split);
+
+    /**---------------------------------------------------------------------------------------
+
        Calculate nonbonded 1-4 interactinos
 
        @param atomIndices      atom indices of the atoms in each pair
@@ -61,13 +77,14 @@ public:
        @param sliceEnergies    the energies of the slice
        @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
        @param sliceSoftDeriv  the derivative of the slice's energy with respect to its softness parameter
+       @param mode             which part of the interactions to compute
 
        --------------------------------------------------------------------------------------- */
 
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
                           vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                          double softcoreAlpha, double& sliceSoftDeriv);
+                          double softcoreAlpha, double& sliceSoftDeriv, Mode mode=Full);
 
 private:
    static const int   Coul = 0;
@@ -75,6 +92,7 @@ private:
    static const int   soft = 2;
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
+   InnerSplit innerSplit;
 };
 
 } // namespace NonbondedSlicing

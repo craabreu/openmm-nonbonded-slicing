@@ -35,6 +35,9 @@ void testSerialization() {
     force.setExceptionsUsePeriodicBoundaryConditions(true);
     force.setIncludeDirectSpace(false);
     force.setReciprocalSpaceForceGroup(2);
+    force.setInnerForceGroup(3);
+    force.setInnerCutoffDistance(0.8);
+    force.setInnerSwitchingDistance(0.5);
     force.setUseCuFFT(false);
     force.setReciprocalExclusions(true);
     double alpha = 0.5;
@@ -80,6 +83,9 @@ void testSerialization() {
     ASSERT_EQUAL(force.getReactionFieldDielectric(), force2.getReactionFieldDielectric());
     ASSERT_EQUAL(force.getUseDispersionCorrection(), force2.getUseDispersionCorrection());
     ASSERT_EQUAL(force.getExceptionsUsePeriodicBoundaryConditions(), force2.getExceptionsUsePeriodicBoundaryConditions());
+    ASSERT_EQUAL(force.getInnerForceGroup(), force2.getInnerForceGroup());
+    ASSERT_EQUAL(force.getInnerCutoffDistance(), force2.getInnerCutoffDistance());
+    ASSERT_EQUAL(force.getInnerSwitchingDistance(), force2.getInnerSwitchingDistance());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
@@ -211,8 +217,46 @@ void testMissingReciprocalExclusions() {
     delete copy;
 }
 
+int eraseAttribute(string& xml, const string& name) {
+    // Remove every occurrence of an attribute from an XML string and return how many were removed.
+    string key = " "+name+"=\"";
+    int removed = 0;
+    size_t pos;
+    while ((pos = xml.find(key)) != string::npos) {
+        xml.erase(pos, xml.find('"', pos+key.size()) - pos + 1);
+        removed++;
+    }
+    return removed;
+}
+
+void testMissingInnerForceGroup() {
+    // Version-2 files written without the inner force group load with it disabled.
+
+    SlicedNonbondedForce force(2);
+    force.addParticle(1, 0.1, 0.01);
+    force.addParticle(-1, 0.2, 0.02);
+    force.setInnerForceGroup(3);
+    force.setInnerCutoffDistance(0.8);
+    force.setInnerSwitchingDistance(0.5);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    ASSERT(xml.find("version=\"2\"") != string::npos);
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
+    ASSERT_EQUAL(-1, copy->getInnerForceGroup());
+    ASSERT_EQUAL(0.0, copy->getInnerCutoffDistance());
+    ASSERT_EQUAL(0.0, copy->getInnerSwitchingDistance());
+    delete copy;
+}
+
 void testDeserializeVersion1() {
-    // Files written before the soft-core potential have version 1 and no alpha on scaling parameters.
+    // Files written before the soft-core potential and the inner force group have version 1, no
+    // alpha on scaling parameters, and no inner force group properties.
 
     SlicedNonbondedForce force(2);
     force.addParticle(1, 0.1, 0.01);
@@ -226,18 +270,17 @@ void testDeserializeVersion1() {
     size_t pos = xml.find("version=\"2\"");
     ASSERT(pos != string::npos);
     xml.replace(pos, 11, "version=\"1\"");
-    int removed = 0;
-    while ((pos = xml.find(" softcoreAlpha=\"")) != string::npos) {
-        xml.erase(pos, xml.find('"', pos+16) - pos + 1);
-        removed++;
-    }
-    ASSERT_EQUAL(1, removed);
+    ASSERT_EQUAL(1, eraseAttribute(xml, "softcoreAlpha"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
     stringstream buffer2(xml);
     SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
     ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
     ASSERT_EQUAL(force.getParticleSubset(1), copy->getParticleSubset(1));
     ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
     ASSERT_EQUAL(0.0, copy->getScalingParameterSoftcoreAlpha(0));
+    ASSERT_EQUAL(-1, copy->getInnerForceGroup());
     delete copy;
 }
 
@@ -270,6 +313,7 @@ int main() {
         testIgnoresSoftcoreSlicesNode();
         testMissingUseCuFFT();
         testMissingReciprocalExclusions();
+        testMissingInnerForceGroup();
     }
     catch(const exception& e) {
         cout << "exception: " << e.what() << endl;

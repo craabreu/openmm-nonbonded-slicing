@@ -13,6 +13,7 @@
 
 #include "openmm/reference/ReferencePairIxn.h"
 #include "openmm/reference/ReferenceNeighborList.h"
+#include "internal/InnerSplit.h"
 
 using namespace std;
 using namespace OpenMM;
@@ -31,6 +32,7 @@ class ReferenceSlicedLJCoulombIxn {
       const OpenMM::NeighborList* neighborList;
       OpenMM::Vec3 periodicBoxVectors[3];
       double cutoffDistance, switchingDistance;
+      InnerSplit innerSplit;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
@@ -66,6 +68,9 @@ class ReferenceSlicedLJCoulombIxn {
       void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
                            vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs) const;
+
+      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r,
+                              double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy) const;
 
 
    public:
@@ -183,6 +188,37 @@ class ReferenceSlicedLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
 
       void setSoftcoreAlphas(const vector<double>& alphas);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set the inner force group split.  When enabled, the direct-space interactions computed by
+         calculatePairIxn exclude their inner part, which is computed by calculateInnerIxn instead.
+
+         @param split    the inner split
+
+         --------------------------------------------------------------------------------------- */
+
+      void setInnerSplit(const InnerSplit& split);
+
+      /**---------------------------------------------------------------------------------------
+
+         Calculate the inner part of all direct-space pair interactions
+
+         @param numberOfAtoms    number of atoms
+         @param atomCoordinates  atom coordinates
+         @param atomSubsets      atom subsets
+         @param atomParameters   atom parameters (sigma/2, 2*sqrt(epsilon), charge)
+         @param sliceLambdas     Coulomb and LJ scaling parameters for each slice
+         @param exclusions       atom exclusion indices
+         @param forces           force array (forces added)
+         @param sliceEnergies    the energy of each slice
+
+         --------------------------------------------------------------------------------------- */
+
+      void calculateInnerIxn(int numberOfAtoms, vector<OpenMM::Vec3>& atomCoordinates, const vector<int>& atomSubsets,
+                           const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas,
+                           const vector<set<int> >& exclusions, vector<OpenMM::Vec3>& forces,
+                           vector<vector<double>>& sliceEnergies) const;
 
       /**---------------------------------------------------------------------------------------
 
