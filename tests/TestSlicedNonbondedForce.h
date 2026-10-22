@@ -2036,7 +2036,19 @@ void testSoftcoreFailedUpdateKeepsAlpha() {
 
     force->setExceptionParameters(0, 0, 2, 0.0, 0.3, 0.0);
     force->updateParametersInContext(context);
-    ASSERT(abs(context.getState(State::Energy).getPotentialEnergy()-original) > 1e-3);
+    double softened = context.getState(State::Energy).getPotentialEnergy();
+    ASSERT(abs(softened-original) > 1e-3);
+
+    // The GPU platforms also reject a particle parameter offset with a new parameter, a check made
+    // after the exceptions are compared. The Reference platform does not check offsets.
+
+    if (platform.getName() != "Reference") {
+        force->setUseSoftcorePotential(0, 1, 3.0);
+        force->addGlobalParameter("delta", 0.0);
+        force->addParticleParameterOffset("delta", 0, 0.1, 0.0, 0.0);
+        ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+        assertEqualTo(softened, context.getState(State::Energy).getPotentialEnergy(), TOL);
+    }
 }
 
 void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
