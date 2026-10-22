@@ -69,7 +69,10 @@ public:
      * (including 1-4 exceptions) is split into a short-range part, switched off smoothly between
      * the inner switching distance and the inner cutoff distance, which is computed in the inner
      * force group, and a remainder, which stays in the force group of this force.  The inner force
-     * group cannot be used with soft-core scaling parameters.
+     * group cannot be used with soft-core scaling parameters, and the inner cutoff distance cannot
+     * exceed the switching distance when a switching function is used.  The inner force group, cutoff
+     * distance and switching distance are fixed when a Context is created (call reinitialize() to
+     * change them).
      */
     int getInnerForceGroup() const {
         return innerForceGroup;

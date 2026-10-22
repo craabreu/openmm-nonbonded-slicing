@@ -480,12 +480,17 @@ public:
      * scaling parameters and parameter offsets apply to both parts.  This is the force splitting
      * used for multiple time-step integration in :cite:`Abreu_2020`.
      *
-     * The inner force group must differ from the force group of this force and from the reciprocal
-     * space force group, and requires 0 < inner switching distance < inner cutoff distance <=
-     * cutoff distance.  Since the split assumes the bare Lennard-Jones potential, the inner force
-     * group cannot be used with soft-core scaling parameters (see ``softcoreAlpha`` in
-     * :func:`addScalingParameter`).  Like other force group settings, changes take effect when a new
-     * :OpenMM:`Context` is created or an existing one is reinitialized.
+     * The inner force group must differ from the force group of this force and, with the Ewald, PME
+     * and LJPME methods, from the reciprocal space force group.  It requires 0 < inner switching
+     * distance < inner cutoff distance <= cutoff distance and, if a switching function is used
+     * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
+     * the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
+     * bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling
+     * parameters (see ``softcoreAlpha`` in :func:`addScalingParameter`).
+     *
+     * The inner force group, the inner cutoff distance and the inner switching distance are fixed
+     * when a :OpenMM:`Context` is created: changing them afterwards has no effect on that Context
+     * until its ``reinitialize()`` method is called.
      *
      * Parameters
      * ----------
@@ -503,7 +508,10 @@ public:
      */
     double getInnerCutoffDistance() const;
     /**
-     * Set the inner cutoff distance.
+     * Set the inner cutoff distance.  It must not exceed the cutoff distance nor, if a switching
+     * function is used, the switching distance (see :func:`setInnerForceGroup`).  Like the inner
+     * force group, it is fixed when a :OpenMM:`Context` is created and only changes in an existing
+     * one when its ``reinitialize()`` method is called.
      *
      * Parameters
      * ----------
@@ -521,7 +529,9 @@ public:
      */
     double getInnerSwitchingDistance() const;
     /**
-     * Set the inner switching distance.
+     * Set the inner switching distance.  Like the inner force group, it is fixed when a
+     * :OpenMM:`Context` is created and only changes in an existing one when its ``reinitialize()``
+     * method is called.
      *
      * Parameters
      * ----------

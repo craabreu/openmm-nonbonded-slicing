@@ -1807,6 +1807,14 @@ void testInnerGroupErrors() {
     build([](SlicedNonbondedForce& f) { f.setInnerCutoffDistance(1.2); }, true);      // r_c must be <= cutoff
     build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(0); }, true);            // same as direct group
     build([](SlicedNonbondedForce& f) { f.setReciprocalSpaceForceGroup(1); }, true);  // same as reciprocal group
+    // Without reciprocal space, the reciprocal space force group is irrelevant
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic); f.setReciprocalSpaceForceGroup(1); }, false);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setReciprocalSpaceForceGroup(1); }, false);
+    // With a switching function, r_c must be <= the switching distance
+    build([](SlicedNonbondedForce& f) { f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, true);
+    build([](SlicedNonbondedForce& f) { f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.8); }, false);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, true);
+    build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, false);
     build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
     build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
     // The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
@@ -1936,7 +1944,9 @@ public:
         SlicedNonbondedForce* force = new SlicedNonbondedForce(numSubsets);
         force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
         force->setCutoffDistance(cutoff);
-        if (method == NonbondedForce::CutoffPeriodic || method == NonbondedForce::PME || method == NonbondedForce::Ewald) {
+        // The inner cutoff cannot exceed the switching distance, so a switching function is only used when
+        // the inner cutoff is inside it.
+        if ((method == NonbondedForce::CutoffPeriodic || method == NonbondedForce::PME || method == NonbondedForce::Ewald) && rc <= 0.9) {
             force->setUseSwitchingFunction(true);
             force->setSwitchingDistance(0.9);
         }
@@ -2173,6 +2183,54 @@ void testInnerGroupOffsets(OpenMM_SFMT::SFMT& sfmt) {
     for (int i = 0; i < data.numParticles; i++)
         assertEqualVec(expected[i], found[i], tol);
     delete system;
+}
+
+void testInnerGroupFixedAtCreation() {
+    // The inner force group, inner cutoff and inner switching distance are fixed when the Context is
+    // created: changing them on the force afterwards must not change the Context's split.
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod(SlicedNonbondedForce::PME);
+    force->setCutoffDistance(1.0);
+    force->setReciprocalSpaceForceGroup(2);
+    force->addParticle(0.6, 0.3, 0.7);
+    force->addParticle(-0.4, 0.3, 0.7);
+    force->addParticle(0.2, 0.25, 0.5);
+    force->addException(0, 2, 0.1, 0.25, 0.3);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.5);
+    force->setInnerCutoffDistance(0.8);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.6, 0, 0), Vec3(0, 0.45, 0)});
+    auto energies = [&]() {
+        vector<double> result;
+        result.push_back(context.getState(State::Energy).getPotentialEnergy());
+        for (int group = 0; group < 4; group++)
+            result.push_back(context.getState(State::Energy, false, 1<<group).getPotentialEnergy());
+        return result;
+    };
+    vector<double> expected = energies();
+    ASSERT(fabs(expected[2]) > 1e-3);
+    double tol = groupTolerance();
+    for (int group : {-1, 3}) {
+        force->setInnerForceGroup(group);
+        vector<double> found = energies();
+        for (int i = 0; i < expected.size(); i++)
+            assertEqualTo(expected[i], found[i], tol);
+    }
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.3);
+    force->setInnerCutoffDistance(0.5);
+    vector<double> found = energies();
+    for (int i = 0; i < expected.size(); i++)
+        assertEqualTo(expected[i], found[i], tol);
 }
 
 void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool useSwitch) {
@@ -2974,6 +3032,7 @@ int main(int argc, char* argv[]) {
             testInnerGroupConsistency(innerSfmt, method);
         testInnerGroupDerivatives(innerSfmt);
         testInnerGroupOffsets(innerSfmt);
+        testInnerGroupFixedAtCreation();
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();

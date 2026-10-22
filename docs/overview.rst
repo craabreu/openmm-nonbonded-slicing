@@ -153,11 +153,15 @@ parameter offsets apply to both parts.
    # bonded forces in group 0; steps of 90, 3 and 0.5 fs
    integrator = openmm.MTSIntegrator(90*unit.femtoseconds, [(2, 1), (1, 30), (0, 180)])
 
-The inner force group must differ from the force group of the force and from its reciprocal-space
-force group, and requires :math:`0 < r_s < r_c \le` cutoff distance. Since the split assumes the
-bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling parameters
-(a positive ``softcoreAlpha``). Changing these settings requires a new :OpenMM:`Context`, as for any
-force group.
+The inner force group must differ from the force group of the force and, with Ewald, PME or LJPME,
+from its reciprocal-space force group. It requires :math:`0 < r_s < r_c \le` cutoff distance and,
+when the Lennard-Jones switching function is used, :math:`r_c \le` switching distance: the inner
+force is the bare Lennard-Jones force times :math:`S(r)`, which beyond the switching distance would
+exceed the switched force and leave the remainder with a correction of opposite sign. Since the
+split assumes the bare Lennard-Jones potential, the inner force group cannot be used with soft-core
+scaling parameters (a positive ``softcoreAlpha``). The inner force group, switching distance and
+cutoff distance are fixed when a :OpenMM:`Context` is created; changing them afterwards takes
+effect only after the Context's ``reinitialize()`` method is called.
 
 Installation
 ============
