@@ -363,7 +363,7 @@ void SlicedNonbondedForceImpl::checkSoftcoreSlices() const {
     // checked against the slices whose Lennard-Jones interactions were scaled at initialization.
 
     vector<double> alphas = getSliceSoftcoreAlphas(owner);
-    for (int slice = 0; slice < alphas.size(); slice++)
+    for (int slice = 0; slice < (int) alphas.size(); slice++)
         if (alphas[slice] > 0 && slicesWithLJScaling.find(slice) == slicesWithLJScaling.end())
             throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
 }

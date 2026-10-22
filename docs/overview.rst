@@ -53,7 +53,10 @@ the slice (which therefore must be defined) and :math:`\alpha` is typically 0.5.
 finite as :math:`r \to 0` whenever :math:`\lambda < 1` and :math:`\alpha > 0`, and it reduces to the usual
 one when :math:`\lambda = 1` or :math:`\alpha = 0`. Keep :math:`\lambda` between 0 and 1: for
 :math:`\lambda > 1`, the term :math:`\alpha (1 - \lambda)` is negative and the potential becomes singular
-at :math:`r = \left[ \alpha (\lambda - 1) \right]^{1/6} \sigma`.
+at :math:`r = \left[ \alpha (\lambda - 1) \right]^{1/6} \sigma`. Since only the Lennard-Jones term
+is softened, scale the Coulomb contribution of the slice with its own parameter
+(``includeCoulomb=True, includeLJ=False`` in ``addScalingParameter``) and turn it off before
+softening the Lennard-Jones term.
 
 Since the energy is no longer linear in :math:`\lambda`, its derivative gains a term,
 
@@ -66,8 +69,9 @@ direct-space Lennard-Jones term and to 1-4 exceptions, including the additive po
 at the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion
 correction are not softened, an approximation accurate to
 :math:`O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)`. As with the usual potential, do not combine
-LJPME with a switching function: the Reference platform ignores it, while the GPU platforms apply it
-to the direct-space Lennard-Jones term.
+LJPME with a switching function: the Reference platform ignores the switching function, while the
+CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
+``NonbondedForce`` does on each platform.
 
 .. warning::
    For a soft-core slice, the derivative with respect to its Lennard-Jones scaling parameter is
