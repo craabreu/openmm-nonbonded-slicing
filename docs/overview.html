@@ -55,24 +55,67 @@ slice contributions or sums thereof via <a class="extlink-OpenMM reference exter
 <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> and <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>. Derivatives are only computed along with
 the energy: without <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code>, they are NaN.</p>
 <p>A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
-both, of any number of slices. Since the energy is linear in the scaling parameters, the derivative
-with respect to a parameter <span class="math notranslate nohighlight">\(\lambda\)</span> is the sum of the unscaled contributions it multiplies:</p>
+both, of any number of slices. Unless a slice uses the soft-core potential (see below), the energy
+is linear in the scaling parameters, and the derivative with respect to a parameter
+<span class="math notranslate nohighlight">\(\lambda\)</span> is the sum of the unscaled contributions it multiplies:</p>
 <div class="math notranslate nohighlight">
 \[\frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
 + \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J},\]</div>
 <p>where <span class="math notranslate nohighlight">\(S^{elec}_\lambda\)</span> and <span class="math notranslate nohighlight">\(S^{vdW}_\lambda\)</span> are the sets of slices whose electrostatic
-and van der Waals contributions are scaled by <span class="math notranslate nohighlight">\(\lambda\)</span>. This derivative does not depend on the
-values of the scaling parameters. For instance, a parameter that scales both contributions of a
-single slice <em>I, J</em> yields its full energy <span class="math notranslate nohighlight">\(E^{vdW}_{I,J}+E^{elec}_{I,J}\)</span>, while one that
-scales the electrostatic contributions of several slices yields their sum.</p>
+and van der Waals contributions are scaled by <span class="math notranslate nohighlight">\(\lambda\)</span>. Without soft-core slices, this
+derivative does not depend on the values of the scaling parameters. For instance, a parameter that
+scales both contributions of a single slice <em>I, J</em> yields its full energy
+<span class="math notranslate nohighlight">\(E^{vdW}_{I,J}+E^{elec}_{I,J}\)</span>, while one that scales the electrostatic contributions of
+several slices yields their sum.</p>
+<section id="soft-core-lennard-jones-potential">
+<h2>Soft-core Lennard-Jones Potential<a class="headerlink" href="#soft-core-lennard-jones-potential" title="Link to this heading">¶</a></h2>
+<p>Driving <span class="math notranslate nohighlight">\(\lambda^{vdW}_{I,J}\)</span> to zero with the usual Lennard-Jones potential leaves a
+singularity at <span class="math notranslate nohighlight">\(r = 0\)</span> that makes free-energy calculations hard to converge. Calling
+<code class="docutils literal notranslate"><span class="pre">setUseSoftcorePotential(I,</span> <span class="pre">J,</span> <span class="pre">alpha)</span></code> switches slice <em>I, J</em> to the soft-core form of
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id6" title="Thomas C. Beutler, Alan E. Mark, René C. van Schaik, Paul R. Gerber, and Wilfred F. van Gunsteren. Avoiding singularities and numerical instabilities in free energy calculations based on molecular simulations. Chemical Physics Letters, 222(6):529–539, June 1994. doi:10.1016/0009-2614(94)00397-1.">1</a>]</span>, in which each pair interacts through</p>
+<div class="math notranslate nohighlight">
+\[U(r) = 4 \lambda \epsilon \left( s^2 - s \right), \qquad
+s = \frac{1}{\alpha (1 - \lambda) + (r/\sigma)^6},\]</div>
+<p>where <span class="math notranslate nohighlight">\(\lambda\)</span> is the scaling parameter that multiplies the Lennard-Jones contributions of
+the slice (which therefore must be defined) and <span class="math notranslate nohighlight">\(\alpha\)</span> is typically 0.5. The potential remains
+finite as <span class="math notranslate nohighlight">\(r \to 0\)</span> whenever <span class="math notranslate nohighlight">\(\lambda &lt; 1\)</span> and <span class="math notranslate nohighlight">\(\alpha &gt; 0\)</span>, and it reduces to the usual
+one when <span class="math notranslate nohighlight">\(\lambda = 1\)</span> or <span class="math notranslate nohighlight">\(\alpha = 0\)</span>. Keep <span class="math notranslate nohighlight">\(\lambda\)</span> between 0 and 1: for
+<span class="math notranslate nohighlight">\(\lambda &gt; 1\)</span>, the term <span class="math notranslate nohighlight">\(\alpha (1 - \lambda)\)</span> is negative and the potential becomes singular
+at <span class="math notranslate nohighlight">\(r = \left[ \alpha (\lambda - 1) \right]^{1/6} \sigma\)</span>. Since only the Lennard-Jones term
+is softened, scale the Coulomb contribution of the slice with its own parameter
+(<code class="docutils literal notranslate"><span class="pre">includeCoulomb=True,</span> <span class="pre">includeLJ=False</span></code> in <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code>) and turn it off before
+softening the Lennard-Jones term.</p>
+<p>Since the energy is no longer linear in <span class="math notranslate nohighlight">\(\lambda\)</span>, its derivative gains a term,</p>
+<div class="math notranslate nohighlight">
+\[\frac{\partial}{\partial \lambda} \left[ \lambda\, 4 \epsilon (s^2 - s) \right]
+= 4 \epsilon (s^2 - s) + 4 \lambda \epsilon \alpha s^2 (2 s - 1),\]</div>
+<p>which the plugin includes in the derivatives it reports. The soft-core form applies to the
+direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift
+at the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion
+correction are not softened, an approximation accurate to
+<span class="math notranslate nohighlight">\(O\left(\alpha (1-\lambda) (\sigma/r_c)^6\right)\)</span>. As with the usual potential, do not combine
+LJPME with a switching function: the Reference platform ignores the switching function, while the
+CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM’s
+<code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code> does on each platform.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>For a soft-core slice, the derivative with respect to its Lennard-Jones scaling parameter is
+<strong>not</strong> the van der Waals energy of the slice, and it changes with <span class="math notranslate nohighlight">\(\lambda\)</span>. This holds
+even at <span class="math notranslate nohighlight">\(\lambda = 1\)</span>: the potentials coincide there, but the derivative keeps a term
+proportional to <span class="math notranslate nohighlight">\(\alpha\)</span>. To obtain that energy, either evaluate the slice in a separate
+force without the soft-core potential or, when that scaling parameter scales nothing else, take
+the energy difference <span class="math notranslate nohighlight">\(E(\lambda = 1) - E(\lambda = 0)\)</span>, since <span class="math notranslate nohighlight">\(\lambda = 0\)</span> gives
+zero soft-core Lennard-Jones energy for the slice and <span class="math notranslate nohighlight">\(\lambda = 1\)</span> gives the usual one.</p>
+</div>
 <p>With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
 calling <code class="docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code>, as in multiple time stepping. As in <a class="reference external" href="https://openmm.org">OpenMM</a>’s
 NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
 exceptions are computed in the direct-space force group by default. Since they only cancel part of
 the reciprocal-space sum, they should be integrated along with it whenever the two groups are
-evaluated at different times <span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id4" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">1</a>, <a class="reference internal" href="references.html#id5" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">2</a>]</span>. Calling
+evaluated at different times <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id4" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="references.html#id5" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
 <code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves them to the reciprocal-space force group, where they are
 also kept when direct space is turned off with <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>.</p>
+</section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
 <p>The plugin is distributed on <a class="reference external" href="https://anaconda.org/conda-forge/openmm-nonbonded-slicing">conda-forge</a>:</p>
@@ -167,6 +210,7 @@ make<span class="w"> </span>PythonInstall
 <h3><a href="index.html">Table of Contents</a></h3>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#soft-core-lennard-jones-potential">Soft-core Lennard-Jones Potential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#building-from-source">Building from Source</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#test-cases">Test Cases</a></li>

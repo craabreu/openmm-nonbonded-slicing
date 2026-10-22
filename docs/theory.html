@@ -63,7 +63,7 @@ focuses on the reciprocal-space and background energy parts.</p>
 <h2>Sliced Background Energy<a class="headerlink" href="#sliced-background-energy" title="Link to this heading">¶</a></h2>
 <p>In the case of systems with non-zero net charge, it is necessary to add the energy of
 interaction with a neutralizing background charge. The background energy is given by
-<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">3</a>]</span></p>
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">4</a>]</span></p>
 <div class="math notranslate nohighlight">
 \[E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.\]</div>
 <p>where <span class="math notranslate nohighlight">\(Q = \sum_{i=1}^N q_i\)</span> is the total charge of the system.
@@ -139,7 +139,7 @@ S_I(\mathbf k) \cdot S_J(\mathbf k).\]</div>
 <section id="sliced-pme-implementation">
 <h2>Sliced PME Implementation<a class="headerlink" href="#sliced-pme-implementation" title="Link to this heading">¶</a></h2>
 <p>Each subset-specific structure factor <span class="math notranslate nohighlight">\(S(\mathbf k)\)</span> can be calculated using the smooth
-Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">4</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
+Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">5</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
 all slices. In the case of forces, <em>n</em> additional inverse FFT calculations are necessary.
 Therefore, in a single processor and for a fixed number of particles, the computational effort
 scales approximately linearly with the number of subsets (not the number of slices). In a GPU, as

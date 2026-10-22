@@ -14,6 +14,11 @@ Changelog
   (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
   1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
+* ``setUseSoftcorePotential(subset1, subset2, alpha)`` switches a slice to the Beutler soft-core
+  Lennard-Jones potential, with derivatives with respect to the slice's scaling parameter that
+  account for the non-linear form. Available on all platforms and with every nonbonded method
+  (with LJPME, as for the usual potential, without a switching function).
+  For such a slice, that derivative is no longer the slice's van der Waals energy.
 
 **Bug fixes**
 
@@ -21,6 +26,8 @@ Changelog
   compile with PME or LJPME when another force in the same context requests derivatives.
 * GPU platforms: after ``updateParametersInContext``, exceptions keep the scaling parameters of
   their own slice instead of those of slice 0.
+* OpenCL on non-NVIDIA devices: LJPME with no charges and a requested energy parameter derivative
+  no longer fails with ``ComputeArray has not been initialized``.
 * OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
   using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
   excluded pairs is now fixed to a valid value. Results were not affected.

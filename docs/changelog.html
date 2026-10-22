@@ -50,6 +50,11 @@ so both should be evaluated together when they are integrated with different tim
 (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
 1798, 2010). With this option, these terms are also kept when <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>
 is used. The default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, keeps the behavior of OpenMM’s <code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">setUseSoftcorePotential(subset1,</span> <span class="pre">subset2,</span> <span class="pre">alpha)</span></code> switches a slice to the Beutler soft-core
+Lennard-Jones potential, with derivatives with respect to the slice’s scaling parameter that
+account for the non-linear form. Available on all platforms and with every nonbonded method
+(with LJPME, as for the usual potential, without a switching function).
+For such a slice, that derivative is no longer the slice’s van der Waals energy.</p></li>
 </ul>
 <p><strong>Bug fixes</strong></p>
 <ul class="simple">
@@ -57,6 +62,8 @@ is used. The default, <code class="docutils literal notranslate"><span class="pr
 compile with PME or LJPME when another force in the same context requests derivatives.</p></li>
 <li><p>GPU platforms: after <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, exceptions keep the scaling parameters of
 their own slice instead of those of slice 0.</p></li>
+<li><p>OpenCL on non-NVIDIA devices: LJPME with no charges and a requested energy parameter derivative
+no longer fails with <code class="docutils literal notranslate"><span class="pre">ComputeArray</span> <span class="pre">has</span> <span class="pre">not</span> <span class="pre">been</span> <span class="pre">initialized</span></code>.</p></li>
 <li><p>OpenCL on CPU devices: the direct-space kernel could read a slice scaling parameter out of bounds,
 using the stale subset of a padding atom in an excluded pair, and crash. The slice index of
 excluded pairs is now fixed to a valid value. Results were not affected.</p></li>
