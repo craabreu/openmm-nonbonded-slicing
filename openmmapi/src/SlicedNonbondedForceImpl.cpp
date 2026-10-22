@@ -12,7 +12,6 @@
   #define _USE_MATH_DEFINES // Needed to get M_PI
 #endif
 #include "internal/SlicedNonbondedForceImpl.h"
-#include "internal/SoftcoreUtilities.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 #include "NonbondedSlicingKernels.h"
@@ -125,15 +124,11 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         owner.getExceptionParameterOffset(index, parameter, offset, charge, sigma, epsilon);
         offsetParams.insert(parameter);
     }
-    slicesWithLJScaling.clear();
     for (int index = 0; index < owner.getNumScalingParameters(); index++) {
         owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
         if (offsetParams.find(parameter) != offsetParams.end())
             throw OpenMMException("SlicedNonbondedForce: Cannot use a global parameter for both slice energy scaling and parameter offset.");
-        if (includeLJ)
-            slicesWithLJScaling.insert(sliceIndex(subset1, subset2));
     }
-    checkSoftcoreSlices();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
 }
 
@@ -358,18 +353,7 @@ vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System&
     return dispersionCorrections;
 }
 
-void SlicedNonbondedForceImpl::checkSoftcoreSlices() const {
-    // The kernels keep the scaling parameters they were created with, so the soft-core slices are
-    // checked against the slices whose Lennard-Jones interactions were scaled at initialization.
-
-    vector<double> alphas = getSliceSoftcoreAlphas(owner);
-    for (int slice = 0; slice < (int) alphas.size(); slice++)
-        if (alphas[slice] > 0 && slicesWithLJScaling.find(slice) == slicesWithLJScaling.end())
-            throw OpenMMException("SlicedNonbondedForce: A soft-core slice must have a scaling parameter that applies to Lennard-Jones interactions.");
-}
-
 void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
-    checkSoftcoreSlices();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().copyParametersToContext(context, owner);
     context.systemChanged();
 }

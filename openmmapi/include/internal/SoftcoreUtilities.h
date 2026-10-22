@@ -13,6 +13,7 @@
 
 #include "SlicedNonbondedForce.h"
 #include <algorithm>
+#include <string>
 #include <vector>
 
 namespace NonbondedSlicing {
@@ -23,10 +24,16 @@ namespace NonbondedSlicing {
  */
 inline std::vector<double> getSliceSoftcoreAlphas(const SlicedNonbondedForce& force) {
     std::vector<double> alphas(force.getNumSlices(), 0.0);
-    int numSubsets = force.getNumSubsets();
-    for (int i = 0; i < numSubsets; i++)
-        for (int j = i; j < numSubsets; j++)
-            alphas[sliceIndex(i, j)] = force.getSoftcoreAlpha(i, j);
+    for (int index = 0; index < force.getNumScalingParameters(); index++) {
+        double alpha = force.getScalingParameterSoftcoreAlpha(index);
+        if (alpha > 0) {
+            std::string parameter;
+            int subset1, subset2;
+            bool includeCoulomb, includeLJ;
+            force.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
+            alphas[sliceIndex(subset1, subset2)] = alpha;
+        }
+    }
     return alphas;
 }
 

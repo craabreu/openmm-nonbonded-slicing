@@ -1811,10 +1811,8 @@ void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod metho
         for (int k = 0; k < numParticles; k++)
             sliced->setParticleSubset(k, subset[k]);
         sliced->addGlobalParameter("lambda", lambda);
-        sliced->addScalingParameter("lambda", 0, 1, true, true);
+        sliced->addScalingParameter("lambda", 0, 1, true, true, softcore ? alpha : 0.0);
         sliced->addEnergyParameterDerivative("lambda");
-        if (softcore)
-            sliced->setUseSoftcorePotential(0, 1, alpha);
         return sliced;
     };
     SlicedNonbondedForce* slicedSoft = makeSliced(true);
@@ -1899,18 +1897,6 @@ void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod metho
     check(0.0);
     check(1.0);
     check(0.75);
-
-    // The soft-core parameter can be changed in an existing context
-
-    slicedSoft->setUseSoftcorePotential(0, 1, 1.0);
-    slicedSoft->updateParametersInContext(contextSoft);
-    contextDiff.setParameter("alpha", 1.0);
-    check(lambda);
-
-    // But the soft-core potential cannot be enabled in a context created without it
-
-    slicedHard->setUseSoftcorePotential(0, 1, alpha);
-    ASSERT(throwsException([&]() { slicedHard->updateParametersInContext(contextHard); }));
 }
 
 void testSoftcoreOverlap() {
@@ -1926,9 +1912,8 @@ void testSoftcoreOverlap() {
     sliced->addParticle(0.0, sigma, epsilon);
     sliced->setParticleSubset(1, 1);
     sliced->addGlobalParameter("lambda", lambda);
-    sliced->addScalingParameter("lambda", 0, 1, false, true);
+    sliced->addScalingParameter("lambda", 0, 1, false, true, alpha);
     sliced->addEnergyParameterDerivative("lambda");
-    sliced->setUseSoftcorePotential(0, 1, alpha);
     system.addForce(sliced);
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
@@ -1944,145 +1929,6 @@ void testSoftcoreOverlap() {
     assertEqualVec(Vec3(-force, 0, 0), state.getForces()[0], TOL);
     assertEqualVec(Vec3(force, 0, 0), state.getForces()[1], TOL);
     assertEqualTo(derivative, state.getEnergyParameterDerivatives().at("lambda"), TOL);
-}
-
-void testSoftcoreFailedUpdateLeavesContextUntouched() {
-    // A rejected updateParametersInContext call must not apply any of the new parameters.
-
-    auto makeForce = [](int subset2, double alpha) {
-        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
-        force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-        force->addParticle(0.5, 0.3, 0.8);
-        force->addParticle(-0.5, 0.35, 0.6);
-        force->addParticle(0.25, 0.3, 0.7);
-        force->setParticleSubset(1, 1);
-        force->setParticleSubset(2, subset2);
-        force->addGlobalParameter("lambda", 0.5);
-        force->addScalingParameter("lambda", 0, 1, true, true);
-        force->addScalingParameter("lambda", 1, 1, true, true);
-        force->setUseSoftcorePotential(0, 1, alpha);
-        return force;
-    };
-    vector<Vec3> positions = {Vec3(0, 0, 0), Vec3(0.28, 0, 0), Vec3(0, 0.31, 0.05)};
-    auto makeSystem = [&](System& system, SlicedNonbondedForce* force) {
-        for (int i = 0; i < 3; i++)
-            system.addParticle(1.0);
-        system.addForce(force);
-    };
-    auto energy = [&](Context& context) {
-        context.setPositions(positions);
-        return context.getState(State::Energy).getPotentialEnergy();
-    };
-
-    System system;
-    SlicedNonbondedForce* force = makeForce(0, 0.0);
-    makeSystem(system, force);
-    VerletIntegrator integrator(0.01);
-    Context context(system, integrator, platform);
-    double original = energy(context);
-
-    System changedSystem;
-    makeSystem(changedSystem, makeForce(1, 0.0));
-    VerletIntegrator changedIntegrator(0.01);
-    Context changedContext(changedSystem, changedIntegrator, platform);
-    double changed = energy(changedContext);
-    ASSERT(abs(changed-original) > 1e-3);
-
-    // Change a subset and enable soft-core in the same call: the call fails and changes nothing.
-
-    force->setParticleSubset(2, 1);
-    force->setUseSoftcorePotential(0, 1, 0.5);
-    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
-    assertEqualTo(original, energy(context), TOL);
-
-    // Without the soft-core request, the same update succeeds and gives the changed energy.
-
-    force->setUseSoftcorePotential(0, 1, 0.0);
-    force->updateParametersInContext(context);
-    assertEqualTo(changed, energy(context), TOL);
-}
-
-void testSoftcoreUpdateUsesContextScaling() {
-    // A Context keeps the scaling parameters it was created with, so updateParametersInContext
-    // validates the soft-core slices against those, not against the current ones of the force.
-
-    System system;
-    for (int i = 0; i < 3; i++)
-        system.addParticle(1.0);
-    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
-    force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-    force->addParticle(0.5, 0.3, 0.8);
-    force->addParticle(-0.5, 0.35, 0.6);
-    force->addParticle(0.25, 0.3, 0.7);
-    force->setParticleSubset(1, 1);
-    force->setParticleSubset(2, 1);
-    force->addGlobalParameter("lambda", 0.5);
-    force->addScalingParameter("lambda", 0, 1, false, true);
-    force->setUseSoftcorePotential(0, 1, 0.5);
-    system.addForce(force);
-    VerletIntegrator integrator(0.01);
-    Context context(system, integrator, platform);
-
-    // The Context still scales the Lennard-Jones interactions of slice (0,1), so a new alpha is valid.
-
-    force->setScalingParameter(0, "lambda", 0, 1, true, false);
-    force->setUseSoftcorePotential(0, 1, 0.7);
-    force->updateParametersInContext(context);
-    force->setScalingParameter(0, "lambda", 0, 1, false, true);
-
-    // The Context does not scale slice (1,1), so it cannot become soft-core.
-
-    force->addScalingParameter("lambda", 1, 1, false, true);
-    force->setUseSoftcorePotential(1, 1, 0.5);
-    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
-}
-
-void testSoftcoreFailedUpdateKeepsAlpha() {
-    // An update that fails for a reason unrelated to the soft-core potential must not apply a new alpha.
-
-    System system;
-    for (int i = 0; i < 3; i++)
-        system.addParticle(1.0);
-    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
-    force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-    force->addParticle(0.5, 0.3, 0.8);
-    force->addParticle(-0.5, 0.35, 0.6);
-    force->addParticle(0.25, 0.3, 0.7);
-    force->setParticleSubset(1, 1);
-    force->addException(0, 2, 0.0, 0.3, 0.0);
-    force->addGlobalParameter("lambda", 0.5);
-    force->addScalingParameter("lambda", 0, 1, true, true);
-    force->setUseSoftcorePotential(0, 1, 0.5);
-    system.addForce(force);
-    VerletIntegrator integrator(0.01);
-    Context context(system, integrator, platform);
-    context.setPositions({Vec3(0, 0, 0), Vec3(0.28, 0, 0), Vec3(0, 0.31, 0.05)});
-    double original = context.getState(State::Energy).getPotentialEnergy();
-
-    // Turning an excluded exception into a non-excluded one makes the update fail.
-
-    force->setUseSoftcorePotential(0, 1, 2.0);
-    force->setExceptionParameters(0, 0, 2, 0.1, 0.3, 0.5);
-    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
-    assertEqualTo(original, context.getState(State::Energy).getPotentialEnergy(), TOL);
-
-    // The same alpha alone is accepted and changes the energy.
-
-    force->setExceptionParameters(0, 0, 2, 0.0, 0.3, 0.0);
-    force->updateParametersInContext(context);
-    double softened = context.getState(State::Energy).getPotentialEnergy();
-    ASSERT(abs(softened-original) > 1e-3);
-
-    // The GPU platforms also reject a particle parameter offset with a new parameter, a check made
-    // after the exceptions are compared. The Reference platform does not check offsets.
-
-    if (platform.getName() != "Reference") {
-        force->setUseSoftcorePotential(0, 1, 3.0);
-        force->addGlobalParameter("delta", 0.0);
-        force->addParticleParameterOffset("delta", 0, 0.1, 0.0, 0.0);
-        ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
-        assertEqualTo(softened, context.getState(State::Energy).getPotentialEnergy(), TOL);
-    }
 }
 
 void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
@@ -2114,10 +1960,8 @@ void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwit
         SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
         sliced->setParticleSubset(1, 1);
         sliced->addGlobalParameter("lambda", lambda);
-        sliced->addScalingParameter("lambda", 0, 1, false, true);
+        sliced->addScalingParameter("lambda", 0, 1, false, true, softcore ? alpha : 0.0);
         sliced->addEnergyParameterDerivative("lambda");
-        if (softcore)
-            sliced->setUseSoftcorePotential(0, 1, alpha);
         system.addForce(sliced);
         return new Context(system, integrator, platform);
     };
@@ -2192,18 +2036,23 @@ void testErrors() {
     force.setScalingParameter(0, "a", 2, 2, true, true);
     force.addScalingParameter("c", 0, 1, true, false);
 
-    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 3, 0.5); }));
-    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(3, 0, 0.5); }));
-    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, -0.5); }));
-    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, numeric_limits<double>::quiet_NaN()); }));
-    ASSERT(throwsException([&]() { force.setUseSoftcorePotential(0, 1, numeric_limits<double>::infinity()); }));
-    ASSERT(throwsException([&]() { force.getSoftcoreAlpha(0, 3); }));
-    assertEqualTo(0.0, force.getSoftcoreAlpha(0, 1), 0.0);
-    force.setUseSoftcorePotential(2, 0, 0.5);
-    assertEqualTo(0.5, force.getSoftcoreAlpha(0, 2), 0.0);
-    assertEqualTo(0.5, force.getSoftcoreAlpha(2, 0), 0.0);
-    force.setUseSoftcorePotential(0, 2, 0.0);
-    assertEqualTo(0.0, force.getSoftcoreAlpha(2, 0), 0.0);
+    // Soft-core entries: alpha must be finite and non-negative, an entry needs a role, and a slice
+    // has at most one softness parameter.
+
+    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, -0.5); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, numeric_limits<double>::quiet_NaN()); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, numeric_limits<double>::infinity()); }));
+    int soft = force.addScalingParameter("c", 0, 2, false, false, 0.5);
+    assertEqualTo(0.5, force.getScalingParameterSoftcoreAlpha(soft), 0.0);
+    assertEqualTo(0.0, force.getScalingParameterSoftcoreAlpha(0), 0.0);
+    ASSERT(throwsException([&]() { force.getScalingParameterSoftcoreAlpha(force.getNumScalingParameters()); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("b", 2, 0, true, false, 0.3); }));
+    force.addScalingParameter("b", 2, 0, true, false);
+    force.setScalingParameter(soft, "c", 0, 2, false, true, 0.0);
+    assertEqualTo(0.0, force.getScalingParameterSoftcoreAlpha(soft), 0.0);
+    force.setScalingParameter(soft, "c", 0, 2, false, true, 0.5);
+    force.addEnergyParameterDerivative("c");
 
     ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("unknown"); }));
     force.addGlobalParameter("d", 1.0);
@@ -2222,29 +2071,18 @@ void testErrors() {
     VerletIntegrator integrator(0.01);
     ASSERT(throwsException([&]() { Context context(system, integrator, platform); }));
 
-    // A soft-core slice needs a scaling parameter that applies to Lennard-Jones interactions.
+    // A softness-only scaling parameter is valid on its own: the slice is softened at full strength.
 
     System system2;
     system2.addParticle(1.0);
-    SlicedNonbondedForce* noLJScaling = new SlicedNonbondedForce(2);
-    noLJScaling->addParticle(1.0, 1.0, 1.0);
-    noLJScaling->addGlobalParameter("q", 1.0);
-    noLJScaling->addScalingParameter("q", 0, 1, true, false);
-    noLJScaling->setUseSoftcorePotential(0, 1, 0.5);
-    system2.addForce(noLJScaling);
+    SlicedNonbondedForce* softOnly = new SlicedNonbondedForce(2);
+    softOnly->addParticle(1.0, 1.0, 1.0);
+    softOnly->addGlobalParameter("q", 1.0);
+    softOnly->addScalingParameter("q", 0, 1, false, false, 0.5);
+    softOnly->addEnergyParameterDerivative("q");
+    system2.addForce(softOnly);
     VerletIntegrator integrator2(0.01);
-    ASSERT(throwsException([&]() { Context context(system2, integrator2, platform); }));
-    noLJScaling->setScalingParameter(0, "q", 0, 1, true, true);
-    VerletIntegrator integrator3(0.01);
-    Context context3(system2, integrator3, platform);
-
-    // updateParametersInContext must apply the same rule and leave the Context untouched on failure.
-
-    noLJScaling->setUseSoftcorePotential(1, 1, 0.5);
-    ASSERT(throwsException([&]() { noLJScaling->updateParametersInContext(context3); }));
-    noLJScaling->setUseSoftcorePotential(1, 1, 0.0);
-    noLJScaling->setUseSoftcorePotential(0, 1, 0.7);
-    noLJScaling->updateParametersInContext(context3);
+    Context context2(system2, integrator2, platform);
 }
 
 void runPlatformTests();
@@ -2303,9 +2141,6 @@ int main(int argc, char* argv[]) {
                 testSoftcore(sfmt, method, exceptions, false);
         testSoftcore(sfmt, NonbondedForce::CutoffPeriodic, true, true);
         testSoftcore(sfmt, NonbondedForce::PME, true, true);
-        testSoftcoreFailedUpdateLeavesContextUntouched();
-        testSoftcoreUpdateUsesContextScaling();
-        testSoftcoreFailedUpdateKeepsAlpha();
         testSoftcoreSinglePair(NonbondedForce::CutoffPeriodic, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
         testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);

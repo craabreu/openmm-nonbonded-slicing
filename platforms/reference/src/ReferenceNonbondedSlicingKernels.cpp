@@ -285,12 +285,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
 
-    // Check the soft-core parameters before changing any state.
-
-    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
-    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
-        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
-
     // Get particle subsets.
 
     for (int i = 0; i < numParticles; i++)
@@ -336,10 +330,6 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     SlicedNonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (force.getUseDispersionCorrection() && (method == SlicedNonbondedForce::CutoffPeriodic || method == SlicedNonbondedForce::Ewald || method == SlicedNonbondedForce::PME))
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(context.getSystem(), force);
-
-    // Update the soft-core parameters, now that no check can fail.
-
-    sliceSoftcoreAlphas = newSoftcoreAlphas;
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

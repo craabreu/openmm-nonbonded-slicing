@@ -1466,9 +1466,6 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
                 throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Lennard-Jones interactions, because all epsilons were originally 0");
         }
     }
-    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
-    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
-        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
     for (int i = 0; i < force.getNumParticles(); i++)
         subsetsVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetsVec);
@@ -1609,13 +1606,6 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
         throw OpenMMException("updateParametersInContext: The number of exception parameter offsets has changed");
     if (e.size() > 0)
         exceptionParamOffsets.upload(e);
-
-    // Update the soft-core parameters if needed, now that no check can fail.
-
-    if (newSoftcoreAlphas != sliceSoftcoreAlphasVec) {
-        sliceSoftcoreAlphasVec = newSoftcoreAlphas;
-        uploadSoftcoreAlphas();
-    }
 
     // Compute other values.
 
