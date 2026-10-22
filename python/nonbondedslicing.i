@@ -287,7 +287,8 @@ public:
     void setParticleSubset(int index, int subset);
     /**
      * Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
-     * particular slice. Its value will scale the interactions between particles of a subset 1
+     * particular slice. A scaling parameter can also soften the Lennard-Jones interactions of its
+     * slice, see ``softcoreAlpha``. Its value will scale the interactions between particles of a subset 1
      * with those of another (or the same) subset 2. The order of subset definition is irrelevant.
      *
      * Parameters
@@ -306,14 +307,35 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions.  At least one
-     *         of includeCoulomb and includeLJ must be true
+     *         of includeCoulomb, includeLJ and softcoreAlpha > 0 must hold
+     *     softcoreAlpha : float, default=0
+     *         if positive, this parameter also softens the Lennard-Jones interactions of the slice
+     *         with the Beutler soft-core potential: each pair interacts through
+     *         :math:`U(r) = 4 \\lambda_E \\epsilon (s^2 - s)` with
+     *         :math:`s = 1/[\\alpha (1 - \\lambda_s) + (r/\\sigma)^6]`, where :math:`\\lambda_E` is
+     *         the slice's Lennard-Jones scaling parameter (1 if there is none), :math:`\\lambda_s` is
+     *         this parameter and :math:`\\alpha` is ``softcoreAlpha`` (typically 0.5). Keep
+     *         :math:`\\lambda_s` between 0 and 1: for :math:`\\lambda_s > 1`, the potential becomes
+     *         singular at :math:`r = [\\alpha (\\lambda_s - 1)]^{1/6} \\sigma`. The potential remains
+     *         finite as :math:`r \\to 0` whenever :math:`\\lambda_s < 1`. Only one scaling parameter
+     *         per slice can soften it. Since only the Lennard-Jones term is softened, scale the
+     *         Coulomb contribution of the slice with its own parameter and turn it off before
+     *         softening the Lennard-Jones term. Soft-core applies to the direct-space Lennard-Jones
+     *         term and to 1-4 exceptions; the dispersion correction and the reciprocal-space part of
+     *         LJPME are not affected. As with the usual potential, do not combine LJPME with a
+     *         switching function: the Reference platform ignores the switching function, while the
+     *         CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
+     *         ``NonbondedForce`` does on each platform. Derivatives with respect to this parameter
+     *         are :math:`4 \\lambda_E \\epsilon \\alpha s^2 (2 s - 1)`, added to the usual derivative
+     *         when the same parameter also scales the Lennard-Jones energy. This setting is fixed
+     *         at Context creation, like the other arguments of this method.
      *
      * Returns
      * -------
      *     index : int
      *         the index of scaling parameter that was added
      */
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     /**
      * Get the number of scaling parameters.
      */
@@ -350,6 +372,16 @@ public:
         }
     }
     /**
+     * Get the soft-core parameter alpha of a scaling parameter, or zero if that parameter does not
+     * soften its slice (see :func:`addScalingParameter`).
+     *
+     * Parameters
+     * ----------
+     *     index : int
+     *         the index of the scaling parameter, as returned by :func:`addScalingParameter`
+     */
+    double getScalingParameterSoftcoreAlpha(int index) const;
+    /**
      * Modify an added scaling parameter.
      *
      * Parameters
@@ -371,69 +403,18 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions
+     *     softcoreAlpha : float, default=0
+     *         the soft-core parameter of the slice, see :func:`addScalingParameter`
      */
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ);
-    /**
-     * Use the soft-core Lennard-Jones potential in a particular slice. With :math:`\\lambda` the
-     * scaling parameter that multiplies the Lennard-Jones contributions of the slice, each pair
-     * in it interacts through
-     *
-     * .. math::
-     *     U(r) = 4 \\lambda \\epsilon \\left( s^2 - s \\right), \\quad
-     *     s = \\frac{1}{\\alpha (1 - \\lambda) + (r/\\sigma)^6},
-     *
-     * which remains finite as :math:`r \\to 0` whenever :math:`\\lambda < 1` and :math:`\\alpha > 0`, and
-     * reduces to the usual potential when :math:`\\lambda = 1` or :math:`\\alpha = 0`. The slice must
-     * have a scaling parameter that applies to Lennard-Jones interactions, and :math:`\\lambda` must
-     * stay between 0 and 1: for :math:`\\lambda > 1`, the term :math:`\\alpha (1 - \\lambda)` is
-     * negative and the potential becomes singular at
-     * :math:`r = \\left[ \\alpha (\\lambda - 1) \\right]^{1/6} \\sigma`. Since only the Lennard-Jones
-     * term is softened, scale the Coulomb contribution of the slice with its own parameter and turn it
-     * off before softening the Lennard-Jones term. Derivatives with respect to
-     * :math:`\\lambda` account for the soft-core form, so for this slice they are not its van der
-     * Waals energy and they change with :math:`\\lambda`.
-     *
-     * Soft-core applies to the direct-space Lennard-Jones term and to 1-4 exceptions; the
-     * dispersion correction and the reciprocal-space part of LJPME are not affected. As with the
-     * usual potential, do not combine LJPME with a switching function: the Reference platform
-     * ignores the switching function, while the CUDA and OpenCL platforms apply it to the
-     * direct-space Lennard-Jones term, as OpenMM's ``NonbondedForce`` does on each platform.
-     * ``updateParametersInContext`` can change :math:`\\alpha` in a Context that already has
-     * a soft-core slice, but cannot add soft-core slices to one created without any.
-     *
-     * Parameters
-     * ----------
-     *     subset1 : int
-     *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets` minus 1
-     *     subset2 : int
-     *         the index of a particle subset.  Legal values are between 0 and the result of
-     *         :func:`getNumSubsets` minus 1
-     *     alpha : float
-     *         the soft-core parameter :math:`\\alpha`, typically 0.5.  Zero turns the soft-core
-     *         potential off for this slice
-     */
-    void setUseSoftcorePotential(int subset1, int subset2, double alpha);
-    /**
-     * Get the soft-core parameter of a particular slice, or zero if the slice uses the
-     * usual Lennard-Jones potential.
-     *
-     * Parameters
-     * ----------
-     *     subset1 : int
-     *         the index of a particle subset
-     *     subset2 : int
-     *         the index of a particle subset
-     */
-    double getSoftcoreAlpha(int subset1, int subset2) const;
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the value of an energy slice or a sum thereof. This does not hold
-     * for the Lennard-Jones contribution of a slice that uses the soft-core potential (see
-     * :func:`setUseSoftcorePotential`). The parameter must have already been added with
+     * for the Lennard-Jones contribution of a slice that uses the soft-core potential (see the
+     * ``softcoreAlpha`` argument of :func:`addScalingParameter`). The parameter must have already been added with
      * :func:`addGlobalParameter` and :func:`addScalingParameter`.
-     * Derivatives are only calculated for scaling parameters that multiply the Lennard-Jones
-     * or Coulomb contributions. Requesting the derivative with respect to non-scaling global
+     * Derivatives are only calculated for scaling parameters (those that multiply the Lennard-Jones
+     * or Coulomb contributions, or soften a slice). Requesting the derivative with respect to non-scaling global
      * parameters will raise an exception.
      *
      * Derivatives are only computed along with the energy: pass both ``getEnergy=True`` and
