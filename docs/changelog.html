@@ -50,11 +50,15 @@ so both should be evaluated together when they are integrated with different tim
 (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
 1798, 2010). With this option, these terms are also kept when <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>
 is used. The default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, keeps the behavior of OpenMM’s <code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">setUseSoftcorePotential(subset1,</span> <span class="pre">subset2,</span> <span class="pre">alpha)</span></code> switches a slice to the Beutler soft-core
-Lennard-Jones potential, with derivatives with respect to the slice’s scaling parameter that
-account for the non-linear form. Available on all platforms and with every nonbonded method
-(with LJPME, as for the usual potential, without a switching function).
-For such a slice, that derivative is no longer the slice’s van der Waals energy.</p></li>
+<li><p>A scaling parameter added with a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> (sixth argument of
+<code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code>) softens its slice with the Beutler soft-core Lennard-Jones potential.
+The softening parameter can be the one that scales the slice’s Lennard-Jones energy or a
+separate one, and derivatives with respect to both are reported. Available on all platforms and
+with every nonbonded method (with LJPME, as for the usual potential, without a switching
+function). With a separate softening parameter, the derivative with respect to the Lennard-Jones
+scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
+When one parameter plays both roles, its derivative also contains the derivative with respect to
+the softening parameter and is not an energy, even when its value is 1.</p></li>
 </ul>
 <p><strong>Bug fixes</strong></p>
 <ul class="simple">

@@ -57,7 +57,7 @@ SlicedNonbondedForce
         getReciprocalExclusions
         getReciprocalSpaceForceGroup
         getScalingParameter
-        getSoftcoreAlpha
+        getScalingParameterSoftcoreAlpha
         getSwitchingDistance
         getUseCuFFT
         getUseDispersionCorrection
@@ -85,7 +85,6 @@ SlicedNonbondedForce
         setSwitchingDistance
         setUseCuFFT
         setUseDispersionCorrection
-        setUseSoftcorePotential
         setUseSwitchingFunction
         updateParametersInContext
         usesPeriodicBoundaryConditions
