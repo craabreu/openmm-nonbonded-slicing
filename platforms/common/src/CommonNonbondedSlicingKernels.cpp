@@ -12,6 +12,7 @@
 #include "CommonNonbondedSlicingKernelSources.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/SoftcoreUtilities.h"
 #include "openmm/common/ComputeForceInfo.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/Context.h"
@@ -223,11 +224,11 @@ string CommonCalcSlicedNonbondedForceKernel::getDerivativeCode(string param, str
     // so it updates a single accumulator, which is double precision in mixed mode
     stringstream code;
     if (countBoth)
-        code<<"if ("<<exprBoth.str()<<") "<<variable<<" += "<<scale<<"(clEnergy + ljEnergy);"<<endl;
+        code<<"if ("<<exprBoth.str()<<") "<<variable<<" += "<<scale<<"(clEnergy + ljEnergyDeriv);"<<endl;
     if (countCoulomb)
         code<<"if ("<<exprCoulomb.str()<<") "<<variable<<" += "<<scale<<"clEnergy;"<<endl;
     if (countLJ)
-        code<<"if ("<<exprLJ.str()<<") "<<variable<<" += "<<scale<<"ljEnergy;"<<endl;
+        code<<"if ("<<exprLJ.str()<<") "<<variable<<" += "<<scale<<"ljEnergyDeriv;"<<endl;
     return code.str();
 }
 
@@ -256,6 +257,15 @@ string CommonCalcSlicedNonbondedForceKernel::getCoulombDerivativeCode(ComputeCon
             derivativeCode<<expr.str()<<"0;"<<endl;
     }
     return derivativeCode.str();
+}
+
+void CommonCalcSlicedNonbondedForceKernel::uploadSoftcoreAlphas() {
+    if (cc.getUseDoublePrecision())
+        sliceSoftcoreAlphas.upload(sliceSoftcoreAlphasVec);
+    else {
+        vector<float> alphas(sliceSoftcoreAlphasVec.begin(), sliceSoftcoreAlphasVec.end());
+        sliceSoftcoreAlphas.upload(alphas);
+    }
 }
 
 void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
@@ -309,6 +319,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             sliceLambdasVecFloat[i] = mm_float2(sliceLambdasVec[i].x, sliceLambdasVec[i].y);
         sliceLambdas.upload(sliceLambdasVecFloat);
     }
+    sliceSoftcoreAlphasVec = getSliceSoftcoreAlphas(force);
+    hasSoftcore = anySoftcoreSlice(sliceSoftcoreAlphasVec);
+    sliceSoftcoreAlphas.initialize(cc, numSlices, sizeOfReal, "sliceSoftcoreAlphas");
+    uploadSoftcoreAlphas();
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -375,6 +389,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     map<string, string> defines;
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
     defines["HAS_LENNARD_JONES"] = (hasLJ ? "1" : "0");
+    defines["HAS_SOFTCORE"] = (hasSoftcore ? "1" : "0");
     defines["USE_LJ_SWITCH"] = (useCutoff && force.getUseSwitchingFunction() ? "1" : "0");
     if (useCutoff) {
         // Compute the reaction field constants.
@@ -718,6 +733,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
     replacements["LAMBDA"] = prefix+"lambda";
     cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2));
+    // SOFTCORE_ALPHA only appears in HAS_SOFTCORE blocks, so the kernel needs the argument only then.
+    replacements["SOFTCORE_ALPHA"] = prefix+"softcoreAlpha";
+    if (hasSoftcore)
+        cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceSoftcoreAlphas, prefix+"softcoreAlpha", "real", 1));
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
@@ -756,6 +775,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cc.getBondedUtilities().addArgument(exceptionParams, "float4");
         replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
+        replacements["HAS_SOFTCORE"] = (hasSoftcore ? "1" : "0");
+        // As in the nonbonded kernel, SOFTCORE_ALPHAS only appears in HAS_SOFTCORE blocks.
+        replacements["SOFTCORE_ALPHAS"] = hasSoftcore ? cc.getBondedUtilities().addArgument(sliceSoftcoreAlphas, "real") : "softcoreAlphas";
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
@@ -1372,8 +1394,11 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 pmeDispersionEvalEnergyKernel->setArg(7, recipBoxVectorsFloat[2]);
             }
             if (!hasCoulomb) {
+                // Without charges the Coulomb kernels never ran, so the buffers they would have filled are
+                // cleared here. The private derivative buffer only exists when the PME queue is in use;
+                // otherwise the derivatives go to the context's buffer, which is cleared by the context.
                 cc.clearBuffer(pmeEnergyBuffer);
-                if (hasDerivatives)
+                if (hasDerivatives && usePmeQueue)
                     cc.clearBuffer(pmeEnergyParamDerivBuffer);
             }
             if (includeEnergy)
@@ -1441,6 +1466,9 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
                 throw OpenMMException("updateParametersInContext: The nonbonded force kernel does not include Lennard-Jones interactions, because all epsilons were originally 0");
         }
     }
+    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
+        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
     for (int i = 0; i < force.getNumParticles(); i++)
         subsetsVec[i] = force.getParticleSubset(i);
     subsets.upload(subsetsVec);
@@ -1581,6 +1609,13 @@ void CommonCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& 
         throw OpenMMException("updateParametersInContext: The number of exception parameter offsets has changed");
     if (e.size() > 0)
         exceptionParamOffsets.upload(e);
+
+    // Update the soft-core parameters if needed, now that no check can fail.
+
+    if (newSoftcoreAlphas != sliceSoftcoreAlphasVec) {
+        sliceSoftcoreAlphasVec = newSoftcoreAlphas;
+        uploadSoftcoreAlphas();
+    }
 
     // Compute other values.
 

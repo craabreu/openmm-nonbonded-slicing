@@ -58,6 +58,8 @@ void testSerialization() {
     force.addScalingParameter("lambda", 0, 1, true, true);
     force.addScalingParameter("lambda", 1, 1, false, true);
     force.addEnergyParameterDerivative("lambda");
+    force.setUseSoftcorePotential(1, 2, 0.5);
+    force.setUseSoftcorePotential(0, 0, 0.25);
 
     // Serialize and then deserialize it.
 
@@ -88,6 +90,9 @@ void testSerialization() {
     ASSERT_EQUAL(force.getReciprocalSpaceForceGroup(), force2.getReciprocalSpaceForceGroup());
     ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
     ASSERT_EQUAL(force.getReciprocalExclusions(), force2.getReciprocalExclusions());
+    for (int i = 0; i < force.getNumSubsets(); i++)
+        for (int j = i; j < force.getNumSubsets(); j++)
+            ASSERT_EQUAL(force.getSoftcoreAlpha(i, j), force2.getSoftcoreAlpha(i, j));
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -207,9 +212,37 @@ void testMissingReciprocalExclusions() {
     delete copy;
 }
 
+void testDeserializeVersion1() {
+    // Files written before the soft-core potential have version 1 and no SoftcoreSlices node.
+
+    SlicedNonbondedForce force(2);
+    force.addParticle(1, 0.1, 0.01);
+    force.addParticle(-1, 0.2, 0.02);
+    force.setParticleSubset(1, 1);
+    force.addGlobalParameter("lambda", 0.5);
+    force.addScalingParameter("lambda", 0, 1, true, true);
+    stringstream buffer;
+    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    size_t pos = xml.find("version=\"2\"");
+    ASSERT(pos != string::npos);
+    xml.replace(pos, 11, "version=\"1\"");
+    pos = xml.find("<SoftcoreSlices");
+    ASSERT(pos != string::npos);
+    xml.erase(pos, xml.find('>', pos) - pos + 1);
+    stringstream buffer2(xml);
+    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
+    ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
+    ASSERT_EQUAL(force.getParticleSubset(1), copy->getParticleSubset(1));
+    ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
+    ASSERT_EQUAL(0.0, copy->getSoftcoreAlpha(0, 1));
+    delete copy;
+}
+
 int main() {
     try {
         testSerialization();
+        testDeserializeVersion1();
         testMissingUseCuFFT();
         testMissingReciprocalExclusions();
     }

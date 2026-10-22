@@ -11,6 +11,7 @@
 #include "ReferenceNonbondedSlicingKernels.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/SoftcoreUtilities.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/reference/RealVec.h"
@@ -85,6 +86,9 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
         if (includeLJ)
             sliceScalingParams[slice][vdW] = info;
     }
+
+    sliceSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    hasSoftcore = anySoftcoreSlice(sliceSoftcoreAlphas);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -217,6 +221,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUseLJPME(ewaldDispersionAlpha, dispersionGridSize);
     }
     vector<vector<double>> sliceEnergies(numSlices, (vector<double>){0.0, 0.0});
+    vector<double> sliceDerivCorrections(numSlices, 0.0);
+    clj.setSoftcoreAlphas(sliceSoftcoreAlphas);
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
     clj.calculatePairIxn(
@@ -229,6 +235,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         exclusions,
         forceData,
         sliceEnergies,
+        sliceDerivCorrections,
         includeDirect,
         includeReciprocal
     );
@@ -242,7 +249,8 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         for (int k = 0; k < num14; k++) {
             int slice = bonded14SliceArray[k];
             nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
-                                         forceData, sliceLambdas[slice], sliceEnergies[slice]);
+                                         forceData, sliceLambdas[slice], sliceEnergies[slice],
+                                         sliceSoftcoreAlphas[slice], sliceDerivCorrections[slice]);
         }
         if (periodic || ewald || pme) {
             Vec3* boxVectors = extractBoxVectors(context);
@@ -263,9 +271,11 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     for (int slice = 0; slice < numSlices; slice++)
         for (int term = 0; term < 2; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
-            if (info.hasDerivative)
+            if (info.hasDerivative) {
                 // As on the GPU platforms, derivatives are only computed along with the energy
-                energyParamDerivs[info.name] += includeEnergy ? sliceEnergies[slice][term] : numeric_limits<double>::quiet_NaN();
+                double derivative = sliceEnergies[slice][term] + (term == vdW ? sliceDerivCorrections[slice] : 0.0);
+                energyParamDerivs[info.name] += includeEnergy ? derivative : numeric_limits<double>::quiet_NaN();
+            }
         }
 
     return energy;
@@ -274,6 +284,12 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
 void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImpl& context, const SlicedNonbondedForce& force) {
     if (force.getNumParticles() != numParticles)
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+
+    // Check the soft-core parameters before changing any state.
+
+    vector<double> newSoftcoreAlphas = getSliceSoftcoreAlphas(force);
+    if (!hasSoftcore && anySoftcoreSlice(newSoftcoreAlphas))
+        throw OpenMMException("updateParametersInContext: The soft-core potential cannot be enabled in a Context created without it");
 
     // Get particle subsets.
 
@@ -320,6 +336,10 @@ void ReferenceCalcSlicedNonbondedForceKernel::copyParametersToContext(ContextImp
     SlicedNonbondedForce::NonbondedMethod method = force.getNonbondedMethod();
     if (force.getUseDispersionCorrection() && (method == SlicedNonbondedForce::CutoffPeriodic || method == SlicedNonbondedForce::Ewald || method == SlicedNonbondedForce::PME))
         dispersionCoefficients = SlicedNonbondedForceImpl::calcDispersionCorrections(context.getSystem(), force);
+
+    // Update the soft-core parameters, now that no check can fail.
+
+    sliceSoftcoreAlphas = newSoftcoreAlphas;
 }
 
 void ReferenceCalcSlicedNonbondedForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

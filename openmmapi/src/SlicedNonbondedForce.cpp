@@ -14,6 +14,7 @@
 #include "openmm/OpenMMException.h"
 #include <string.h>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 using namespace std;
@@ -149,6 +150,25 @@ void SlicedNonbondedForce::setScalingParameter(int index, const string& paramete
         if (i != index && scalingParameters[i].clashesWith(info))
             throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters[index] = info;
+}
+
+void SlicedNonbondedForce::setUseSoftcorePotential(int subset1, int subset2, double alpha) {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    if (!(alpha >= 0) || !std::isfinite(alpha))
+        throwException(__FILE__, __LINE__, "The soft-core parameter alpha must be finite and non-negative");
+    int slice = sliceIndex(subset1, subset2);
+    if (alpha == 0)
+        softcoreAlphas.erase(slice);
+    else
+        softcoreAlphas[slice] = alpha;
+}
+
+double SlicedNonbondedForce::getSoftcoreAlpha(int subset1, int subset2) const {
+    ASSERT_VALID("Subset", subset1, numSubsets);
+    ASSERT_VALID("Subset", subset2, numSubsets);
+    auto element = softcoreAlphas.find(sliceIndex(subset1, subset2));
+    return element == softcoreAlphas.end() ? 0.0 : element->second;
 }
 
 int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) const {
