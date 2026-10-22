@@ -437,6 +437,11 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         double reactionFieldC = (1.0 / force.getCutoffDistance())*(3.0*force.getReactionFieldDielectric())/(2.0*force.getReactionFieldDielectric()+1.0);
         defines["REACTION_FIELD_K"] = cc.doubleToString(reactionFieldK);
         defines["REACTION_FIELD_C"] = cc.doubleToString(reactionFieldC);
+        if (hasInner) {
+            // The constant part of the reaction-field Coulomb remainder for r <= r_s, combined in double precision
+            InnerSplit split(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
+            defines["INNER_K1_MINUS_RF_C"] = cc.doubleToString(split.K[2]-reactionFieldC);
+        }
 
         // Compute the switching coefficients.
 

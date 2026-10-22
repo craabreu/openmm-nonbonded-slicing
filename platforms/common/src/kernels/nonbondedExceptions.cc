@@ -71,11 +71,15 @@ if (r2 < INNER_CUTOFF_SQUARED) {
     e1 = INNER_C1*(Y4*(10.0f-15.0f*INNER_GAMMA*Y+6.0f*INNER_GAMMA*INNER_GAMMA*Y2)*invOneMinusY-30.0f*(INNER_GAMMA1SQ*L6+(1.0f-2.0f*INNER_GAMMA)*Y5*0.2f+Y4*0.25f));
     }
     else {
+#if SUBTRACT_INNER
+        e12 = e6 = e1 = 0.0f;
+#else
         const real invR2 = invR*invR;
         const real invR6 = invR2*invR2*invR2;
         e12 = invR6*invR6-INNER_K12;
         e6 = invR6-INNER_K6;
         e1 = invR-INNER_K1;
+#endif
     }
     innerForceLJ = innerSwitch*ljForce;
     innerForceCl = innerSwitch*clForce;
@@ -83,6 +87,15 @@ if (r2 < INNER_CUTOFF_SQUARED) {
     sigma6 = sigma6*sigma6*sigma6;
     innerEnergyLJ = exceptionParams.z*(sigma6*sigma6*e12 - sigma6*e6);
     innerEnergyCl = exceptionParams.x*e1;
+#if SUBTRACT_INNER
+    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
+    // is the constant sum_n c_n K_n. It replaces the bare energies rather than being computed as the
+    // difference of two large, nearly equal terms (the inner energies are zero above).
+    if (r <= INNER_SWITCH) {
+        ljEnergy = exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
+        clEnergy = exceptionParams.x*INNER_K1;
+    }
+#endif
 }
 #endif
 #if INNER_GROUP

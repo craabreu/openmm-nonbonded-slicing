@@ -24,6 +24,13 @@
     // HAS_SOFTCORE is 0 whenever INNER_GROUP or SUBTRACT_INNER is 1.
     real innerForce = 0.0f, innerEnergyLJ = 0.0f, innerEnergyCl = 0.0f;
     const bool insideInner = (!isExcluded && r2 < INNER_CUTOFF_SQUARED);
+#if SUBTRACT_INNER
+    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
+    // is the constant sum_n c_n K_n. It replaces the bare energies below rather than being computed as the
+    // difference of two large, nearly equal terms, and the inner energies are then zero. With Ewald, the
+    // Coulomb remainder is erfc(alpha*r)/r - e_1(r), which has no such constant.
+    const bool innerIsBare = (insideInner && r <= INNER_SWITCH);
+#endif
     if (insideInner) {
         real innerSwitch = 1.0f;
         if (r > INNER_SWITCH) {
@@ -68,11 +75,20 @@
         e1 = INNER_C1*(Y4*(10.0f-15.0f*INNER_GAMMA*Y+6.0f*INNER_GAMMA*INNER_GAMMA*Y2)*invOneMinusY-30.0f*(INNER_GAMMA1SQ*L6+(1.0f-2.0f*INNER_GAMMA)*Y5*0.2f+Y4*0.25f));
         }
         else {
+#if SUBTRACT_INNER
+            e12 = e6 = 0.0f;
+#if USE_EWALD
+            e1 = invR-INNER_K1;
+#else
+            e1 = 0.0f;
+#endif
+#else
             const real invR2 = invR*invR;
             const real invR6 = invR2*invR2*invR2;
             e12 = invR6*invR6-INNER_K12;
             e6 = invR6-INNER_K6;
             e1 = invR-INNER_K1;
+#endif
         }
         innerEnergyCl = qq*e1;
 #if HAS_LENNARD_JONES
@@ -123,6 +139,13 @@
 #else
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
+#if SUBTRACT_INNER
+    if (innerIsBare) {
+        real sigma6 = sig*sig;
+        sigma6 = sigma6*sigma6*sigma6;
+        ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
+    }
+#endif
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -215,6 +238,13 @@
 #else
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
+#if SUBTRACT_INNER
+    if (innerIsBare) {
+        real sigma6 = sig*sig;
+        sigma6 = sigma6*sigma6*sigma6;
+        ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
+    }
+#endif
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -238,10 +268,18 @@
   #ifdef USE_CUTOFF
     const real prefactor = qq;
     real clEnergy = includeInteraction ? prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C) : 0;
+#if SUBTRACT_INNER
+    if (innerIsBare)
+        clEnergy = prefactor*(INNER_K1_MINUS_RF_C + REACTION_FIELD_K*r2);
+#endif
     tempForce += clLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
   #else
     const real prefactor = qq*invR;
     real clEnergy = includeInteraction ? prefactor : 0;
+#if SUBTRACT_INNER
+    if (innerIsBare)
+        clEnergy = qq*INNER_K1;
+#endif
     tempForce += clLambda*prefactor;
   #endif
 #if SUBTRACT_INNER

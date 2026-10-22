@@ -2185,6 +2185,63 @@ void testInnerGroupOffsets(OpenMM_SFMT::SFMT& sfmt) {
     delete system;
 }
 
+void testInnerGroupCloseContact(NonbondedForce::NonbondedMethod method, bool asException) {
+    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
+    // is the constant sum_n c_n K_n. At close contact, where (sigma/r)^12 ~ 500, it must not be computed as
+    // the difference of two large, nearly equal energies, which loses digits in single precision.
+
+    const double q1 = 0.6, q2 = -0.4, sigma = 0.3, epsilon = 0.7, rs = 0.5, rc = 0.8, cutoff = 1.0, r = 0.18;
+    bool lj = true, coulomb = (method != NonbondedForce::PME);
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(1);
+    force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+    force->setCutoffDistance(cutoff);
+    force->setUseDispersionCorrection(false);
+    force->setReciprocalSpaceForceGroup(2);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(rs);
+    force->setInnerCutoffDistance(rc);
+    double qq = coulomb ? q1*q2 : 0.0;
+    if (asException) {
+        force->addParticle(0.0, sigma, 0.0);
+        force->addParticle(0.0, sigma, 0.0);
+        force->addException(0, 1, qq, sigma, epsilon);
+    }
+    else {
+        force->addParticle(coulomb ? q1 : 0.0, sigma, epsilon);
+        force->addParticle(coulomb ? q2 : 0.0, sigma, epsilon);
+    }
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
+
+    // K_n = rs^-n - e_n(rs), with e_n(rs) = n*integral(S(s)*s^-(n+1), s=rs..rc) by Simpson's rule
+    auto K = [&](int n) {
+        const int steps = 2000;
+        double h = (rc-rs)/steps, sum = 0.0;
+        for (int i = 0; i <= steps; i++) {
+            double s = rs+i*h, z = (s-rs)/(rc-rs);
+            double w = (i == 0 || i == steps) ? 1 : (i%2 ? 4 : 2);
+            sum += w*(1+z*z*z*(-10+z*(15-z*6)))*n*pow(s, -(n+1));
+        }
+        return pow(rs, -n)-sum*h/3;
+    };
+    double expected = 4*epsilon*(pow(sigma, 12)*K(12)-pow(sigma, 6)*K(6));
+    double coulombRemainder = K(1);
+    if (method == NonbondedForce::CutoffPeriodic && !asException) {
+        double eps = force->getReactionFieldDielectric();
+        double krf = pow(cutoff, -3.0)*(eps-1.0)/(2.0*eps+1.0);
+        double crf = (1.0/cutoff)*(3.0*eps)/(2.0*eps+1.0);
+        coulombRemainder += krf*r*r-crf;
+    }
+    expected += ONE_4PI_EPS0*qq*coulombRemainder;
+    assertEqualTo(expected, context.getState(State::Energy, false, 1<<0).getPotentialEnergy(), 1e-6);
+}
+
 void testInnerGroupFixedAtCreation() {
     // The inner force group, inner cutoff and inner switching distance are fixed when the Context is
     // created: changing them on the force afterwards must not change the Context's split.
@@ -3033,6 +3090,9 @@ int main(int argc, char* argv[]) {
         testInnerGroupDerivatives(innerSfmt);
         testInnerGroupOffsets(innerSfmt);
         testInnerGroupFixedAtCreation();
+        for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::CutoffPeriodic, NonbondedForce::PME})
+            testInnerGroupCloseContact(method, false);
+        testInnerGroupCloseContact(NonbondedForce::NoCutoff, true);
         for (auto method : nonbondedMethods)
             testInstantiateFromNonbondedForce(method);
         testCoulomb();
