@@ -221,6 +221,52 @@ def testSoftcore(platformName, precision):
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
+def testSoftcoreSeparateParameters(platformName, precision):
+    """Different energy and softness parameters: energy, forces and both derivatives vs closed forms."""
+    sigma, epsilon, alpha, lambdaE, lambdaS, r = 1.0, 1.0, 0.5, 0.3, 0.6, 0.9
+    system = mm.System()
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    force = plugin.SlicedNonbondedForce(2)
+    force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+    force.addParticle(0.0, sigma, epsilon)
+    force.addParticle(0.0, sigma, epsilon)
+    force.setParticleSubset(1, 1)
+    force.addGlobalParameter("lambdaE", lambdaE)
+    force.addGlobalParameter("lambdaS", lambdaS)
+    force.addScalingParameter("lambdaE", 0, 1, False, True)
+    force.addScalingParameter("lambdaS", 0, 1, False, False, alpha)
+    force.addEnergyParameterDerivative("lambdaE")
+    force.addEnergyParameterDerivative("lambdaS")
+    system.addForce(force)
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+    context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(r, 0, 0)])
+    state = context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
+    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
+
+    sig6 = (sigma/r)**6
+    s = sig6/(1 + alpha*(1 - lambdaS)*sig6)
+    energy = lambdaE*4*epsilon*(s*s - s)
+    fx = lambdaE*4*epsilon*(2*s - 1)*s*s*6*r**5/sigma**6
+    ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), tol)
+    ASSERT_EQUAL_VEC(mm.Vec3(-fx, 0, 0), state.getForces()[0], tol)
+    ASSERT_EQUAL_VEC(mm.Vec3(fx, 0, 0), state.getForces()[1], tol)
+    derivs = state.getEnergyParameterDerivatives()
+    ASSERT_EQUAL_TOL(4*epsilon*(s*s - s), derivs["lambdaE"], tol)
+    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*alpha*s*s*(2*s - 1), derivs["lambdaS"], tol)
+
+    # Changing the softness parameter alone changes the energy; the energy parameter alone scales it.
+
+    context.setParameter("lambdaS", 1.0)
+    hard = context.getState(getEnergy=True).getPotentialEnergy()
+    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*(sig6*sig6 - sig6), hard, tol)
+    context.setParameter("lambdaE", 0.0)
+    ASSERT_EQUAL_TOL(0.0, context.getState(getEnergy=True).getPotentialEnergy(), tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
 def testCoulomb(platformName, precision):
     system = mm.System()
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
