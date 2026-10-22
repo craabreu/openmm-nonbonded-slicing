@@ -22,9 +22,9 @@ The scaling parameters can be tied to [Context] global parameters, so that selec
 while a simulation runs; the derivative of the energy with respect to a scaling parameter can be
 requested along with the energy, which is a way of reporting the energies of individual slices; a scaling
 parameter can soften the Lennard-Jones interactions of its slice with a soft-core potential, for alchemical
-decoupling without singularities; and, with Ewald, PME or LJPME, the reciprocal-space sum and a
-short-range, force-switched copy of the direct-space interactions can be computed in their own force groups
-for multiple time-step integration. The [documentation] has a user guide for each of these capabilities,
+decoupling without singularities; and, for multiple time-step integration, a short-range, force-switched
+copy of the direct-space interactions can be computed in its own force group, as can the reciprocal-space
+sum with Ewald, PME or LJPME. The [documentation] has a user guide for each of these capabilities,
 the theory behind the sliced lattice sums, measured costs and the Python API.
 
 Example

@@ -27,6 +27,7 @@ force.setReciprocalExclusions(True)      # and the exclusion corrections with it
 
 * `setReciprocalExclusions` only matters with Ewald, PME or LJPME, when the reciprocal-space force group
   differs from the direct-space one. The default, `False`, keeps the behavior of NonbondedForce.
-* With `setReciprocalExclusions(True)`, the exclusion corrections are also kept when direct space is turned
-  off with `setIncludeDirectSpace(False)`. A replacement for the direct-space calculation, such as a
-  {OpenMM}`CustomNonbondedForce`, must then not include them, or they are counted twice.
+* By default, turning off direct space with `setIncludeDirectSpace(False)` also removes the exclusion
+  corrections, as in NonbondedForce. With `setReciprocalExclusions(True)`, they are kept, so a replacement
+  for the direct-space calculation, such as a {OpenMM}`CustomNonbondedForce`, must then not include them,
+  or they are counted twice.

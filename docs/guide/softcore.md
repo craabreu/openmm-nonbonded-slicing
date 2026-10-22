@@ -38,8 +38,9 @@ Lennard-Jones term is softened, scale the Coulomb contribution of the slice with
 other properties of a scaling parameter, $\alpha$ is fixed when a {OpenMM}`Context` is created, while
 $\lambda_E$ and $\lambda_s$ are its global parameters.
 
-The soft-core form applies to the direct-space Lennard-Jones term and to 1-4 exceptions, including the
-additive potential shift at the cutoff with LJPME. The reciprocal-space part of LJPME and the long-range
+The soft-core potential is available on all platforms and with every nonbonded method. It applies to the
+direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift at the
+cutoff with LJPME. The reciprocal-space part of LJPME and the long-range
 dispersion correction are not softened, an approximation accurate to
 $O\left(\alpha (1-\lambda_s) (\sigma/r_c)^6\right)$.
 
@@ -52,7 +53,7 @@ $O\left(\alpha (1-\lambda_s) (\sigma/r_c)^6\right)$.
   ignores the switching function, while the CUDA and OpenCL platforms apply it to the direct-space
   Lennard-Jones term, as OpenMM's NonbondedForce does on each platform.
 * Soft-core slices cannot be combined with an inner force group ({doc}`mts`), whose split assumes the
-  usual Lennard-Jones potential.
+  bare Lennard-Jones potential.
 
 ## What the derivatives mean
 
@@ -63,7 +64,8 @@ $$
 \frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
 $$
 
-and a parameter that plays both roles gets their sum. The first is the soft-core van der Waals energy of
+each times the switching function when it is used and, with LJPME, minus the same term evaluated at the
+cutoff, and a parameter that plays both roles gets their sum. The first is the soft-core van der Waals energy of
 the slice, which differs from the usual one whenever $\lambda_s < 1$; the second is not an energy, and
 neither is their sum, even at $\lambda = 1$. The table in {doc}`derivatives` states what is reported in
 each case.

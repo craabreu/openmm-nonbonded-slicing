@@ -33,8 +33,9 @@ force.setInnerCutoffDistance(0.8*unit.nanometer)
 integrator = mm.MTSIntegrator(90*unit.femtoseconds, [(2, 1), (1, 30), (0, 180)])
 ```
 
-With Ewald, PME or LJPME, consider computing the exclusion corrections along with the reciprocal-space sum
-({doc}`reciprocal`), so that the slow group has no fast intramolecular component.
+If the reciprocal-space sum is also moved to a group of its own with `setReciprocalSpaceForceGroup`, call
+`setReciprocalExclusions(True)` so that the exclusion corrections go with it ({doc}`reciprocal`) and the
+slow group has no fast intramolecular component.
 
 ## Restrictions
 
@@ -44,8 +45,10 @@ With Ewald, PME or LJPME, consider computing the exclusion corrections along wit
   function is used, $r_c \le$ switching distance: the inner force is the bare Lennard-Jones force times
   $S(r)$, which beyond the switching distance would exceed the switched force and leave the remainder with
   a correction of opposite sign.
-* Since the split assumes the usual Lennard-Jones potential, the inner force group cannot be used with
+* Since the split assumes the bare Lennard-Jones potential, the inner force group cannot be used with
   soft-core scaling parameters ({doc}`softcore`).
+* The inner force group requires the direct space to be included (the default; see
+  `setIncludeDirectSpace`).
 * The inner force group, switching distance and cutoff distance are fixed when a {OpenMM}`Context` is
   created; changing them afterwards takes effect only after the Context's `reinitialize()` method is
   called.
@@ -58,8 +61,6 @@ With Ewald, PME or LJPME, consider computing the exclusion corrections along wit
 
 On the CUDA and OpenCL platforms, the cost of an inner-group evaluation depends little on the inner cutoff,
 because the inner kernels traverse the neighbor list built for the full cutoff and only skip the pairs
-beyond $r_c$. In a box of 50,442 water atoms with a 1.2 nm cutoff, an inner-group evaluation on an NVIDIA
-RTX 4090 took 0.167 ms with $r_c = 0.5$ nm and 0.188 ms with $r_c = 1.2$ nm, against 0.21–0.23 ms for
-the direct-space group alone. The inner group is therefore not much cheaper than the direct space it is
-carved from, which limits the speedup of multiple time stepping; with the inner force group disabled, a
-step costs the same as without the feature.
+beyond $r_c$. The inner group is therefore not much cheaper than the direct space it is carved from, which
+limits the speedup of multiple time stepping. The `--inner-group` mode of `devtools/benchmarks/benchmark.py`
+measures it.

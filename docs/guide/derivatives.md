@@ -40,13 +40,14 @@ derivative depends on the roles the parameter plays:
 
 | Parameter | Reported derivative |
 |---|---|
-| Multiplies Coulomb and/or Lennard-Jones contributions of slices with the usual potential | The sum of the unscaled contributions it multiplies, independent of the parameter values |
+| Multiplies the Coulomb contributions of any slices, or the Lennard-Jones contributions of unsoftened slices | The sum of the unscaled contributions it multiplies, independent of the parameter values |
 | Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter | The soft-core van der Waals energy of the slice, $4 \epsilon (s^2 - s)$ summed over its pairs, which differs from the usual energy whenever $\lambda_s < 1$ |
 | Softens a slice | $4 \lambda_E \epsilon \alpha s^2 (2 s - 1)$ summed over its pairs, which is not an energy |
 | Multiplies the Lennard-Jones contribution of a slice and softens it | The sum of the two rows above, which is not an energy, even when the parameter is 1 and the soft-core and usual potentials coincide |
 
-To obtain the usual van der Waals energy of a softened slice, evaluate it in a separate force without the
-soft-core potential.
+The pair terms in the last three rows are multiplied by the switching function when it is used and, with
+LJPME, have the same term evaluated at the cutoff subtracted. To obtain the usual van der Waals energy of a
+softened slice, evaluate it in a separate force without the soft-core potential.
 
 ## Restrictions
 

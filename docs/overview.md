@@ -20,9 +20,8 @@ parameters, so that the van der Waals and electrostatic contributions of chosen 
 down while a simulation runs. See {doc}`guide/slicing`.
 
 **Energy parameter derivatives.** The derivative of the energy with respect to a scaling parameter can be
-requested along with the energy. For a parameter that multiplies slices with the usual Lennard-Jones
-potential, that derivative is the sum of the unscaled energies of those slices, which makes it a way of
-reporting slice energies. See {doc}`guide/derivatives`.
+requested along with the energy, which gives the energy of a slice or of a group of slices. See
+{doc}`guide/derivatives`.
 
 **Soft-core Lennard-Jones potential.** A scaling parameter can also soften the Lennard-Jones interactions
 of its slice with the Beutler soft-core potential, which remains finite as particles overlap, so that a
@@ -30,10 +29,10 @@ slice can be decoupled alchemically without the singularity of the usual potenti
 {doc}`guide/softcore`.
 
 **Force-group splitting.** With Ewald, PME and LJPME, the reciprocal-space sum can be computed in its own
-force group, together with the terms that correct it for excluded pairs ({doc}`guide/reciprocal`), and a
-short-range, force-switched copy of the direct-space interactions can be computed in an *inner* force
-group, so that a multiple time-step integrator advances it with a smaller step than the rest
-({doc}`guide/mts`).
+force group, together with the terms that correct it for excluded pairs and exceptions
+({doc}`guide/reciprocal`). With any nonbonded method, a short-range, force-switched copy of the
+direct-space interactions can be computed in an *inner* force group, so that a multiple time-step
+integrator advances it with a smaller step than the rest ({doc}`guide/mts`).
 
 The formulation behind the sliced lattice sums and the inner force group is in {doc}`theory`, measured
 costs are in {doc}`performance`, and the class is documented in {doc}`pythonapi/index`.

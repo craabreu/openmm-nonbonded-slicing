@@ -30,11 +30,12 @@ it. A scaling parameter is a global parameter, declared with `addGlobalParameter
 import openmm as mm
 import nonbondedslicing as nbs
 
-force = nbs.SlicedNonbondedForce(nonbonded, 2)   # a NonbondedForce, 2 subsets
-for index in ligand_atoms:
-    force.setParticleSubset(index, 1)            # the rest stays in subset 0
+force = nbs.SlicedNonbondedForce(nonbonded, 2)   # built from a NonbondedForce, 2 subsets
+for atom in ligand_atoms:
+    force.setParticleSubset(atom, 1)             # the rest stays in subset 0
 force.addGlobalParameter("lambda", 1.0)
 force.addScalingParameter("lambda", 0, 1, True, True)   # scale Coulomb and LJ of slice (0, 1)
+system.removeForce(index)                        # index of the NonbondedForce being replaced
 system.addForce(force)
 
 context = mm.Context(system, integrator)
@@ -59,8 +60,9 @@ interactions of its slice; see {doc}`softcore`.
   after the Context's `reinitialize()` method is called. The *values* of the parameters, in contrast, are
   read at every evaluation and can be changed at any time with the Context's `setParameter` method.
 * Particle parameters, exception parameters and particle subsets can be changed in an existing Context with
-  `updateParametersInContext`, with the same limitations as in NonbondedForce: the nonbonded method, the
-  cutoff and the set of exceptions cannot change.
+  `updateParametersInContext`, with the same limitations as in NonbondedForce: other settings, such as the
+  nonbonded method and the cutoff, are not updated (reinitialize the Context instead), the pair of
+  particles of an exception cannot change, and particles or exceptions cannot be added.
 
 ## What the derivatives mean
 
