@@ -746,7 +746,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
     replacements["LAMBDA"] = prefix+"lambda";
     cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2));
-    // SOFTCORE_ALPHA only appears in HAS_SOFTCORE blocks, so the kernel needs the argument only then.
+    // SOFTCORE_ALPHA and SOFTCORE_LAMBDA only appear in HAS_SOFTCORE blocks, so the kernel needs
+    // their arguments only then.
     replacements["SOFTCORE_ALPHA"] = prefix+"softcoreAlpha";
     if (hasSoftcore)
         cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceSoftcoreAlphas, prefix+"softcoreAlpha", "real", 1));
@@ -792,7 +793,8 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         replacements["PARAMS"] = cc.getBondedUtilities().addArgument(exceptionParams, "float4");
         replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
         replacements["HAS_SOFTCORE"] = (hasSoftcore ? "1" : "0");
-        // As in the nonbonded kernel, SOFTCORE_ALPHAS only appears in HAS_SOFTCORE blocks.
+        // As in the nonbonded kernel, SOFTCORE_ALPHAS and SOFTCORE_LAMBDAS only appear in HAS_SOFTCORE
+        // blocks.
         replacements["SOFTCORE_ALPHAS"] = hasSoftcore ? cc.getBondedUtilities().addArgument(sliceSoftcoreAlphas, "real") : "softcoreAlphas";
         replacements["SOFTCORE_LAMBDAS"] = hasSoftcore ? cc.getBondedUtilities().addArgument(sliceSoftLambdas, "real") : "softLambdas";
         stringstream code;

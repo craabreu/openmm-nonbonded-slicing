@@ -19,8 +19,10 @@ Changelog
   The softening parameter can be the one that scales the slice's Lennard-Jones energy or a
   separate one, and derivatives with respect to both are reported. Available on all platforms and
   with every nonbonded method (with LJPME, as for the usual potential, without a switching
-  function). For a softened slice, the derivative with respect to its Lennard-Jones scaling
-  parameter is the soft-core van der Waals energy, not the usual one.
+  function). With a separate softening parameter, the derivative with respect to the Lennard-Jones
+  scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
+  When one parameter plays both roles, its derivative also contains the derivative with respect to
+  the softening parameter and is not an energy, even when its value is 1.
 
 **Bug fixes**
 

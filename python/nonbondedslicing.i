@@ -329,8 +329,10 @@ public:
      *         switching function: the Reference platform ignores the switching function, while the
      *         CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
      *         ``NonbondedForce`` does on each platform. Derivatives with respect to this parameter
-     *         are :math:`4 \\lambda_E \\epsilon \\alpha s^2 (2 s - 1)`, added to the usual derivative
-     *         when the same parameter also scales the Lennard-Jones energy. This setting is fixed
+     *         are :math:`4 \\lambda_E \\epsilon \\alpha s^2 (2 s - 1)`, times the switching function
+     *         when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
+     *         added to the usual derivative when the same parameter also scales the Lennard-Jones
+     *         energy. This setting is fixed
      *         at Context creation, like the other arguments of this method.
      *
      * Returns
@@ -412,9 +414,12 @@ public:
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
-     * can be used to obtain the value of an energy slice or a sum thereof. This does not hold
-     * for the Lennard-Jones contribution of a slice that uses the soft-core potential (see the
-     * ``softcoreAlpha`` argument of :func:`addScalingParameter`). The parameter must have already been added with
+     * can be used to obtain the value of an energy slice or a sum thereof. For a slice that uses the
+     * soft-core potential (see the ``softcoreAlpha`` argument of :func:`addScalingParameter`) with a
+     * separate softening parameter, the derivative with respect to its Lennard-Jones scaling parameter
+     * is the slice's unscaled soft-core Lennard-Jones energy. The derivative with respect to a
+     * softening parameter, or to a parameter that also softens the slice, is not an energy. The
+     * parameter must have already been added with
      * :func:`addGlobalParameter` and :func:`addScalingParameter`.
      * Derivatives are only calculated for scaling parameters (those that multiply the Lennard-Jones
      * or Coulomb contributions, or soften a slice). Requesting the derivative with respect to non-scaling global

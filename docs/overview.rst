@@ -92,8 +92,10 @@ while the CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones t
 .. warning::
    For a softened slice, :math:`\partial U / \partial \lambda_E` is the soft-core van der Waals
    energy of the slice, which differs from the usual one whenever :math:`\lambda_s < 1`, and
-   :math:`\partial U / \partial \lambda_s` is not an energy. To obtain the usual van der Waals energy
-   of the slice, evaluate it in a separate force without the soft-core potential.
+   :math:`\partial U / \partial \lambda_s` is not an energy. For a parameter that plays both roles,
+   the reported derivative is the sum of the two, which is not an energy even at
+   :math:`\lambda = 1`, where the soft-core and usual potentials coincide. To obtain the usual van der
+   Waals energy of the slice, evaluate it in a separate force without the soft-core potential.
 
 With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
 calling ``setReciprocalSpaceForceGroup``, as in multiple time stepping. As in OpenMM_'s
