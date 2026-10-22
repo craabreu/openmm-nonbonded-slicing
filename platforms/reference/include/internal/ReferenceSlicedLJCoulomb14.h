@@ -60,18 +60,19 @@ public:
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
        @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
-       @param sliceDerivCorrection  the correction to add to the vdW energy of the slice to obtain its derivative
+       @param sliceSoftDeriv  the derivative of the slice's energy with respect to its softness parameter
 
        --------------------------------------------------------------------------------------- */
 
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
                           vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                          double softcoreAlpha, double& sliceDerivCorrection);
+                          double softcoreAlpha, double& sliceSoftDeriv);
 
 private:
    static const int   Coul = 0;
    static const int   vdW = 1;
+   static const int   soft = 2;
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
 };
