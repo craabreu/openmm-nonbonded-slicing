@@ -15,16 +15,16 @@ sig2 *= sig2;
 real sig6 = sig2*sig2*sig2;
 #if HAS_SOFTCORE
 real softcoreAlpha = SOFTCORE_ALPHAS[slice];
-real q = RECIP(1.0f + softcoreAlpha*(1.0f-ljLambda)*sig6);
+real softLambda = SOFTCORE_LAMBDAS[slice];
+real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
 real s = sig6*q;
 real epss = exceptionParams.z*s;
 real dEdR = ljLambda*6.0f*epss*(2.0f*s-1.0f)*q;
 real ljEnergy = epss*(s-1.0f);
-real ljEnergyDeriv = ljEnergy + ljLambda*softcoreAlpha*epss*s*(2.0f*s-1.0f);
+real ljSoftDeriv = ljLambda*softcoreAlpha*epss*s*(2.0f*s-1.0f);
 #else
 real dEdR = ljLambda*exceptionParams.z*(12.0f*sig6-6.0f)*sig6;
 real ljEnergy = exceptionParams.z*(sig6-1.0f)*sig6;
-real ljEnergyDeriv = ljEnergy;
 #endif
 dEdR += clLambda*exceptionParams.x*invR;
 dEdR *= invR*invR;
