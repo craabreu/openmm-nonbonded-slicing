@@ -14,11 +14,13 @@ Changelog
   (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
   1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
-* ``setUseSoftcorePotential(subset1, subset2, alpha)`` switches a slice to the Beutler soft-core
-  Lennard-Jones potential, with derivatives with respect to the slice's scaling parameter that
-  account for the non-linear form. Available on all platforms and with every nonbonded method
-  (with LJPME, as for the usual potential, without a switching function).
-  For such a slice, that derivative is no longer the slice's van der Waals energy.
+* A scaling parameter added with a positive ``softcoreAlpha`` (sixth argument of
+  ``addScalingParameter``) softens its slice with the Beutler soft-core Lennard-Jones potential.
+  The softening parameter can be the one that scales the slice's Lennard-Jones energy or a
+  separate one, and derivatives with respect to both are reported. Available on all platforms and
+  with every nonbonded method (with LJPME, as for the usual potential, without a switching
+  function). For a softened slice, the derivative with respect to its Lennard-Jones scaling
+  parameter is the soft-core van der Waals energy, not the usual one.
 
 **Bug fixes**
 

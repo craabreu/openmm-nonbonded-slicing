@@ -77,7 +77,10 @@ namespace NonbondedSlicing {
  * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
  * a new Context parameter, then pass its name to :func:`addScalingParameter`.  The same scaling parameter
  * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
- * multiply the Coulomb and Lennard-Jones parts of that slice separately.
+ * multiply the Coulomb and Lennard-Jones parts of that slice separately.  A scaling parameter can also
+ * soften the Lennard-Jones interactions of its slice (see ``softcoreAlpha`` in :func:`addScalingParameter`),
+ * so a slice can have up to three scaling parameters: one for Coulomb, one for Lennard-Jones and one
+ * softening parameter.
  *
  * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
