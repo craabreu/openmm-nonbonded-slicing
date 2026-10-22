@@ -177,6 +177,8 @@ jobs:
           mkdir -p /etc/OpenCL/vendors && cp /opt/pocl/etc/OpenCL/vendors/*.icd /etc/OpenCL/vendors/
           VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
           /opt/python/cp${MATRIX_PYTHON/./}-cp${MATRIX_PYTHON/./}/bin/python -m venv /tmp/test-env
+          # PyPI may already have a wheel with this version: install ours first, then the dependencies
+          /tmp/test-env/bin/pip install --no-index --no-deps --find-links dist "openmm-nonbonded-slicing==$VERSION"
           /tmp/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
           /tmp/test-env/bin/pip check
           # pocl's LLVM needs a newer libstdc++ than the system one, which OpenMM would load first
@@ -287,6 +289,9 @@ jobs:
           PY=/opt/python/cp312-cp312/bin/python
           VERSION=$($PY tools/devtools/wheels/versions.py version src ${{ matrix.openmm }})
           $PY -m venv /tmp/test-env
+          # PyPI may already have wheels with this version: install ours first, then the dependencies
+          /tmp/test-env/bin/pip install --no-index --no-deps --find-links wheels \
+            "openmm-nonbonded-slicing==$VERSION" "openmm-nonbonded-slicing-cuda-${{ matrix.cuda }}==$VERSION"
           /tmp/test-env/bin/pip install --find-links wheels "openmm-nonbonded-slicing[cuda${{ matrix.cuda }}]==$VERSION"
           /tmp/test-env/bin/pip check
           cd /tmp && /tmp/test-env/bin/python $GITHUB_WORKSPACE/tools/devtools/wheels/smoke.py cuda $VERSION ${{ matrix.cuda }}
@@ -363,6 +368,8 @@ jobs:
         run: |
           VERSION=$(python $TOOLS/versions.py version $SRC ${{ matrix.openmm }})
           python -m venv $RUNNER_TEMP/test-env
+          # PyPI may already have a wheel with this version: install ours first, then the dependencies
+          $RUNNER_TEMP/test-env/bin/pip install --no-index --no-deps --find-links dist "openmm-nonbonded-slicing==$VERSION"
           $RUNNER_TEMP/test-env/bin/pip install --find-links dist "openmm-nonbonded-slicing==$VERSION" pytest
           $RUNNER_TEMP/test-env/bin/pip check
           cd $RUNNER_TEMP && $RUNNER_TEMP/test-env/bin/python $TOOLS/smoke.py base $VERSION
