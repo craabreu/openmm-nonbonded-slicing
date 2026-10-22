@@ -26,7 +26,8 @@ Changelog
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,
-  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``).
+  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``). It cannot be combined with soft-core
+  scaling parameters.
 
 **Bug fixes**
 

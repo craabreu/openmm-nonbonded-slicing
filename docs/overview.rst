@@ -85,7 +85,8 @@ is negative and the potential becomes singular at
 softened, scale the Coulomb contribution of the slice with its own parameter
 (``includeCoulomb=True, includeLJ=False``) and turn it off before softening the Lennard-Jones term.
 Like the other properties of a scaling parameter, :math:`\alpha` is fixed when a :OpenMM:`Context`
-is created, while :math:`\lambda_E` and :math:`\lambda_s` are its global parameters.
+is created, while :math:`\lambda_E` and :math:`\lambda_s` are its global parameters. Soft-core
+slices cannot be combined with an inner force group (see below).
 
 The derivatives with respect to the two parameters are
 
@@ -153,8 +154,10 @@ parameter offsets apply to both parts.
    integrator = openmm.MTSIntegrator(90*unit.femtoseconds, [(2, 1), (1, 30), (0, 180)])
 
 The inner force group must differ from the force group of the force and from its reciprocal-space
-force group, and requires :math:`0 < r_s < r_c \le` cutoff distance. Changing these settings
-requires a new :OpenMM:`Context`, as for any force group.
+force group, and requires :math:`0 < r_s < r_c \le` cutoff distance. Since the split assumes the
+bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling parameters
+(a positive ``softcoreAlpha``). Changing these settings requires a new :OpenMM:`Context`, as for any
+force group.
 
 Installation
 ============

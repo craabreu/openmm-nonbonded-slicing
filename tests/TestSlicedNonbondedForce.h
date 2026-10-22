@@ -1809,6 +1809,9 @@ void testInnerGroupErrors() {
     build([](SlicedNonbondedForce& f) { f.setReciprocalSpaceForceGroup(1); }, true);  // same as reciprocal group
     build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
     build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
+    // The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
+    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true); }, false);
     bool threw = false;
     try {
         SlicedNonbondedForce force(1);

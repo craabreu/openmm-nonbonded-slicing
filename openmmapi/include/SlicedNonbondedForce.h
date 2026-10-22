@@ -68,7 +68,8 @@ public:
      * force group is disabled (the default).  When enabled, every direct-space pair interaction
      * (including 1-4 exceptions) is split into a short-range part, switched off smoothly between
      * the inner switching distance and the inner cutoff distance, which is computed in the inner
-     * force group, and a remainder, which stays in the force group of this force.
+     * force group, and a remainder, which stays in the force group of this force.  The inner force
+     * group cannot be used with soft-core scaling parameters.
      */
     int getInnerForceGroup() const {
         return innerForceGroup;

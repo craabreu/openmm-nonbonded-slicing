@@ -342,7 +342,8 @@ public:
      *         when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
      *         added to the usual derivative when the same parameter also scales the Lennard-Jones
      *         energy. This setting is fixed
-     *         at Context creation, like the other arguments of this method.
+     *         at Context creation, like the other arguments of this method. Soft-core scaling
+     *         parameters cannot be used with an inner force group (see :func:`setInnerForceGroup`).
      *
      * Returns
      * -------
@@ -481,7 +482,9 @@ public:
      *
      * The inner force group must differ from the force group of this force and from the reciprocal
      * space force group, and requires 0 < inner switching distance < inner cutoff distance <=
-     * cutoff distance.  Like other force group settings, changes take effect when a new
+     * cutoff distance.  Since the split assumes the bare Lennard-Jones potential, the inner force
+     * group cannot be used with soft-core scaling parameters (see ``softcoreAlpha`` in
+     * :func:`addScalingParameter`).  Like other force group settings, changes take effect when a new
      * :OpenMM:`Context` is created or an existing one is reinitialized.
      *
      * Parameters

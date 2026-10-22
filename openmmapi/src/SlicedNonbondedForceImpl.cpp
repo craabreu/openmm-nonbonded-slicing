@@ -143,6 +143,9 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
             throw OpenMMException("SlicedNonbondedForce: the inner force group must differ from the direct-space and reciprocal-space force groups");
         if (!owner.getIncludeDirectSpace())
             throw OpenMMException("SlicedNonbondedForce: the inner force group requires the direct space to be included");
+        for (int index = 0; index < owner.getNumScalingParameters(); index++)
+            if (owner.getScalingParameterSoftcoreAlpha(index) > 0.0)
+                throw OpenMMException("SlicedNonbondedForce: the inner force group cannot be used with soft-core scaling parameters");
     }
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
 }

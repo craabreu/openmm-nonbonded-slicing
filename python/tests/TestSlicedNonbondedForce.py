@@ -748,6 +748,29 @@ def testInnerGroupAccessors():
     ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance().value_in_unit(unit.nanometer), 1e-12)
 
 
+def testInnerGroupWithSoftcore():
+    # The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
+    def makeContext(softcoreAlpha):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        force = plugin.SlicedNonbondedForce(1)
+        force.addParticle(1.0, 0.3, 0.5)
+        force.addParticle(-1.0, 0.3, 0.5)
+        force.setInnerForceGroup(1)
+        force.setInnerSwitchingDistance(0.5)
+        force.setInnerCutoffDistance(0.8)
+        force.addGlobalParameter("lambda", 1.0)
+        force.addScalingParameter("lambda", 0, 0, False, True, softcoreAlpha)
+        system.addForce(force)
+        platform = mm.Platform.getPlatformByName("Reference")
+        return mm.Context(system, mm.VerletIntegrator(0.001), platform)
+
+    with pytest.raises(mm.OpenMMException, match="inner force group cannot be used with soft-core"):
+        makeContext(0.5)
+    makeContext(0.0)
+
+
 @pytest.mark.parametrize("platformName, precision", cases)
 def testInnerGroupSplit(platformName, precision):
     platform = mm.Platform.getPlatformByName(platformName)
