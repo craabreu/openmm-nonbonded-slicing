@@ -35,14 +35,21 @@ parameters. A parameter that scales both contributions of a single slice $I, J$ 
 $E^{vdW}_{I,J} + E^{elec}_{I,J}$, while one that scales the electrostatic contributions of several slices
 yields their sum. This is how the energy of a slice, or of a group of slices, can be reported.
 
-A parameter that softens a slice ({doc}`softcore`) makes the energy non-linear in it, and the reported
-derivative depends on the roles the parameter plays:
+A parameter that softens a slice ({doc}`softcore`) makes the energy non-linear in it. For a pair of the
+slice, the derivatives with respect to the energy and softening parameters are
+
+$$
+\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
+\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
+$$
+
+and the reported derivative depends on the roles the parameter plays:
 
 | Parameter | Reported derivative |
 |---|---|
 | Multiplies the Coulomb contributions of any slices, or the Lennard-Jones contributions of unsoftened slices | The sum of the unscaled contributions it multiplies, independent of the parameter values |
-| Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter | The soft-core van der Waals energy of the slice, $4 \epsilon (s^2 - s)$ summed over its pairs, which differs from the usual energy whenever $\lambda_s < 1$ |
-| Softens a slice | $4 \lambda_E \epsilon \alpha s^2 (2 s - 1)$ summed over its pairs, which is not an energy |
+| Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter | $\partial U / \partial \lambda_E$ summed over its pairs: the soft-core van der Waals energy of the slice, which differs from the usual energy whenever $\lambda_s < 1$ |
+| Softens a slice | $\partial U / \partial \lambda_s$ summed over its pairs, which is not an energy |
 | Multiplies the Lennard-Jones contribution of a slice and softens it | The sum of the two rows above, which is not an energy, even when the parameter is 1 and the soft-core and usual potentials coincide |
 
 The pair terms in the last three rows are multiplied by the switching function when it is used and, with

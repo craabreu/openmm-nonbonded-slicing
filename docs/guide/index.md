@@ -4,8 +4,8 @@
 :maxdepth: 1
 
 slicing
-derivatives
 softcore
+derivatives
 reciprocal
 mts
 ```

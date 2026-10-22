@@ -54,18 +54,3 @@ $O\left(\alpha (1-\lambda_s) (\sigma/r_c)^6\right)$.
   Lennard-Jones term, as OpenMM's NonbondedForce does on each platform.
 * Soft-core slices cannot be combined with an inner force group ({doc}`mts`), whose split assumes the
   bare Lennard-Jones potential.
-
-## What the derivatives mean
-
-The derivatives with respect to the two parameters are
-
-$$
-\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
-\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
-$$
-
-each times the switching function when it is used and, with LJPME, minus the same term evaluated at the
-cutoff, and a parameter that plays both roles gets their sum. The first is the soft-core van der Waals energy of
-the slice, which differs from the usual one whenever $\lambda_s < 1$; the second is not an energy, and
-neither is their sum, even at $\lambda = 1$. The table in {doc}`derivatives` states what is reported in
-each case.

@@ -19,14 +19,14 @@ NonbondedForce it replaces. Selected scaling parameters can instead be tied to {
 parameters, so that the van der Waals and electrostatic contributions of chosen slices are scaled up or
 down while a simulation runs. See {doc}`guide/slicing`.
 
-**Energy parameter derivatives.** The derivative of the energy with respect to a scaling parameter can be
-requested along with the energy, which gives the energy of a slice or of a group of slices. See
-{doc}`guide/derivatives`.
-
 **Soft-core Lennard-Jones potential.** A scaling parameter can also soften the Lennard-Jones interactions
 of its slice with the Beutler soft-core potential, which remains finite as particles overlap, so that a
 slice can be decoupled alchemically without the singularity of the usual potential. See
 {doc}`guide/softcore`.
+
+**Energy parameter derivatives.** The derivative of the energy with respect to a scaling parameter can be
+requested along with the energy, which gives the energy of a slice or of a group of slices. See
+{doc}`guide/derivatives`.
 
 **Force-group splitting.** With Ewald, PME and LJPME, the reciprocal-space sum can be computed in its own
 force group, together with the terms that correct it for excluded pairs and exceptions

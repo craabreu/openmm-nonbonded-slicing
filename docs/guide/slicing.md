@@ -63,9 +63,3 @@ interactions of its slice; see {doc}`softcore`.
   `updateParametersInContext`, with the same limitations as in NonbondedForce: other settings, such as the
   nonbonded method and the cutoff, are not updated (reinitialize the Context instead), the pair of
   particles of an exception cannot change, and particles or exceptions cannot be added.
-
-## What the derivatives mean
-
-The derivative of the energy with respect to a scaling parameter can be requested with
-`addEnergyParameterDerivative`. For parameters that only multiply slice energies, it is the sum of the
-unscaled energies of the slices the parameter multiplies; see {doc}`derivatives`.

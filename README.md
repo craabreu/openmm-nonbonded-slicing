@@ -19,10 +19,10 @@ der Waals and electrostatic contributions, $`E_{I,J}`$ is the potential energy o
 formed by one particle in subset $`I`$ and one in subset $`J`$, and $`\lambda_{I,J}`$ is a scaling parameter.
 
 The scaling parameters can be tied to [Context] global parameters, so that selected slices are scaled
-while a simulation runs; the derivative of the energy with respect to a scaling parameter can be
-requested along with the energy, which is a way of reporting the energies of individual slices; a scaling
-parameter can soften the Lennard-Jones interactions of its slice with a soft-core potential, for alchemical
-decoupling without singularities; and, for multiple time-step integration, a short-range, force-switched
+while a simulation runs; a scaling parameter can soften the Lennard-Jones interactions of its slice with
+a soft-core potential, for alchemical decoupling without singularities; the derivative of the energy with
+respect to a scaling parameter can be requested along with the energy, which is a way of reporting the
+energies of individual slices; and, for multiple time-step integration, a short-range, force-switched
 copy of the direct-space interactions can be computed in its own force group, as can the reciprocal-space
 sum with Ewald, PME or LJPME. The [documentation] has a user guide for each of these capabilities,
 the theory behind the sliced lattice sums, measured costs and the Python API.
