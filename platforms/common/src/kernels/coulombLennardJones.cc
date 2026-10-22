@@ -33,20 +33,20 @@
     real sig6 = sig2*sig2*sig2;
     real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
 #if HAS_SOFTCORE
-    // Beutler soft-core potential: s replaces sig6 and reduces to it when alpha = 0 or lambda = 1.
-    // ljEnergyDeriv is the derivative of lambda*ljEnergy with respect to lambda.
+    // Beutler soft-core potential: s replaces sig6 and reduces to it when alpha = 0 or the softness
+    // parameter is 1. ljSoftDeriv is the derivative of ljLambda*ljEnergy with respect to that parameter.
     const real softcoreAlpha = SOFTCORE_ALPHA[slice];
-    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-ljLambda)*sig6);
+    const real softLambda = SOFTCORE_LAMBDA[slice];
+    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
     const real s = sig6*q;
     real epss = eps*s;
     tempForce = 6.0f*epss*(2.0f*s - 1.0f)*q;
     real ljEnergy = includeInteraction ? epss*(s - 1.0f) : 0;
-    real ljEnergyDeriv = includeInteraction ? ljEnergy + ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
+    real ljSoftDeriv = includeInteraction ? ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
 #else
     real epssig6 = sig6*eps;
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
-    real ljEnergyDeriv = ljEnergy;
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -55,7 +55,9 @@
         real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
         tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
         ljEnergy *= switchValue;
-        ljEnergyDeriv *= switchValue;
+#if HAS_SOFTCORE
+        ljSoftDeriv *= switchValue;
+#endif
     }
     #endif
 #if DO_LJPME
@@ -84,7 +86,7 @@
 #if HAS_SOFTCORE
     // The additive part of the potential shift, in the soft-core form so that the energy
     // stays continuous at the cutoff
-    const real qc = RECIP(1.0f + softcoreAlpha*(1.0f-ljLambda)*sig6);
+    const real qc = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
     const real sc = sig6*qc;
     epss = eps*sc;
     ljPmeEnergy += epss*(1.0f - sc);
@@ -98,9 +100,7 @@
     ljPmeEnergy += MULTSHIFT6*c6;
     ljEnergy += includeInteraction ? ljPmeEnergy : 0;
 #if HAS_SOFTCORE
-    ljEnergyDeriv += includeInteraction ? ljPmeEnergy - shiftDeriv : 0;
-#else
-    ljEnergyDeriv = ljEnergy;
+    ljSoftDeriv -= includeInteraction ? shiftDeriv : 0;
 #endif
 #endif
     tempForce *= ljLambda;
@@ -125,17 +125,17 @@
     real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
 #if HAS_SOFTCORE
     const real softcoreAlpha = SOFTCORE_ALPHA[slice];
-    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-ljLambda)*sig6);
+    const real softLambda = SOFTCORE_LAMBDA[slice];
+    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
     const real s = sig6*q;
     const real epss = eps*s;
     tempForce = 6.0f*epss*(2.0f*s - 1.0f)*q;
     real ljEnergy = includeInteraction ? epss*(s - 1.0f) : 0;
-    real ljEnergyDeriv = includeInteraction ? ljEnergy + ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
+    real ljSoftDeriv = includeInteraction ? ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
 #else
     real epssig6 = sig6*eps;
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
-    real ljEnergyDeriv = ljEnergy;
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -144,7 +144,9 @@
         real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
         tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
         ljEnergy *= switchValue;
-        ljEnergyDeriv *= switchValue;
+#if HAS_SOFTCORE
+        ljSoftDeriv *= switchValue;
+#endif
     }
     #endif
     tempForce *= ljLambda;

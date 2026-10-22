@@ -143,6 +143,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray subsets;
         ComputeArray sliceLambdas;
         ComputeArray sliceSoftcoreAlphas;
+        ComputeArray sliceSoftLambdas;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -179,26 +180,28 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         std::vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
         std::vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
         std::vector<double> sliceSoftcoreAlphasVec;
+        std::vector<double> sliceSoftLambdasVec;
         std::vector<ScalingParameterInfo> sliceScalingParams;
         AddEnergyPostComputation* addEnergy;
 
-        std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ);
+        std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ, bool conditionSoftcore);
         std::string getCoulombDerivativeCode(ComputeContext& cc, std::vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
-        void uploadSoftcoreAlphas();
+        void uploadReals(ComputeArray& array, const std::vector<double>& values);
 
         double totalCharge;
     };
 
 class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
     public:
-        std::string nameCoulomb, nameLJ;
-        bool includeCoulomb, includeLJ;
-        bool hasDerivativeCoulomb, hasDerivativeLJ;
+        std::string nameCoulomb, nameLJ, nameSoftcore;
+        bool includeCoulomb, includeLJ, includeSoftcore;
+        bool hasDerivativeCoulomb, hasDerivativeLJ, hasDerivativeSoftcore;
+        double softcoreAlpha;
         ScalingParameterInfo() :
-            nameCoulomb(""), nameLJ(""), includeCoulomb(false), includeLJ(false),
-            hasDerivativeCoulomb(false), hasDerivativeLJ(false) {
+            nameCoulomb(""), nameLJ(""), nameSoftcore(""), includeCoulomb(false), includeLJ(false), includeSoftcore(false),
+            hasDerivativeCoulomb(false), hasDerivativeLJ(false), hasDerivativeSoftcore(false), softcoreAlpha(0.0) {
         }
-        void addInfo(std::string name, bool includeCoulomb, bool includeLJ, bool hasDerivative) {
+        void addInfo(std::string name, bool includeCoulomb, bool includeLJ, double softcoreAlpha, bool hasDerivative) {
             if (includeCoulomb) {
                 this->includeCoulomb = true;
                 nameCoulomb = name;
@@ -208,6 +211,12 @@ class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
                 this->includeLJ = true;
                 nameLJ = name;
                 hasDerivativeLJ = hasDerivative;
+            }
+            if (softcoreAlpha > 0) {
+                includeSoftcore = true;
+                nameSoftcore = name;
+                hasDerivativeSoftcore = hasDerivative;
+                this->softcoreAlpha = softcoreAlpha;
             }
         }
     };

@@ -42,11 +42,9 @@ public:
     static double calcDispersionCorrection(const System& system, const SlicedNonbondedForce& force);
     static std::vector<double> calcDispersionCorrections(const System& system, const SlicedNonbondedForce& force);
 private:
-    void checkSoftcoreSlices() const;
     static double evalIntegral(double r, double rs, double rc, double sigma);
     const SlicedNonbondedForce& owner;
     Kernel kernel;
-    std::set<int> slicesWithLJScaling;
 };
 
 } // namespace NonbondedSlicing

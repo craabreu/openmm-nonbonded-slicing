@@ -37,7 +37,6 @@ const real coef = invR2*invR2*invR2*c6;
 const real eprefac = 1.0f + dar2 + 0.5f*dar4;
 const real dprefac = eprefac + dar6/6.0f;
 real ljEnergy = coef*(1.0f - expDar2*eprefac);
-const real ljEnergyDeriv = ljEnergy;
 tempForce += ljLambda*6.0f*coef*(1.0f - expDar2*dprefac);
 energy += ljLambda*ljEnergy;
 #endif

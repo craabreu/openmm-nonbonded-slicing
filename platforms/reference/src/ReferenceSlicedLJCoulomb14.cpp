@@ -57,14 +57,14 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
        @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
-       @param sliceDerivCorrection  the correction to add to the vdW energy of the slice to obtain its derivative
+       @param sliceSoftDeriv  the derivative of the slice's energy with respect to its softness parameter
 
    --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
                                      vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                                     double softcoreAlpha, double& sliceDerivCorrection) {
+                                     double softcoreAlpha, double& sliceSoftDeriv) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -81,8 +81,8 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    double energy, rdUdr, derivCorrection;
-    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], softcoreAlpha, energy, rdUdr, derivCorrection);
+    double energy, rdUdr, softDeriv;
+    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], sliceLambdas[soft], softcoreAlpha, energy, rdUdr, softDeriv);
 
     double dEdR      = sliceLambdas[vdW]*rdUdr;
            dEdR     += sliceLambdas[Coul]*ONE_4PI_EPS0*parameters[2]*inverseR;
@@ -98,6 +98,6 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
 
     // accumulate energies
     sliceEnergies[vdW] += energy;
-    sliceDerivCorrection += derivCorrection;
+    sliceSoftDeriv += softDeriv;
     sliceEnergies[Coul] += ONE_4PI_EPS0*parameters[2]*inverseR;
 }
