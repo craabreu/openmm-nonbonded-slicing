@@ -15,13 +15,15 @@ Changelog
   1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
 * A scaling parameter added with ``includeDecapping=True`` (sixth argument of ``addScalingParameter``)
-  multiplies the decapping term of its slice: each Lennard-Jones pair of the slice is split into a capped
-  potential, finite at r = 0 and multiplied by the slice's Lennard-Jones scaling parameter, and the rest of
-  the usual potential, which is zero beyond sigma (Correa et al., J. Chem. Theory Comput. 18, 5876, 2022).
-  The energy stays linear in every parameter, so the derivatives are the capped and decapping energies of the
-  slice. Available on all platforms, with every nonbonded method and with the inner force group. With a
-  switching function or an inner force group, the sigma of the Lennard-Jones pairs of decapped slices cannot
-  exceed the switching distance or the inner switching distance.
+  multiplies the decapping term of its slice: each Lennard-Jones pair of the slice is split into a
+  capped potential, finite at r = 0 and multiplied by the slice's Lennard-Jones scaling parameter, and
+  the rest of the usual potential, which is zero beyond sigma (Correa et al., J. Chem. Theory Comput.
+  18, 5876, 2022). The energy stays linear in every parameter, so the derivatives are the capped and
+  decapping energies of the slice. The polynomial core is defined by the orders of the derivatives that
+  vanish at r = 0 and that match the usual potential at r = sigma, both 3 by default
+  (``setCappingOrders``). Available on all platforms, with every nonbonded method and with the inner
+  force group. With a switching function or an inner force group, the sigma of the Lennard-Jones pairs
+  of decapped slices cannot exceed the switching distance or the inner switching distance.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,

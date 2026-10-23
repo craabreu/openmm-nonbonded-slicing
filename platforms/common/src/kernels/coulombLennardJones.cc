@@ -60,9 +60,9 @@
         decapped = (IS_DECAPPED && sig6 > 1.0f);
         if (decapped) {
             const real x = RECIP(invR*sig);
-            const real x4 = (x*x)*(x*x);
-            capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
-            const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+            const real xp = CAP_XPOW;
+            capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+            const real capForce = -eps*xp*(CAP_RPOLY);
             const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
             decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
             decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
@@ -169,9 +169,9 @@
     // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
     if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
         const real x = RECIP(invR*sig);
-        const real x4 = (x*x)*(x*x);
-        const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
-        const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+        const real xp = CAP_XPOW;
+        const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+        const real capForce = -eps*xp*(CAP_RPOLY);
         const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
         decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
         decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
@@ -264,9 +264,9 @@
     // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
     if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
         const real x = RECIP(invR*sig);
-        const real x4 = (x*x)*(x*x);
-        const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
-        const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+        const real xp = CAP_XPOW;
+        const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+        const real capForce = -eps*xp*(CAP_RPOLY);
         const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
         decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
         decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;

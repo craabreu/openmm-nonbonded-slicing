@@ -10,11 +10,13 @@
 
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
+#include "internal/CappedLJ.h"
 #include "openmm/internal/AssertionUtilities.h"
 #include "openmm/OpenMMException.h"
 #include <string.h>
 #include <algorithm>
 #include <iostream>
+#include <string>
 
 using namespace std;
 using namespace OpenMM;
@@ -29,7 +31,8 @@ using namespace NonbondedSlicing;
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true),
-        reciprocalExclusions(false), innerForceGroup(-1), innerCutoff(0.0), innerSwitchingDistance(0.0) {
+        reciprocalExclusions(false), innerForceGroup(-1), innerCutoff(0.0), innerSwitchingDistance(0.0),
+        cappingOrderAtZero(3), cappingOrderAtSigma(3) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : NonbondedForce() {
@@ -39,6 +42,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     innerForceGroup = -1;
     innerCutoff = 0.0;
     innerSwitchingDistance = 0.0;
+    cappingOrderAtZero = cappingOrderAtSigma = 3;
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
@@ -114,6 +118,13 @@ int SlicedNonbondedForce::getParticleSubset(int index) const {
     ASSERT_VALID("Index", index, getNumParticles());
     auto element = subsets.find(index);
     return element == subsets.end() ? 0 : element->second;
+}
+
+void SlicedNonbondedForce::setCappingOrders(int orderAtZero, int orderAtSigma) {
+    if (orderAtZero < 1 || orderAtZero > CappedLJ::MaxOrder || orderAtSigma < 1 || orderAtSigma > CappedLJ::MaxOrder)
+        throw OpenMMException("SlicedNonbondedForce: the capping orders must be between 1 and "+to_string(CappedLJ::MaxOrder));
+    cappingOrderAtZero = orderAtZero;
+    cappingOrderAtSigma = orderAtSigma;
 }
 
 void SlicedNonbondedForce::setInnerForceGroup(int group) {

@@ -54,6 +54,8 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     node.setIntProperty("innerForceGroup", force.getInnerForceGroup());
     node.setDoubleProperty("innerCutoff", force.getInnerCutoffDistance());
     node.setDoubleProperty("innerSwitchingDistance", force.getInnerSwitchingDistance());
+    node.setIntProperty("cappingOrderAtZero", force.getCappingOrderAtZero());
+    node.setIntProperty("cappingOrderAtSigma", force.getCappingOrderAtSigma());
     SerializationNode& globalParams = node.createChildNode("GlobalParameters");
     for (int i = 0; i < force.getNumGlobalParameters(); i++)
         globalParams.createChildNode("Parameter").setStringProperty("name", force.getGlobalParameterName(i)).setDoubleProperty("default", force.getGlobalParameterDefaultValue(i));
@@ -138,6 +140,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
         force->setInnerForceGroup(node.getIntProperty("innerForceGroup", -1));
         force->setInnerCutoffDistance(node.getDoubleProperty("innerCutoff", 0.0));
         force->setInnerSwitchingDistance(node.getDoubleProperty("innerSwitchingDistance", 0.0));
+        force->setCappingOrders(node.getIntProperty("cappingOrderAtZero", 3), node.getIntProperty("cappingOrderAtSigma", 3));
         const SerializationNode& globalParams = node.getChildNode("GlobalParameters");
         for (auto& parameter : globalParams.getChildren())
             force->addGlobalParameter(parameter.getStringProperty("name"), parameter.getDoubleProperty("default"));

@@ -408,11 +408,26 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     map<string, string> decapDefines;
     decapDefines["HAS_DECAPPING"] = (hasDecapping ? "1" : "0");
     decapDefines["IS_DECAPPED"] = getDecappedSliceCondition();
-    decapDefines["CAP_C0"] = cc.doubleToString(CappedLJ::C0);
-    decapDefines["CAP_C4"] = cc.doubleToString(CappedLJ::C4);
-    decapDefines["CAP_C5"] = cc.doubleToString(CappedLJ::C5);
-    decapDefines["CAP_C6"] = cc.doubleToString(CappedLJ::C6);
-    decapDefines["CAP_MAX_SIG6"] = cc.doubleToString(CappedLJ::MaxDecapSig6);
+    // The capped potential c(x) = a_0 + x^(m0+1)*P(x) and -x*c'(x) = -x^(m0+1)*R(x), with P and R written in Horner
+    // form from the coefficients of CappedLJ, so that the kernels need no loop or pow for any pair of orders
+    CappedLJ cappedLJ(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
+    const vector<double>& capCoefficients = cappedLJ.getCoefficients();
+    int capPower = cappedLJ.getOrderAtZero()+1;
+    string capPoly, capRPoly;
+    for (int j = capCoefficients.size()-1; j >= 0; j--) {
+        string a = cc.doubleToString(capCoefficients[j]);
+        string ka = cc.doubleToString((capPower+j)*capCoefficients[j]);
+        capPoly = capPoly.empty() ? a : a+"+x*("+capPoly+")";
+        capRPoly = capRPoly.empty() ? ka : ka+"+x*("+capRPoly+")";
+    }
+    string capXPow = "x";
+    for (int i = 1; i < capPower; i++)
+        capXPow += "*x";
+    decapDefines["CAP_C0"] = cc.doubleToString(cappedLJ.getConstant());
+    decapDefines["CAP_XPOW"] = capXPow;
+    decapDefines["CAP_POLY"] = capPoly;
+    decapDefines["CAP_RPOLY"] = capRPoly;
+    decapDefines["CAP_MAX_SIG6"] = cc.doubleToString(MaxDecapSig6);
     map<string, string> defines;
     defines.insert(decapDefines.begin(), decapDefines.end());
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");

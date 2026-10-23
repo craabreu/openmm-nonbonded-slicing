@@ -13,6 +13,7 @@
 #include "openmm/Vec3.h"
 #include "internal/windowsExportNonbondedSlicing.h"
 #include "internal/InnerSplit.h"
+#include "internal/CappedLJ.h"
 #include <vector>
 
 using namespace std;
@@ -67,6 +68,16 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
+       Set the capped Lennard-Jones potential of the decapped slices.
+
+       @param capped   the capped potential
+
+       --------------------------------------------------------------------------------------- */
+
+    void setCappedLJ(const CappedLJ& capped);
+
+    /**---------------------------------------------------------------------------------------
+
        Calculate nonbonded 1-4 interactinos
 
        @param atomIndices      atom indices of the atoms in each pair
@@ -92,6 +103,7 @@ private:
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
    InnerSplit innerSplit;
+   CappedLJ cappedLJ;
 };
 
 } // namespace NonbondedSlicing

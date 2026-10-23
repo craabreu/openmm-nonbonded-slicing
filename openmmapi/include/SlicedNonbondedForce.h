@@ -48,6 +48,26 @@ public:
     void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
     bool getScalingParameterIncludeDecapping(int index) const;
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
+    /**
+     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that vanish at r = 0
+     * (m0 in Correa et al., J. Chem. Theory Comput. 18, 5876, 2022).  The default is 3.
+     */
+    int getCappingOrderAtZero() const {
+        return cappingOrderAtZero;
+    }
+    /**
+     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that match those of the
+     * usual potential at r = sigma (m1 in Correa et al., 2022).  The default is 3.
+     */
+    int getCappingOrderAtSigma() const {
+        return cappingOrderAtSigma;
+    }
+    /**
+     * Set the orders m0 and m1 of the capped Lennard-Jones potential of decapped slices, a polynomial in r/sigma of
+     * degree m0 + m1 whose first m0 derivatives vanish at r = 0 and whose value and first m1 derivatives match those of
+     * the usual potential at r = sigma.  Both orders must be between 1 and 6.  They are fixed when a Context is created.
+     */
+    void setCappingOrders(int orderAtZero, int orderAtSigma);
     int addEnergyParameterDerivative(const std::string& parameter);
     const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
@@ -100,6 +120,7 @@ private:
     bool useCuFFT, reciprocalExclusions;
     int innerForceGroup;
     double innerCutoff, innerSwitchingDistance;
+    int cappingOrderAtZero, cappingOrderAtSigma;
 };
 
 /**

@@ -9,6 +9,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "SlicedNonbondedForce.h"
+#include "internal/CappedLJ.h"
 #include "AssertionUtilities.h"
 #include "openmm/NonbondedForce.h"
 #include "openmm/Context.h"
@@ -2296,19 +2297,24 @@ void testInnerGroupFixedAtCreation() {
         assertEqualTo(expected[i], found[i], tol);
 }
 
-// The capped Lennard-Jones potential of Correa et al. (J. Chem. Theory Comput. 18, 5876, 2022), eq. 5, in units of
-// 4*epsilon, and -x times its derivative, for x = r/sigma < 1
-double cappedLJ(double x) {
+// The capped Lennard-Jones potential of Correa et al. (J. Chem. Theory Comput. 18, 5876, 2022) in units of 4*epsilon,
+// and -x times its derivative, for x = r/sigma < 1: eq. 5 for the default orders m0 = m1 = 3, and the same conditions
+// solved by hand for m0 = 4, m1 = 2
+double cappedLJ(double x, int m0 = 3, int m1 = 3) {
+    if (m0 == 4 && m1 == 2)
+        return 5.8 - 28.8*pow(x, 5) + 23*pow(x, 6);   // solved by hand from the same conditions
     return (-868*pow(x, 6) + 2188.8*pow(x, 5) - 1440*pow(x, 4) + 119.2)/4;
 }
 
-double cappedLJRForce(double x) {
+double cappedLJRForce(double x, int m0 = 3, int m1 = 3) {
+    if (m0 == 4 && m1 == 2)
+        return -(-5*28.8*pow(x, 5) + 6*23*pow(x, 6));
     return -(-6*868*pow(x, 6) + 5*2188.8*pow(x, 5) - 4*1440*pow(x, 4))/4;
 }
 
 enum DecapPairKind {DecapPair, DecapException, DecapExcluded};
 
-void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kind, double x) {
+void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kind, double x, int m0 = 3, int m1 = 3) {
     // One Lennard-Jones pair in slice (0, 1), with "lambdaLJ" scaling its Lennard-Jones contribution and "lambdaD"
     // multiplying its decapping term. The difference from the same force without decapping is
     // (lambdaD - lambdaLJ)*Delta, where Delta is the bare minus the capped potential, zero for r >= sigma. The LJPME
@@ -2329,6 +2335,7 @@ void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kin
         force->addParticle(0.0, sigma, epsilon);
         force->addParticle(0.0, sigma, epsilon);
         force->setParticleSubset(1, 1);
+        force->setCappingOrders(m0, m1);
         if (kind != DecapPair)
             force->addException(0, 1, 0.0, sigma, kind == DecapException ? epsilon : 0.0);
         force->addGlobalParameter("lambdaLJ", lambdaLJ);
@@ -2353,8 +2360,8 @@ void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kin
 
     double delta = 0.0, deltaRForce = 0.0;
     if (x < 1 && kind != DecapExcluded) {
-        delta = 4*epsilon*(pow(x, -12) - pow(x, -6) - cappedLJ(x));
-        deltaRForce = 4*epsilon*(12*pow(x, -12) - 6*pow(x, -6) - cappedLJRForce(x));
+        delta = 4*epsilon*(pow(x, -12) - pow(x, -6) - cappedLJ(x, m0, m1));
+        deltaRForce = 4*epsilon*(12*pow(x, -12) - 6*pow(x, -6) - cappedLJRForce(x, m0, m1));
     }
     for (double lambdaDValue : {lambdaD, 0.0, 1.0}) {
         contextDecap.setParameter("lambdaD", lambdaDValue);
@@ -2373,7 +2380,7 @@ void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kin
     }
 }
 
-void testDecappingOverlap(bool asException, bool inner, double x) {
+void testDecappingOverlap(bool asException, bool inner, double x, int m0 = 3, int m1 = 3) {
     // Two nearly overlapping particles with the decapping term off: the energy is the finite capped potential, which
     // must not come from the difference of the bare and decapping terms (both of order x^-12). At x = 1e-4, x^-12
     // overflows single precision, so the result must also not be 0*inf, nor inf-inf in the remainder of an inner group.
@@ -2387,6 +2394,7 @@ void testDecappingOverlap(bool asException, bool inner, double x) {
     force->addParticle(0.0, sigma, epsilon);
     force->addParticle(0.0, sigma, epsilon);
     force->setParticleSubset(1, 1);
+    force->setCappingOrders(m0, m1);
     if (asException)
         force->addException(0, 1, 0.0, sigma, epsilon);
     force->addGlobalParameter("lambdaLJ", lambdaLJ);
@@ -2404,8 +2412,8 @@ void testDecappingOverlap(bool asException, bool inner, double x) {
     Context context(system, integrator, platform);
     context.setPositions({Vec3(0, 0, 0), Vec3(x*sigma, 0, 0)});
     State state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
-    double energy = 4*epsilon*cappedLJ(x);
-    double f = lambdaLJ*4*epsilon*cappedLJRForce(x)/(x*sigma);
+    double energy = 4*epsilon*cappedLJ(x, m0, m1);
+    double f = lambdaLJ*4*epsilon*cappedLJRForce(x, m0, m1)/(x*sigma);
     assertEqualTo(lambdaLJ*energy, state.getPotentialEnergy(), TOL);
     assertEqualVec(Vec3(-f, 0, 0), state.getForces()[0], TOL);
     assertEqualVec(Vec3(f, 0, 0), state.getForces()[1], TOL);
@@ -2699,6 +2707,79 @@ void testDecappingSwitchingErrors() {
     assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
 }
 
+void testCappingOrders() {
+    // The orders must be between 1 and 6. For every pair, the polynomial has its first m0 derivatives null at x = 0 (it
+    // has no powers 1, ..., m0), matches x^-12 - x^-6 and its first m1 derivatives at x = 1, decreases on [0, 1], and
+    // has -x times its derivative as the force term. The default orders reproduce eq. 5 of Correa et al. (2022).
+
+    SlicedNonbondedForce force(2);
+    ASSERT_EQUAL(3, force.getCappingOrderAtZero());
+    ASSERT_EQUAL(3, force.getCappingOrderAtSigma());
+    for (auto orders : vector<pair<int, int>>{{0, 3}, {3, 0}, {7, 3}, {3, 7}})
+        ASSERT(throwsException([&]() { force.setCappingOrders(orders.first, orders.second); }));
+    force.setCappingOrders(4, 2);
+    ASSERT_EQUAL(4, force.getCappingOrderAtZero());
+    ASSERT_EQUAL(2, force.getCappingOrderAtSigma());
+
+    auto fallingFactorial = [](int p, int n) {
+        double result = 1.0;
+        for (int k = 0; k < n; k++)
+            result *= p-k;
+        return result;
+    };
+    for (int m0 = 1; m0 <= 6; m0++)
+        for (int m1 = 1; m1 <= 6; m1++) {
+            CappedLJ capped(m0, m1);
+            const vector<double>& a = capped.getCoefficients();
+            ASSERT_EQUAL(m1, (int) a.size());
+            for (int n = 0; n <= m1; n++) {
+                double derivative = (n == 0 ? capped.getConstant() : 0.0);
+                for (int j = 0; j < m1; j++)
+                    derivative += a[j]*fallingFactorial(m0+1+j, n);
+                double expected = fallingFactorial(-12, n)-fallingFactorial(-6, n);
+                ASSERT_EQUAL_TOL(expected, derivative, 1e-7);   // coefficients reach 1e5 at the highest orders
+            }
+            double previous = capped.getConstant(), energy, rForce;
+            for (int i = 1; i <= 100; i++) {
+                double x = 0.01*i;
+                capped.evaluate(x, energy, rForce);
+                ASSERT(energy <= previous+1e-12);
+                previous = energy;
+                double h = 1e-6, ePlus, eMinus, unused;
+                capped.evaluate(x+h, ePlus, unused);
+                capped.evaluate(x-h, eMinus, unused);
+                ASSERT_EQUAL_TOL(-x*(ePlus-eMinus)/(2*h), rForce, 1e-5);
+            }
+        }
+    CappedLJ standard;
+    ASSERT_EQUAL_TOL(29.8, standard.getConstant(), 1e-12);
+    ASSERT_EQUAL_TOL(-360.0, standard.getCoefficients()[0], 1e-12);
+    ASSERT_EQUAL_TOL(547.2, standard.getCoefficients()[1], 1e-12);
+    ASSERT_EQUAL_TOL(-217.0, standard.getCoefficients()[2], 1e-12);
+
+    // The orders are fixed when a Context is created
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(2);
+    sliced->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
+    sliced->addParticle(0.0, 1.0, 1.0);
+    sliced->addParticle(0.0, 1.0, 1.0);
+    sliced->setParticleSubset(1, 1);
+    sliced->addGlobalParameter("lambdaD", 0.0);
+    sliced->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    system.addForce(sliced);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.5, 0, 0)});
+    double before = context.getState(State::Energy).getPotentialEnergy();
+    sliced->setCappingOrders(4, 2);
+    assertEqualTo(before, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+    context.reinitialize(true);
+    assertEqualTo(4*cappedLJ(0.5, 4, 2), context.getState(State::Energy).getPotentialEnergy(), TOL);
+    assertEqualTo(4*cappedLJ(0.5), before, TOL);
+}
+
 void testErrors() {
     SlicedNonbondedForce force(3);
     force.addParticle(0.0, 1.0, 0.0);
@@ -2850,6 +2931,14 @@ int main(int argc, char* argv[]) {
             for (bool inner : {false, true})
                 for (double x : {0.02, 1e-4})
                     testDecappingOverlap(asException, inner, x);
+        // Capping orders other than the default
+        for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::PME, NonbondedForce::LJPME})
+            for (auto kind : {DecapPair, DecapException})
+                for (double x : {0.5, 0.999})
+                    testDecappingPair(method, kind, x, 4, 2);
+        for (bool inner : {false, true})
+            testDecappingOverlap(false, inner, 1e-4, 4, 2);
+        testCappingOrders();
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
                 testDecapping(sfmt, method, exceptions, false, false);

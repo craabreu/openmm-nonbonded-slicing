@@ -326,7 +326,8 @@ public:
      *         slice, each Lennard-Jones pair interacts through
      *         :math:`\\lambda_{LJ} u_{cap}(r) + \\lambda_D [u_{LJ}(r) - u_{cap}(r)]`, where
      *         :math:`u_{LJ}` is the usual potential, :math:`u_{cap}` equals it for :math:`r \\ge \\sigma`
-     *         and is a polynomial with the finite value :math:`119.2 \\epsilon` at :math:`r = 0`
+     *         and is a polynomial in :math:`r/\\sigma` with a finite value at :math:`r = 0`
+     *         (:math:`119.2 \\epsilon` with the default orders, see :func:`setCappingOrders`)
      *         :cite:`Correa_2022`, :math:`\\lambda_{LJ}` is the slice's Lennard-Jones scaling parameter (1
      *         if there is none) and :math:`\\lambda_D` is this parameter. The energy is linear in both
      *         parameters: the derivative with respect to :math:`\\lambda_{LJ}` is the capped van der Waals
@@ -419,6 +420,33 @@ public:
      *         :func:`addScalingParameter`
      */
     void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
+    /**
+     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that vanish at
+     * :math:`r = 0` (:math:`m_0` in :cite:`Correa_2022`). The default is 3.
+     */
+    int getCappingOrderAtZero() const;
+    /**
+     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that match those
+     * of the usual potential at :math:`r = \\sigma` (:math:`m_1` in :cite:`Correa_2022`). The default is 3.
+     */
+    int getCappingOrderAtSigma() const;
+    /**
+     * Set the orders of the capped Lennard-Jones potential of decapped slices (see ``includeDecapping`` in
+     * :func:`addScalingParameter`). The capped potential is :math:`4 \\epsilon c(r/\\sigma)` for
+     * :math:`r < \\sigma`, where :math:`c(x)` is the polynomial of degree :math:`m_0 + m_1` whose first
+     * :math:`m_0` derivatives vanish at :math:`x = 0` and whose value and first :math:`m_1` derivatives match
+     * those of :math:`x^{-12} - x^{-6}` at :math:`x = 1` :cite:`Correa_2022`. Lowering :math:`m_0` or raising
+     * :math:`m_1` raises the core, :math:`4 \\epsilon c(0)`, which is :math:`119.2 \\epsilon` with the
+     * default orders :math:`m_0 = m_1 = 3`. The orders are fixed when a Context is created.
+     *
+     * Parameters
+     * ----------
+     *     orderAtZero : int
+     *         :math:`m_0`, between 1 and 6
+     *     orderAtSigma : int
+     *         :math:`m_1`, between 1 and 6
+     */
+    void setCappingOrders(int orderAtZero, int orderAtSigma);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the value of an energy slice or a sum thereof. For a decapped

@@ -114,9 +114,9 @@ clEnergy -= innerEnergyCl;
 // and its energy is the bare one minus the constant subtracted below.
 if (IS_DECAPPED && sig6 > 1.0f) {
     const real x = RECIP(invR*exceptionParams.y);
-    const real x4 = (x*x)*(x*x);
-    const real capEnergy = exceptionParams.z*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
-    const real capForce = -exceptionParams.z*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+    const real xp = CAP_XPOW;
+    const real capEnergy = exceptionParams.z*(CAP_C0 + xp*(CAP_POLY));
+    const real capForce = -exceptionParams.z*xp*(CAP_RPOLY);
     const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
     decapForce = exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
     decapEnergy = exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;

@@ -120,6 +120,47 @@ def testDecappingAPI():
     assert clone.getScalingParameterIncludeDecapping(decap)
 
 
+def testCappingOrdersAPI():
+    force = plugin.SlicedNonbondedForce(2)
+    assert (force.getCappingOrderAtZero(), force.getCappingOrderAtSigma()) == (3, 3)
+    for orders in ((0, 3), (3, 0), (7, 3), (3, 7)):
+        with pytest.raises(Exception):
+            force.setCappingOrders(*orders)
+    force.setCappingOrders(4, 2)
+    assert (force.getCappingOrderAtZero(), force.getCappingOrderAtSigma()) == (4, 2)
+    clone = copy.deepcopy(force)
+    assert (clone.getCappingOrderAtZero(), clone.getCappingOrderAtSigma()) == (4, 2)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testCappingOrders(platformName, precision):
+    """The capped energy with orders (4, 2), 4*epsilon*(5.8 - 28.8*x^5 + 23*x^6), and with the default ones."""
+    def energy(orders, x):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+        force.addParticle(0.0, 1.0, 0.5)
+        force.addParticle(0.0, 1.0, 0.5)
+        force.setParticleSubset(1, 1)
+        force.addGlobalParameter("lambdaD", 0.0)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        if orders is not None:
+            force.setCappingOrders(*orders)
+        system.addForce(force)
+        platform = mm.Platform.getPlatformByName(platformName)
+        properties = {} if platformName == "Reference" else {"Precision": precision}
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(x, 0, 0)])
+        return value(context.getState(getEnergy=True).getPotentialEnergy())
+
+    tol = 1e-6 if platformName == "Reference" or precision == "double" else 1e-4
+    for x in (0.0001, 0.5, 0.9):
+        ASSERT_EQUAL_TOL(2*(5.8 - 28.8*x**5 + 23*x**6), energy((4, 2), x), tol)
+        ASSERT_EQUAL_TOL(2*(-868*x**6 + 2188.8*x**5 - 1440*x**4 + 119.2)/4, energy(None, x), tol)
+
+
 @pytest.mark.parametrize("platformName, precision", cases)
 def testDecapping(platformName, precision):
     """Decapped minus plain sliced energies match (lambdaD - lambdaLJ)*Delta from Custom forces."""

@@ -38,6 +38,7 @@ void testSerialization() {
     force.setInnerForceGroup(3);
     force.setInnerCutoffDistance(0.8);
     force.setInnerSwitchingDistance(0.5);
+    force.setCappingOrders(4, 2);
     force.setUseCuFFT(false);
     force.setReciprocalExclusions(true);
     double alpha = 0.5;
@@ -86,6 +87,8 @@ void testSerialization() {
     ASSERT_EQUAL(force.getInnerForceGroup(), force2.getInnerForceGroup());
     ASSERT_EQUAL(force.getInnerCutoffDistance(), force2.getInnerCutoffDistance());
     ASSERT_EQUAL(force.getInnerSwitchingDistance(), force2.getInnerSwitchingDistance());
+    ASSERT_EQUAL(force.getCappingOrderAtZero(), force2.getCappingOrderAtZero());
+    ASSERT_EQUAL(force.getCappingOrderAtSigma(), force2.getCappingOrderAtSigma());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
@@ -274,6 +277,8 @@ void testDeserializeVersion1() {
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "cappingOrderAtZero"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "cappingOrderAtSigma"));
     stringstream buffer2(xml);
     SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
     ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
@@ -281,6 +286,8 @@ void testDeserializeVersion1() {
     ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
     ASSERT(!copy->getScalingParameterIncludeDecapping(0));
     ASSERT_EQUAL(-1, copy->getInnerForceGroup());
+    ASSERT_EQUAL(3, copy->getCappingOrderAtZero());
+    ASSERT_EQUAL(3, copy->getCappingOrderAtSigma());
     delete copy;
 }
 

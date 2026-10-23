@@ -12,6 +12,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "internal/InnerSplit.h"
+#include "internal/CappedLJ.h"
 #include "NonbondedSlicingKernels.h"
 #include "openmm/Platform.h"
 #include "openmm/reference/ReferenceNeighborList.h"
@@ -91,6 +92,7 @@ private:
     int kmax[3], gridSize[3], dispersionGridSize[3];
     bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
     InnerSplit innerSplit;
+    CappedLJ cappedLJ;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;

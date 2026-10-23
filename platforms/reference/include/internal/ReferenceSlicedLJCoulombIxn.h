@@ -14,6 +14,7 @@
 #include "openmm/reference/ReferencePairIxn.h"
 #include "openmm/reference/ReferenceNeighborList.h"
 #include "internal/InnerSplit.h"
+#include "internal/CappedLJ.h"
 
 using namespace std;
 using namespace OpenMM;
@@ -33,6 +34,7 @@ class ReferenceSlicedLJCoulombIxn {
       OpenMM::Vec3 periodicBoxVectors[3];
       double cutoffDistance, switchingDistance;
       InnerSplit innerSplit;
+      CappedLJ cappedLJ;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
@@ -187,6 +189,16 @@ class ReferenceSlicedLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
 
       void setDecappedSlices(const vector<bool>& decapped);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set the capped Lennard-Jones potential of the decapped slices.
+
+         @param capped   the capped potential
+
+         --------------------------------------------------------------------------------------- */
+
+      void setCappedLJ(const CappedLJ& capped);
 
       /**---------------------------------------------------------------------------------------
 

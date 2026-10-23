@@ -13,7 +13,6 @@
 #include <sstream>
 
 #include "internal/ReferenceSlicedLJCoulomb14.h"
-#include "internal/CappedLJ.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 
@@ -61,6 +60,10 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
 
    --------------------------------------------------------------------------------------- */
 
+void ReferenceSlicedLJCoulomb14::setCappedLJ(const CappedLJ& capped) {
+    cappedLJ = capped;
+}
+
 void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
     innerSplit = split;
 }
@@ -105,7 +108,7 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     double decapEnergy = 0.0, decapRdUdr = 0.0;
     if (mode != Remainder && decapped && sig6 > 1.0) {
         double capEnergy = vdwEnergy, capRdUdr = rdUdr;
-        CappedLJ::split(1.0/(inverseR*parameters[0]), parameters[1], capEnergy, capRdUdr, decapEnergy, decapRdUdr);
+        cappedLJ.split(1.0/(inverseR*parameters[0]), parameters[1], capEnergy, capRdUdr, decapEnergy, decapRdUdr);
         if (mode == Full) {
             vdwEnergy = capEnergy;
             rdUdr = capRdUdr;

@@ -15,7 +15,6 @@
 #include <iostream>
 
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
-#include "internal/CappedLJ.h"
 #include "internal/ReferenceSlicedPME.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 #include "openmm/reference/ReferenceForce.h"
@@ -167,6 +166,10 @@ void ReferenceSlicedLJCoulombIxn::setDecappedSlices(const vector<bool>& decapped
     decappedSlices = decapped;
 }
 
+void ReferenceSlicedLJCoulombIxn::setCappedLJ(const CappedLJ& capped) {
+    cappedLJ = capped;
+}
+
 void ReferenceSlicedLJCoulombIxn::setInnerSplit(const InnerSplit& split) {
     innerSplit = split;
 }
@@ -205,7 +208,7 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerPair(int ii, int jj, const vecto
     // takes the capped potential of a decapped slice and all of its decapping term.
     if (decapped && sig6 > 1.0) {
         double capEnergy = eps*(sig6-1.0)*sig6, capRdUdr = eps*(12.0*sig6-6.0)*sig6, decapRdUdr;
-        CappedLJ::split(1.0/(inverseR*sig), eps, capEnergy, capRdUdr, decapEnergy, decapRdUdr);
+        cappedLJ.split(1.0/(inverseR*sig), eps, capEnergy, capRdUdr, decapEnergy, decapRdUdr);
         forceFactorVdw = capRdUdr*inverseR*inverseR;
         forceFactorDecap = decapRdUdr*inverseR*inverseR;
         vdwEnergy = capEnergy - eps*sigma6*(sigma6*innerSplit.K[0] - innerSplit.K[1]);
@@ -558,7 +561,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         // inner force group, both belong to the inner part.
         double decapEnergy = 0.0, decapRdUdr = 0.0;
         if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
-            CappedLJ::split(1.0/(inverseR*sig), eps, vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
+            cappedLJ.split(1.0/(inverseR*sig), eps, vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
         // With an inner force group, the remainder of a decapped pair below sigma has no bare Lennard-Jones term, only
         // the constant of the inner split, which is set directly rather than as the difference of two terms of order x^-12
         bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
@@ -736,7 +739,7 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     // inner force group, both belong to the inner part.
     double decapEnergy = 0.0, decapRdUdr = 0.0;
     if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
-        CappedLJ::split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
+        cappedLJ.split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
     // See calculatePairIxn
     bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
     if (decappedRemainder)
