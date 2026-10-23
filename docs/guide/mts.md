@@ -19,7 +19,9 @@ that $\hat V(r_c) = 0$ {cite}`Abreu_2020`; the direct-space group reports $V - \
 corresponding force. Every group therefore has an energy consistent with its force, and the groups add up
 to the unsplit result. The same applies to 1-4 exceptions, and scaling parameters, their derivatives and
 parameter offsets apply to both parts. The closed form of $\hat V$ used by all platforms is derived in
-{doc}`../theory`.
+{doc}`../theory`. In a decapped slice ({doc}`decapping`), the potential below $\sigma$ is the capped one
+plus the decapping term instead of the bare one; since $\sigma \le r_s$, the inner group takes all of it
+there, and the remainder is unchanged.
 
 ## Setting it up
 

@@ -219,3 +219,9 @@ on all platforms and :math:`e_1` on the Reference platform, while the Chebyshev 
 :math:`10^{-9}` relative). These errors affect only the energies: the inner force is computed
 directly as :math:`S(r)` times the bare force. The Reference platform and the constants of the GPU
 kernels are computed by the same code, in ``InnerSplit.h``.
+
+In a decapped slice (:doc:`guide/decapping`), the Lennard-Jones potential below :math:`\sigma` is not
+the bare one. Since :math:`\sigma` cannot exceed :math:`r_s`, where :math:`S = 1`, the inner group takes
+the whole interaction there: the capped force with energy :math:`u_{cap}(r) - K_{LJ}`, where
+:math:`K_{LJ} = 4\epsilon(\sigma^{12} K_{12} - \sigma^6 K_6)` is the constant the remainder reports for
+:math:`r \le r_s`, and all of the decapping term. The remainder is the same as for the bare potential.
