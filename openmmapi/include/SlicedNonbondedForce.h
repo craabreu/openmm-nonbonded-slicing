@@ -67,9 +67,11 @@ public:
      * force group is disabled (the default).  When enabled, every direct-space pair interaction
      * (including 1-4 exceptions) is split into a short-range part, switched off smoothly between
      * the inner switching distance and the inner cutoff distance, which is computed in the inner
-     * force group, and a remainder, which stays in the force group of this force.  The inner force
-     * group cannot be used with decapping scaling parameters, and the inner cutoff distance cannot
-     * exceed the switching distance when a switching function is used.  The inner force group, cutoff
+     * force group, and a remainder, which stays in the force group of this force.  The inner cutoff
+     * distance cannot exceed the switching distance when a switching function is used.  With
+     * decapping scaling parameters, the sigma of every Lennard-Jones pair in a decapped slice cannot
+     * exceed the inner switching distance, so that the inner force group can take all of the capped
+     * and decapping terms below sigma.  The inner force group, cutoff
      * distance and switching distance are fixed when a Context is created (call reinitialize() to
      * change them).
      */

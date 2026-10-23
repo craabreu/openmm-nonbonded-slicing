@@ -335,8 +335,10 @@ public:
      *         multiply its decapping term. The capped core is finite, so turn the Coulomb contribution of
      *         the slice on only while :math:`\\lambda_D > 0`. Decapping applies to direct-space pairs and
      *         1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction apply to the
-     *         capped term, which is the usual potential beyond :math:`\\sigma`. This setting is fixed at
-     *         Context creation, like the other arguments of this method.
+     *         capped term, which is the usual potential beyond :math:`\\sigma`. The decapping term is not
+     *         switched, so with a switching function the sigma of every Lennard-Jones pair in a decapped
+     *         slice, excluding those with zero epsilon, cannot exceed the switching distance. This setting
+     *         is fixed at Context creation, like the other arguments of this method.
      *
      * Returns
      * -------
@@ -475,9 +477,12 @@ public:
      * and LJPME methods, from the reciprocal space force group.  It requires 0 < inner switching
      * distance < inner cutoff distance <= cutoff distance and, if a switching function is used
      * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
-     * the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
-     * bare Lennard-Jones potential, the inner force group cannot be used with decapping scaling
-     * parameters (see ``includeDecapping`` in :func:`addScalingParameter`).  On the CUDA and OpenCL
+     * the inner force never exceeds the switched Lennard-Jones force.  With decapping scaling parameters
+     * (see ``includeDecapping`` in :func:`addScalingParameter`), the inner force group takes all of the
+     * capped and decapping terms below :math:`\\sigma`, so the sigma of every Lennard-Jones pair in a
+     * decapped slice, excluding those with zero epsilon, cannot exceed the inner switching distance.
+     * This is checked at Context creation and by :func:`updateParametersInContext`, but not for
+     * parameter offsets.  On the CUDA and OpenCL
      * platforms, all nonbonded interactions in one force group must use the same cutoff, so the
      * inner force group should be a group of its own or one whose other nonbonded forces (for
      * instance, a :OpenMM:`CustomNonbondedForce`) use the inner cutoff distance.

@@ -19,12 +19,14 @@
 #include <map>
 #include <sstream>
 #include <algorithm>
+#include <limits>
 
 using namespace NonbondedSlicing;
 using namespace OpenMM;
 using namespace std;
 
-SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : NonbondedForceImpl(owner), owner(owner), innerForceGroup(-1) {
+SlicedNonbondedForceImpl::SlicedNonbondedForceImpl(const SlicedNonbondedForce& owner) : NonbondedForceImpl(owner), owner(owner), innerForceGroup(-1),
+        switchingDistance(numeric_limits<double>::infinity()), innerSwitchingDistance(numeric_limits<double>::infinity()) {
 }
 
 SlicedNonbondedForceImpl::~SlicedNonbondedForceImpl() {
@@ -148,10 +150,19 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
             throw OpenMMException("SlicedNonbondedForce: the inner force group must differ from the direct-space and reciprocal-space force groups");
         if (!owner.getIncludeDirectSpace())
             throw OpenMMException("SlicedNonbondedForce: the inner force group requires the direct space to be included");
-        for (int index = 0; index < owner.getNumScalingParameters(); index++)
-            if (owner.getScalingParameterIncludeDecapping(index))
-                throw OpenMMException("SlicedNonbondedForce: the inner force group cannot be used with decapping scaling parameters");
     }
+    // Below sigma, a decapped slice has a decapping term, which is not switched and which the inner force group
+    // takes whole, so sigma can exceed neither the switching distance nor the inner switching distance
+    decappedSlices.assign(owner.getNumSlices(), false);
+    for (int index = 0; index < owner.getNumScalingParameters(); index++)
+        if (owner.getScalingParameterIncludeDecapping(index)) {
+            owner.getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
+            decappedSlices[sliceIndex(subset1, subset2)] = true;
+        }
+    bool useSwitch = (owner.getNonbondedMethod() != SlicedNonbondedForce::NoCutoff && owner.getUseSwitchingFunction());
+    switchingDistance = useSwitch ? owner.getSwitchingDistance() : numeric_limits<double>::infinity();
+    innerSwitchingDistance = owner.getInnerForceGroup() >= 0 ? owner.getInnerSwitchingDistance() : numeric_limits<double>::infinity();
+    checkDecappedSigma(owner);
     // The split is set up once, at Context creation, so the inner force group is fixed from here on.
     innerForceGroup = owner.getInnerForceGroup();
     kernel.getAs<CalcSlicedNonbondedForceKernel>().initialize(context.getSystem(), owner);
@@ -380,8 +391,45 @@ vector<double> SlicedNonbondedForceImpl::calcDispersionCorrections(const System&
 }
 
 void SlicedNonbondedForceImpl::updateParametersInContext(ContextImpl& context) {
+    // Checked before any Context state changes
+    checkDecappedSigma(owner);
     kernel.getAs<CalcSlicedNonbondedForceKernel>().copyParametersToContext(context, owner);
     context.systemChanged();
+}
+
+double SlicedNonbondedForceImpl::getMaxDecappedSigma(const SlicedNonbondedForce& force, const vector<bool>& decappedSlices) {
+    // The largest sigma of the Lennard-Jones pairs of decapped slices, from the largest sigma of each subset (an upper
+    // bound for particle pairs) and from the exceptions. Pairs with zero epsilon have no capped or decapping terms.
+    int numSubsets = force.getNumSubsets();
+    vector<double> subsetMaxSigma(numSubsets, -1.0);
+    for (int i = 0; i < force.getNumParticles(); i++) {
+        double charge, sigma, epsilon;
+        force.getParticleParameters(i, charge, sigma, epsilon);
+        int subset = force.getParticleSubset(i);
+        if (epsilon != 0.0)
+            subsetMaxSigma[subset] = max(subsetMaxSigma[subset], sigma);
+    }
+    double maxSigma = 0.0;
+    for (int i = 0; i < numSubsets; i++)
+        for (int j = i; j < numSubsets; j++)
+            if (decappedSlices[sliceIndex(i, j)] && subsetMaxSigma[i] >= 0.0 && subsetMaxSigma[j] >= 0.0)
+                maxSigma = max(maxSigma, 0.5*(subsetMaxSigma[i]+subsetMaxSigma[j]));
+    for (int k = 0; k < force.getNumExceptions(); k++) {
+        int particle1, particle2;
+        double chargeProd, sigma, epsilon;
+        force.getExceptionParameters(k, particle1, particle2, chargeProd, sigma, epsilon);
+        if (epsilon != 0.0 && decappedSlices[sliceIndex(force.getParticleSubset(particle1), force.getParticleSubset(particle2))])
+            maxSigma = max(maxSigma, sigma);
+    }
+    return maxSigma;
+}
+
+void SlicedNonbondedForceImpl::checkDecappedSigma(const SlicedNonbondedForce& force) const {
+    double maxSigma = getMaxDecappedSigma(force, decappedSlices);
+    if (maxSigma > switchingDistance)
+        throw OpenMMException("SlicedNonbondedForce: with a switching function, the sigma of a Lennard-Jones pair in a decapped slice cannot exceed the switching distance");
+    if (maxSigma > innerSwitchingDistance)
+        throw OpenMMException("SlicedNonbondedForce: with an inner force group, the sigma of a Lennard-Jones pair in a decapped slice cannot exceed the inner switching distance");
 }
 
 void SlicedNonbondedForceImpl::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

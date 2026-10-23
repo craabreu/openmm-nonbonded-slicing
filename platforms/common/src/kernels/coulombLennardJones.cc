@@ -4,6 +4,11 @@
     int slice = isExcluded ? 0 : SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
     real clLambda = LAMBDA[slice].x;
     real ljLambda = LAMBDA[slice].y;
+#if HAS_DECAPPING
+    // The decapping term of a decapped slice (see CappedLJ.h), zero unless r < sigma
+    const real decapLambda = DECAP_LAMBDA[slice];
+    real decapEnergy = 0.0f, decapForce = 0.0f;
+#endif
 #if HAS_COULOMB
     const real qq = ONE_4PI_EPS0*CHARGE1*CHARGE2;
 #else
@@ -30,6 +35,10 @@
     // Coulomb remainder is erfc(alpha*r)/r - e_1(r), which has no such constant.
     const bool innerIsBare = (insideInner && r <= INNER_SWITCH);
 #endif
+#if INNER_GROUP && HAS_DECAPPING
+    bool decapped = false;
+    real capEnergy = 0.0f;
+#endif
     if (insideInner) {
         real innerSwitch = 1.0f;
         if (r > INNER_SWITCH) {
@@ -39,6 +48,20 @@
         real innerForceLJ = 0.0f;
 #if HAS_LENNARD_JONES
         innerForceLJ = epssig6*(12.0f*sig6 - 6.0f);
+#if INNER_GROUP && HAS_DECAPPING
+        // Below sigma, which cannot exceed INNER_SWITCH, the inner force is the whole force, so the inner group takes
+        // the capped force of a decapped slice and all of its decapping term; the remainder gets neither.
+        decapped = (IS_DECAPPED && sig6 > 1.0f);
+        if (decapped) {
+            const real x = RECIP(invR*sig);
+            const real x4 = (x*x)*(x*x);
+            capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
+            const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+            decapForce = innerForceLJ - capForce;
+            decapEnergy = epssig6*(sig6 - 1.0f) - capEnergy;
+            innerForceLJ = capForce;
+        }
+#endif
 #endif
         innerForce = innerSwitch*(ljLambda*innerForceLJ + clLambda*qq*invR);
 #ifdef INCLUDE_ENERGY
@@ -94,6 +117,10 @@
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
         innerEnergyLJ = eps*(sigma6*sigma6*e12 - sigma6*e6);
+#if INNER_GROUP && HAS_DECAPPING
+        if (decapped)
+            innerEnergyLJ = capEnergy - eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
+#endif
 #endif
 #endif
     }
@@ -103,6 +130,10 @@
     real ljEnergy = innerEnergyLJ;
     real clEnergy = innerEnergyCl;
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
+#if HAS_DECAPPING
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
     dEdR += insideInner ? tempForce*invR*invR : 0;
 #else
 #if USE_EWALD
@@ -126,6 +157,20 @@
 #if HAS_LENNARD_JONES
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
+    // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real x4 = (x*x)*(x*x);
+        const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
+        const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+        decapForce = tempForce - capForce;
+        decapEnergy = ljEnergy - capEnergy;
+        tempForce = capForce;
+        ljEnergy = capEnergy;
+    }
+#endif
 #if SUBTRACT_INNER
     if (innerIsBare) {
         real sigma6 = sig*sig;
@@ -173,6 +218,10 @@
     ljEnergy += includeInteraction ? ljPmeEnergy : 0;
 #endif
     tempForce *= ljLambda;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
     tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
 #if SUBTRACT_INNER
     tempForce -= innerForce;
@@ -198,6 +247,20 @@
 #if HAS_LENNARD_JONES
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
+    // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real x4 = (x*x)*(x*x);
+        const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
+        const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+        decapForce = tempForce - capForce;
+        decapEnergy = ljEnergy - capEnergy;
+        tempForce = capForce;
+        ljEnergy = capEnergy;
+    }
+#endif
 #if SUBTRACT_INNER
     if (innerIsBare) {
         real sigma6 = sig*sig;
@@ -215,6 +278,10 @@
     }
     #endif
     tempForce *= ljLambda;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
 #if SUBTRACT_INNER
     ljEnergy -= innerEnergyLJ;
 #endif

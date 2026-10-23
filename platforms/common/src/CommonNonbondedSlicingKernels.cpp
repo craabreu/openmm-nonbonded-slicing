@@ -10,6 +10,7 @@
 
 #include "internal/InnerSplit.h"
 #include "CommonNonbondedSlicingKernels.h"
+#include "internal/CappedLJ.h"
 #include "CommonNonbondedSlicingKernelSources.h"
 #include "SlicedNonbondedForce.h"
 #include "internal/SlicedNonbondedForceImpl.h"
@@ -205,6 +206,15 @@ CommonCalcSlicedNonbondedForceKernel::~CommonCalcSlicedNonbondedForceKernel() {
     ContextSelector selector(cc);
 }
 
+string CommonCalcSlicedNonbondedForceKernel::getDecappedSliceCondition() {
+    // A compile-time condition on the slice index, like the branches of getDerivativeCode
+    stringstream condition;
+    for (int slice = 0; slice < numSlices; slice++)
+        if (sliceScalingParams[slice].includeDecapping)
+            condition<<(condition.tellp() > 0 ? " || " : "")<<"slice=="<<slice;
+    return condition.tellp() > 0 ? "("+condition.str()+")" : "false";
+}
+
 string CommonCalcSlicedNonbondedForceKernel::getDerivativeCode(string param, string variable, string scale, bool conditionCoulomb, bool conditionLJ, bool conditionDecapping) {
     // Group the slices by the terms this parameter's derivative collects from them.
     map<string, vector<int> > slicesByTerms;
@@ -314,6 +324,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         int slice = sliceIndex(subset1, subset2);
         sliceScalingParams[slice].addInfo(name, includeCoulomb, includeLJ, force.getScalingParameterIncludeDecapping(index), hasDerivative);
     }
+    hasDecapping = false;
+    for (int slice = 0; slice < numSlices; slice++)
+        hasDecapping = hasDecapping || sliceScalingParams[slice].includeDecapping;
 
     size_t sizeOfReal = cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float);
     sliceLambdas.initialize(cc, numSlices, 2*sizeOfReal, "sliceLambdas");
@@ -325,6 +338,9 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
             sliceLambdasVecFloat[i] = mm_float2(sliceLambdasVec[i].x, sliceLambdasVec[i].y);
         sliceLambdas.upload(sliceLambdasVecFloat);
     }
+    sliceDecapLambdasVec.assign(numSlices, 1.0);
+    sliceDecapLambdas.initialize(cc, numSlices, sizeOfReal, "sliceDecapLambdas");
+    uploadReals(sliceDecapLambdas, sliceDecapLambdasVec);
 
     // Identify which exceptions are 1-4 interactions.
 
@@ -388,7 +404,16 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     if (recipForceGroup < 0)
         recipForceGroup = force.getForceGroup();
     usePosqCharges = hasCoulomb ? cc.requestPosqCharges() : false;
+    hasDecapping = hasDecapping && hasLJ;
+    map<string, string> decapDefines;
+    decapDefines["HAS_DECAPPING"] = (hasDecapping ? "1" : "0");
+    decapDefines["IS_DECAPPED"] = getDecappedSliceCondition();
+    decapDefines["CAP_C0"] = cc.doubleToString(CappedLJ::C0);
+    decapDefines["CAP_C4"] = cc.doubleToString(CappedLJ::C4);
+    decapDefines["CAP_C5"] = cc.doubleToString(CappedLJ::C5);
+    decapDefines["CAP_C6"] = cc.doubleToString(CappedLJ::C6);
     map<string, string> defines;
+    defines.insert(decapDefines.begin(), decapDefines.end());
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
     defines["HAS_LENNARD_JONES"] = (hasLJ ? "1" : "0");
     defines["USE_LJ_SWITCH"] = (useCutoff && force.getUseSwitchingFunction() ? "1" : "0");
@@ -764,10 +789,14 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(subsets, prefix+"subset", "int", 1));
     replacements["LAMBDA"] = prefix+"lambda";
     cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceLambdas, prefix+"lambda", "real", 2));
+    // DECAP_LAMBDA only appears in HAS_DECAPPING blocks, so the kernel needs its argument only then.
+    replacements["DECAP_LAMBDA"] = prefix+"decapLambda";
+    if (hasDecapping)
+        cc.getNonbondedUtilities().addArgument(ComputeParameterInfo(sliceDecapLambdas, prefix+"decapLambda", "real", 1));
     stringstream code;
     for (string param : requestedDerivatives) {
         string variableName = cc.getNonbondedUtilities().addEnergyParameterDerivative(param);
-        code<<getDerivativeCode(param, variableName, "interactionScale*", hasCoulomb, hasLJ, false);
+        code<<getDerivativeCode(param, variableName, "interactionScale*", hasCoulomb, hasLJ, hasDecapping);
     }
     replacements["COMPUTE_DERIVATIVES"] = "#ifdef INCLUDE_ENERGY\n"+code.str()+"#endif\n";
     source = cc.replaceStrings(source, replacements);
@@ -810,10 +839,12 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
         replacements["APPLY_PERIODIC"] = (usePeriodic && force.getExceptionsUsePeriodicBoundaryConditions() ? "1" : "0");
         replacements["PARAMS"] = cc.getBondedUtilities().addArgument(exceptionParams, "float4");
         replacements["LAMBDAS"] = cc.getBondedUtilities().addArgument(sliceLambdas, "real2");
+        replacements["DECAP_LAMBDAS"] = hasDecapping ? cc.getBondedUtilities().addArgument(sliceDecapLambdas, "real") : "decapLambdas";
+        replacements.insert(decapDefines.begin(), decapDefines.end());
         stringstream code;
         for (string param : requestedDerivatives) {
             string variableName = cc.getBondedUtilities().addEnergyParameterDerivative(param);
-            code<<getDerivativeCode(param, variableName, "", hasCoulomb, hasLJ, false);
+            code<<getDerivativeCode(param, variableName, "", hasCoulomb, hasLJ, hasDecapping);
         }
         replacements["COMPUTE_DERIVATIVES"] = code.str();
         replacements.insert(innerDefines.begin(), innerDefines.end());
@@ -1184,6 +1215,7 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
     // Update scaling parameters if needed.
 
     bool scalingParamChanged = false;
+    bool decapLambdaChanged = false;
     for (int slice = 0; slice < numSlices; slice++) {
         ScalingParameterInfo info = sliceScalingParams[slice];
         if (info.includeCoulomb) {
@@ -1200,7 +1232,16 @@ double CommonCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bool 
                 scalingParamChanged = true;
             }
         }
+        if (info.includeDecapping) {
+            double value = context.getParameter(info.nameDecapping);
+            if (value != sliceDecapLambdasVec[slice]) {
+                sliceDecapLambdasVec[slice] = value;
+                decapLambdaChanged = true;
+            }
+        }
     }
+    if (decapLambdaChanged)
+        uploadReals(sliceDecapLambdas, sliceDecapLambdasVec);
     if (scalingParamChanged) {
         if (!hasOffsets && hasReciprocal && cc.getContextIndex() == 0) {
             ewaldSelfEnergy = 0.0;

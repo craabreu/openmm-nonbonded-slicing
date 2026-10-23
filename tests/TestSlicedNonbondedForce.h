@@ -1817,9 +1817,15 @@ void testInnerGroupErrors() {
     build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, false);
     build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
     build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
-    // Decapped slices are not supported with an inner force group yet
-    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, false, true); }, true);
-    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true); }, false);
+    // Decapped slices need sigma <= r_s (0.5) for every Lennard-Jones pair, particles and exceptions alike; pairs with
+    // zero epsilon do not count
+    auto decap = [](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, false, true); };
+    build([&](SlicedNonbondedForce& f) { decap(f); }, false);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.setParticleParameters(0, 1.0, 0.6, 0.5); }, true);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.setParticleParameters(0, 1.0, 1.0, 0.0); }, false);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.addException(0, 1, 0.0, 0.6, 0.5); }, true);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.addException(0, 1, 0.0, 0.6, 0.0); }, false);
+    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 1.0, 0.6, 0.5); }, false);   // not decapped
     bool threw = false;
     try {
         SlicedNonbondedForce force(1);
@@ -2594,6 +2600,99 @@ void testDecappingRoles(NonbondedForce::NonbondedMethod method) {
     assertEqualVec(unscaled.getForces()[1], decapOnly.getForces()[1], tol);
 }
 
+void testInnerGroupDecappingUpdate() {
+    // updateParametersInContext must reject a sigma above the inner switching distance in a decapped slice and leave
+    // the Context unchanged.
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::CutoffNonPeriodic);
+    force->setCutoffDistance(1.0);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->setParticleSubset(1, 1);
+    force->addGlobalParameter("lambdaD", 0.5);
+    force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.5);
+    force->setInnerCutoffDistance(0.8);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.25, 0, 0)});
+    double energy = context.getState(State::Energy).getPotentialEnergy();
+    force->setParticleParameters(1, 0.0, 0.8, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+    force->setParticleParameters(1, 0.0, 0.4, 0.5);
+    force->updateParametersInContext(context);
+}
+
+void testDecappingSwitchingErrors() {
+    // The decapping term is not switched, so with a switching function the sigma of every Lennard-Jones pair of a
+    // decapped slice cannot exceed the switching distance (0.5 here), at Context creation and in
+    // updateParametersInContext. Without a switching function, or with NoCutoff, any sigma is accepted.
+
+    auto build = [](function<void(SlicedNonbondedForce&)> configure, bool expectFailure) {
+        System system;
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
+        force->setCutoffDistance(1.0);
+        force->setUseSwitchingFunction(true);
+        force->setSwitchingDistance(0.5);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->setParticleSubset(1, 1);
+        force->addGlobalParameter("lambdaD", 1.0);
+        force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+        configure(*force);
+        system.addForce(force);
+        VerletIntegrator integrator(0.001);
+        bool threw = false;
+        try {
+            Context context(system, integrator, platform);
+        }
+        catch (const OpenMMException&) {
+            threw = true;
+        }
+        ASSERT_EQUAL(expectFailure, threw);
+    };
+    build([](SlicedNonbondedForce& f) {}, false);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setParticleParameters(1, 0.0, 0.8, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 1.0, 0.0); }, false);   // zero epsilon
+    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.0, 0.6, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setUseSwitchingFunction(false); }, false);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); }, false);
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
+    force->setCutoffDistance(1.0);
+    force->setUseSwitchingFunction(true);
+    force->setSwitchingDistance(0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->setParticleSubset(1, 1);
+    force->addGlobalParameter("lambdaD", 0.5);
+    force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.25, 0, 0)});
+    double energy = context.getState(State::Energy).getPotentialEnergy();
+    force->setParticleParameters(1, 0.0, 0.8, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+}
+
 void testErrors() {
     SlicedNonbondedForce force(3);
     force.addParticle(0.0, 1.0, 0.0);
@@ -2680,6 +2779,8 @@ int main(int argc, char* argv[]) {
         testErrors();
         testLJPMEWithoutCharges();
         testInnerGroupErrors();
+        testInnerGroupDecappingUpdate();
+        testDecappingSwitchingErrors();
         for (bool asException : {false, true}) {
             testInnerGroupPair(asException, 0.5, 0.8);
             testInnerGroupPair(asException, 0.79, 0.8);
@@ -2746,6 +2847,10 @@ int main(int argc, char* argv[]) {
                 testDecapping(sfmt, method, exceptions, false, false);
         testDecapping(sfmt, NonbondedForce::CutoffPeriodic, true, true, false);
         testDecapping(sfmt, NonbondedForce::PME, false, true, false);
+        for (auto method : nonbondedMethods)
+            for (auto exceptions : {false, true})
+                testDecapping(sfmt, method, exceptions, false, true);
+        testDecapping(sfmt, NonbondedForce::PME, false, true, true);
         for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::PME, NonbondedForce::LJPME})
             testDecappingRoles(method);
         runPlatformTests();

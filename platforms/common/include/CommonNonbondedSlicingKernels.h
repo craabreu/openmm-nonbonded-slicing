@@ -143,6 +143,7 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         ComputeArray chargeBuffer;
         ComputeArray subsets;
         ComputeArray sliceLambdas;
+        ComputeArray sliceDecapLambdas;
         ComputeSort sort;
         ComputeQueue pmeQueue;
         ComputeEvent pmeSyncEvent, paramsSyncEvent;
@@ -174,12 +175,15 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
 
         int numSubsets, numSlices;
         bool hasDerivatives;
+        bool hasDecapping;
         std::vector<int> subsetsVec;
         std::vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
         std::vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
+        std::vector<double> sliceDecapLambdasVec;
         std::vector<ScalingParameterInfo> sliceScalingParams;
         AddEnergyPostComputation* addEnergy;
 
+        std::string getDecappedSliceCondition();
         std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ, bool conditionDecapping);
         std::string getCoulombDerivativeCode(ComputeContext& cc, std::vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
         void uploadReals(ComputeArray& array, const std::vector<double>& values);

@@ -4,6 +4,10 @@ u.f = exceptionParams.w;
 int slice = u.i;
 real clLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
+#if HAS_DECAPPING
+const real decapLambda = DECAP_LAMBDAS[slice];
+real decapEnergy = 0.0f, decapForce = 0.0f;
+#endif
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if APPLY_PERIODIC
 APPLY_PERIODIC_TO_DELTA(delta)
@@ -98,8 +102,33 @@ clForce -= innerForceCl;
 ljEnergy -= innerEnergyLJ;
 clEnergy -= innerEnergyCl;
 #endif
+#if HAS_DECAPPING && !SUBTRACT_INNER
+// Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). Here ljForce and
+// ljEnergy are bare, and with an inner group sigma cannot exceed INNER_SWITCH, where the inner part is the whole force
+// and its energy is the bare one minus the constant subtracted below.
+if (IS_DECAPPED && sig6 > 1.0f) {
+    const real x = RECIP(invR*exceptionParams.y);
+    const real x4 = (x*x)*(x*x);
+    const real capEnergy = exceptionParams.z*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
+    const real capForce = -exceptionParams.z*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
+    decapForce = exceptionParams.z*(12.0f*sig6-6.0f)*sig6 - capForce;
+    decapEnergy = exceptionParams.z*(sig6-1.0f)*sig6 - capEnergy;
+    ljForce = capForce;
+    ljEnergy = capEnergy;
+#if INNER_GROUP
+    real sigma6 = exceptionParams.y*exceptionParams.y;
+    sigma6 = sigma6*sigma6*sigma6;
+    ljEnergy -= exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
+#endif
+}
+#endif
+#if HAS_DECAPPING
+real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda*decapForce)*invR*invR;
+energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda*decapEnergy;
+#else
 real dEdR = (ljLambda*ljForce + clLambda*clForce)*invR*invR;
 energy += clLambda*clEnergy + ljLambda*ljEnergy;
+#endif
 delta *= dEdR;
 real3 force1 = -delta;
 real3 force2 = delta;

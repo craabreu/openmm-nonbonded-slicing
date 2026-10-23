@@ -121,6 +121,109 @@ def testDecappingAPI():
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
+def testDecapping(platformName, precision):
+    """Decapped minus plain sliced energies match (lambdaD - lambdaLJ)*Delta from Custom forces."""
+    random.seed(1)
+    numMolecules = 100
+    numParticles = 2*numMolecules
+    boxSize = 10.0
+    cutoff = 3.5
+    lamLJ, lamD = 0.4, 0.7
+
+    nonbonded = mm.NonbondedForce()
+    nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
+    nonbonded.setCutoffDistance(cutoff)
+    nonbonded.setEwaldErrorTolerance(1e-4)
+    positions = []
+    M = int(numMolecules**(1.0/3.0))
+    if M*M*M < numMolecules:
+        M += 1
+    for k in range(numMolecules):
+        iz = k//(M*M)
+        iy = (k - iz*M*M)//M
+        ix = k - M*(iy + iz*M)
+        center = mm.Vec3(ix + 0.5, iy + 0.5, iz + 0.5)*(boxSize/M)
+        delta = mm.Vec3(0.5 - ix%2, 0.5 - iy%2, 0.5 - iz%2)/2
+        positions += [center + delta, center - delta]
+        nonbonded.addParticle(0.2, 1.0, 1.0)
+        nonbonded.addParticle(-0.2, 1.0, 1.0)
+        nonbonded.addException(2*k, 2*k+1, -0.04, 1.0, 1.0)
+    subsets = [random.randint(0, 1) for _ in range(numParticles)]
+
+    def makeSystem(*forces):
+        system = mm.System()
+        for _ in range(numParticles):
+            system.addParticle(1.0)
+        system.setDefaultPeriodicBoxVectors(mm.Vec3(boxSize, 0, 0), mm.Vec3(0, boxSize, 0), mm.Vec3(0, 0, boxSize))
+        for force in forces:
+            system.addForce(force)
+        return system
+
+    def makeSliced(decap):
+        sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
+        for i, s in enumerate(subsets):
+            sliced.setParticleSubset(i, s)
+        sliced.addGlobalParameter("lambdaLJ", lamLJ)
+        sliced.addGlobalParameter("lambdaD", lamD)
+        sliced.addScalingParameter("lambdaLJ", 0, 1, True, True)
+        sliced.addEnergyParameterDerivative("lambdaLJ")
+        if decap:
+            sliced.addScalingParameter("lambdaD", 0, 1, False, False, True)
+            sliced.addEnergyParameterDerivative("lambdaD")
+        return sliced
+
+    expression = ("(lambdaD-lambdaLJ)*step(1-x)*4*eps*(x^(-12)-x^(-6)-(-868*x^6+2188.8*x^5-1440*x^4+119.2)/4);"
+                  "x=r/sigma;")
+    custom = mm.CustomNonbondedForce(expression + "sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)")
+    custom.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
+    custom.setCutoffDistance(cutoff)
+    custom.addPerParticleParameter("sigma")
+    custom.addPerParticleParameter("eps")
+    bonds = mm.CustomBondForce(expression)
+    bonds.addPerBondParameter("sigma")
+    bonds.addPerBondParameter("eps")
+    for force in (custom, bonds):
+        for name, value_ in (("lambdaLJ", lamLJ), ("lambdaD", lamD)):
+            force.addGlobalParameter(name, value_)
+            force.addEnergyParameterDerivative(name)
+    for _ in range(numParticles):
+        custom.addParticle([1.0, 1.0])
+    custom.addInteractionGroup({i for i, s in enumerate(subsets) if s == 0}, {i for i, s in enumerate(subsets) if s == 1})
+    for k in range(numMolecules):
+        i, j = 2*k, 2*k+1
+        custom.addExclusion(i, j)
+        if subsets[i] != subsets[j]:
+            bonds.addBond(i, j, [1.0, 1.0])
+
+    platform = mm.Platform.getPlatformByName(platformName)
+    properties = {} if platformName == "Reference" else {"Precision": precision}
+    contexts = []
+    for system in (makeSystem(makeSliced(True)), makeSystem(makeSliced(False)), makeSystem(custom, bonds)):
+        context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
+        context.setPositions(positions)
+        contexts.append(context)
+    if platformName == "Reference" or precision == "double":
+        tol = 1e-4
+    else:
+        tol = 1e-3 if precision == "mixed" else 5e-3
+    for lj, d in ((lamLJ, lamD), (1.0, 0.0), (0.0, 1.0)):
+        states = []
+        for context in contexts:
+            context.setParameter("lambdaLJ", lj)
+            context.setParameter("lambdaD", d)
+            states.append(context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True))
+        decap, plain, diff = states
+        scale = max(1.0, abs(value(plain.getPotentialEnergy())))
+        ASSERT_EQUAL_TOL(value(diff.getPotentialEnergy())/scale,
+                         (value(decap.getPotentialEnergy()) - value(plain.getPotentialEnergy()))/scale, tol)
+        for fd_, fp, fx in zip(decap.getForces(), plain.getForces(), diff.getForces()):
+            ASSERT_EQUAL_VEC(fx, fd_ - fp, tol)
+        dDecap, dPlain, dDiff = (state.getEnergyParameterDerivatives() for state in states)
+        ASSERT_EQUAL_TOL(dDiff["lambdaLJ"], dDecap["lambdaLJ"] - dPlain["lambdaLJ"], tol)
+        ASSERT_EQUAL_TOL(dDiff["lambdaD"], dDecap["lambdaD"], tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
 def testCoulomb(platformName, precision):
     system = mm.System()
     system.setDefaultPeriodicBoxVectors(mm.Vec3(4, 0, 0), mm.Vec3(0, 4, 0), mm.Vec3(0, 0, 4))
@@ -602,27 +705,42 @@ def testInnerGroupAccessors():
     ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance().value_in_unit(unit.nanometer), 1e-12)
 
 
-def testInnerGroupWithDecapping():
-    # Decapped slices are not supported with an inner force group yet
-    def makeContext(decapping):
+@pytest.mark.parametrize("platformName, precision", cases)
+def testInnerGroupWithDecapping(platformName, precision):
+    # Decapping terms go entirely to the inner group, which needs sigma <= the inner switching distance
+    def makeContext(sigma):
         system = mm.System()
         for _ in range(2):
             system.addParticle(1.0)
-        force = plugin.SlicedNonbondedForce(1)
-        force.addParticle(1.0, 0.3, 0.5)
-        force.addParticle(-1.0, 0.3, 0.5)
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.CutoffNonPeriodic)
+        force.setCutoffDistance(1.0)
+        force.addParticle(0.0, sigma, 0.5)
+        force.addParticle(0.0, sigma, 0.5)
+        force.setParticleSubset(1, 1)
         force.setInnerForceGroup(1)
         force.setInnerSwitchingDistance(0.5)
         force.setInnerCutoffDistance(0.8)
-        force.addGlobalParameter("lambda", 1.0)
-        force.addScalingParameter("lambda", 0, 0, False, not decapping, decapping)
+        force.addGlobalParameter("lambdaLJ", 0.6)
+        force.addGlobalParameter("lambdaD", 0.3)
+        force.addScalingParameter("lambdaLJ", 0, 1, False, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
         system.addForce(force)
-        platform = mm.Platform.getPlatformByName("Reference")
-        return mm.Context(system, mm.VerletIntegrator(0.001), platform)
+        platform = mm.Platform.getPlatformByName(platformName)
+        properties = {} if platformName == "Reference" else {"Precision": precision}
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(0.9*sigma, 0, 0)])
+        return context
 
-    with pytest.raises(mm.OpenMMException, match="inner force group cannot be used with decapping"):
-        makeContext(True)
-    makeContext(False)
+    with pytest.raises(mm.OpenMMException, match="cannot exceed the inner switching distance"):
+        makeContext(0.6)
+    context = makeContext(0.3)
+    x = 0.9
+    delta = 4*0.5*(x**-12 - x**-6 - (-868*x**6 + 2188.8*x**5 - 1440*x**4 + 119.2)/4)
+    inner = value(context.getState(getEnergy=True, groups={1}).getPotentialEnergy())
+    context.setParameter("lambdaD", 0.6)
+    tol = 1e-5 if platformName == "Reference" or precision == "double" else 1e-3
+    ASSERT_EQUAL_TOL(inner + 0.3*delta, value(context.getState(getEnergy=True, groups={1}).getPotentialEnergy()), tol)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)

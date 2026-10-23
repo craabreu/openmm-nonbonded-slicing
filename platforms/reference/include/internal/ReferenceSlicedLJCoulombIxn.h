@@ -68,8 +68,9 @@ class ReferenceSlicedLJCoulombIxn {
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
                            vector<vector<double>>& sliceEnergies) const;
 
-      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r,
-                              double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy) const;
+      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool decapped,
+                              double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy,
+                              double& forceFactorDecap, double& decapEnergy) const;
 
 
    public:
