@@ -337,8 +337,10 @@ public:
      *         1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction apply to the
      *         capped term, which is the usual potential beyond :math:`\\sigma`. The decapping term is not
      *         switched, so with a switching function the sigma of every Lennard-Jones pair in a decapped
-     *         slice, excluding those with zero epsilon, cannot exceed the switching distance. This setting
-     *         is fixed at Context creation, like the other arguments of this method.
+     *         slice, excluding those with zero epsilon, cannot exceed the switching distance, and with an
+     *         inner force group it cannot exceed the inner switching distance either (see
+     *         :func:`setInnerForceGroup`). This setting is fixed at Context creation, like the other
+     *         arguments of this method.
      *
      * Returns
      * -------

@@ -559,6 +559,11 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         double decapEnergy = 0.0, decapRdUdr = 0.0;
         if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
             CappedLJ::split(1.0/(inverseR*sig), eps, vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
+        // With an inner force group, the remainder of a decapped pair below sigma has no bare Lennard-Jones term, only
+        // the constant of the inner split, which is set directly rather than as the difference of two terms of order x^-12
+        bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
+        if (decappedRemainder)
+            vdwEnergy = rdUdr = 0.0;
         double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
 
         if (ljpme) {
@@ -599,6 +604,11 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         if (innerSplit.enabled) {
             double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy, unusedForce, unusedEnergy;
             calculateInnerPair(ii, jj, atomParameters, r, false, forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy, unusedForce, unusedEnergy);
+            if (decappedRemainder) {
+                double sigma6 = pow(sig, 6);
+                forceFactorVdw = 0.0;
+                innerVdwEnergy = -eps*sigma6*(sigma6*innerSplit.K[0] - innerSplit.K[1]);
+            }
             dEdRvdW -= forceFactorVdw;
             dEdRCoul -= forceFactorCoul;
             sliceEnergies[slice][vdW] -= innerVdwEnergy;
@@ -727,6 +737,10 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     double decapEnergy = 0.0, decapRdUdr = 0.0;
     if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
         CappedLJ::split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
+    // See calculatePairIxn
+    bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
+    if (decappedRemainder)
+        energy = rdUdr = 0.0;
     double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
     double dEdRCoul = inverseR*inverseR;
     if (cutoff)
@@ -742,6 +756,11 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
         double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy, unusedForce, unusedEnergy;
         calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], false, forceFactorVdw, forceFactorCoul,
                            innerVdwEnergy, innerCoulEnergy, unusedForce, unusedEnergy);
+        if (decappedRemainder) {
+            double sigma6 = pow(sig, 6);
+            forceFactorVdw = 0.0;
+            innerVdwEnergy = -eps*sigma6*(sigma6*innerSplit.K[0] - innerSplit.K[1]);
+        }
         dEdRvdW -= forceFactorVdw;
         dEdRCoul -= forceFactorCoul;
         sliceEnergies[slice][vdW] -= innerVdwEnergy;

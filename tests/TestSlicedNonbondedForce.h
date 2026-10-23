@@ -2373,11 +2373,12 @@ void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kin
     }
 }
 
-void testDecappingOverlap(bool asException) {
+void testDecappingOverlap(bool asException, bool inner, double x) {
     // Two nearly overlapping particles with the decapping term off: the energy is the finite capped potential, which
-    // must not come from the difference of the bare and decapping terms (both of order x^-12).
+    // must not come from the difference of the bare and decapping terms (both of order x^-12). At x = 1e-4, x^-12
+    // overflows single precision, so the result must also not be 0*inf, nor inf-inf in the remainder of an inner group.
 
-    const double sigma = 1.0, epsilon = 0.7, lambdaLJ = 0.4, x = 0.02;
+    const double sigma = 0.3, epsilon = 0.7, lambdaLJ = 0.4;
     System system;
     system.addParticle(1.0);
     system.addParticle(1.0);
@@ -2393,6 +2394,11 @@ void testDecappingOverlap(bool asException) {
     force->addScalingParameter("lambdaLJ", 0, 1, false, true);
     force->addScalingParameter("lambdaD", 0, 1, false, false, true);
     force->addEnergyParameterDerivative("lambdaLJ");
+    if (inner) {
+        force->setInnerForceGroup(1);
+        force->setInnerSwitchingDistance(0.5);
+        force->setInnerCutoffDistance(0.8);
+    }
     system.addForce(force);
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
@@ -2840,8 +2846,10 @@ int main(int argc, char* argv[]) {
             for (auto kind : {DecapPair, DecapException, DecapExcluded})
                 for (double x : {0.5, 0.8, 0.999, 1.001, 1.3})
                     testDecappingPair(method, kind, x);
-        testDecappingOverlap(false);
-        testDecappingOverlap(true);
+        for (bool asException : {false, true})
+            for (bool inner : {false, true})
+                for (double x : {0.02, 1e-4})
+                    testDecappingOverlap(asException, inner, x);
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
                 testDecapping(sfmt, method, exceptions, false, false);

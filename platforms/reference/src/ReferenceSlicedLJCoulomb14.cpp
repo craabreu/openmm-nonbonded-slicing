@@ -130,6 +130,13 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         coulForce -= innerCoulForce;
         vdwEnergy -= innerVdwEnergy;
         coulEnergy -= innerCoulEnergy;
+        // The remainder of a decapped pair below sigma is the constant of the inner split, set directly rather than as
+        // the difference of two terms of order x^-12
+        if (decapped && sig6 > 1.0) {
+            double sigma6 = pow(parameters[0], 6);
+            vdwForce = 0.0;
+            vdwEnergy = parameters[1]*sigma6*(sigma6*innerSplit.K[0] - innerSplit.K[1]);
+        }
     }
     double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce + sliceLambdas[decap]*decapRdUdr*inverseR*inverseR;
 

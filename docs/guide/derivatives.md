@@ -35,10 +35,10 @@ $E^{vdW}_{I,J} + E^{elec}_{I,J}$, while one that scales the electrostatic contri
 yields their sum. This is how the energy of a slice, or of a group of slices, can be reported.
 
 The energy remains linear with decapped slices ({doc}`decapping`). The derivative with respect to the
-Lennard-Jones scaling parameter of a decapped slice is its capped van der Waals energy, and the derivative with
-respect to its decapping parameter is its decapping energy; their sum is the usual van der Waals energy of the
-slice. A parameter that plays both roles in a slice yields the usual van der Waals energy, as it would without
-decapping.
+Lennard-Jones scaling parameter of a decapped slice is its capped van der Waals energy, and the derivative
+with respect to its decapping parameter is its decapping energy; their sum is the usual van der Waals energy
+of the slice. A parameter that plays both roles in a slice yields the usual van der Waals energy, as it
+would without decapping.
 
 ## Restrictions
 

@@ -48,6 +48,12 @@
         real innerForceLJ = 0.0f;
 #if HAS_LENNARD_JONES
         innerForceLJ = epssig6*(12.0f*sig6 - 6.0f);
+#if SUBTRACT_INNER && HAS_DECAPPING
+        // Below sigma, the remainder of a decapped slice has no Lennard-Jones force. Dropping the bare force from both
+        // sides of the difference keeps it from becoming inf-inf in single precision as r -> 0.
+        if (IS_DECAPPED && sig6 > 1.0f)
+            innerForceLJ = 0.0f;
+#endif
 #if INNER_GROUP && HAS_DECAPPING
         // Below sigma, which cannot exceed INNER_SWITCH, the inner force is the whole force, so the inner group takes
         // the capped force of a decapped slice and all of its decapping term; the remainder gets neither.
@@ -57,8 +63,9 @@
             const real x4 = (x*x)*(x*x);
             capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
             const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
-            decapForce = innerForceLJ - capForce;
-            decapEnergy = epssig6*(sig6 - 1.0f) - capEnergy;
+            const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+            decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+            decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
             innerForceLJ = capForce;
         }
 #endif
@@ -165,11 +172,16 @@
         const real x4 = (x*x)*(x*x);
         const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
         const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
-        decapForce = tempForce - capForce;
-        decapEnergy = ljEnergy - capEnergy;
+        const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
         tempForce = capForce;
         ljEnergy = capEnergy;
     }
+#endif
+#if HAS_DECAPPING && SUBTRACT_INNER
+    if (IS_DECAPPED && sig6 > 1.0f)
+        tempForce = 0.0f;   // see the inner part above
 #endif
 #if SUBTRACT_INNER
     if (innerIsBare) {
@@ -255,11 +267,16 @@
         const real x4 = (x*x)*(x*x);
         const real capEnergy = eps*(CAP_C0 + x4*(CAP_C4 + x*(CAP_C5 + x*CAP_C6)));
         const real capForce = -eps*x4*(4.0f*CAP_C4 + x*(5.0f*CAP_C5 + x*(6.0f*CAP_C6)));
-        decapForce = tempForce - capForce;
-        decapEnergy = ljEnergy - capEnergy;
+        const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
         tempForce = capForce;
         ljEnergy = capEnergy;
     }
+#endif
+#if HAS_DECAPPING && SUBTRACT_INNER
+    if (IS_DECAPPED && sig6 > 1.0f)
+        tempForce = 0.0f;   // see the inner part above
 #endif
 #if SUBTRACT_INNER
     if (innerIsBare) {

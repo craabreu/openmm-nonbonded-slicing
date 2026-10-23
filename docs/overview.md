@@ -20,9 +20,9 @@ parameters, so that the van der Waals and electrostatic contributions of chosen 
 down while a simulation runs. See {doc}`guide/slicing`.
 
 **Capped Lennard-Jones potential.** A scaling parameter can multiply the decapping term of its slice, which
-splits its Lennard-Jones interactions into a capped term, finite as particles overlap, and the rest of the usual
-potential, so that a slice can be decoupled alchemically without the singularity of the usual potential while
-the energy stays linear in every parameter. See {doc}`guide/decapping`.
+splits its Lennard-Jones interactions into a capped term, finite as particles overlap, and the rest of the
+usual potential, so that a slice can be decoupled alchemically without the singularity of the usual
+potential while the energy stays linear in every parameter. See {doc}`guide/decapping`.
 
 **Energy parameter derivatives.** The derivative of the energy with respect to a scaling parameter can be
 requested along with the energy, which gives the energy of a slice or of a group of slices. See

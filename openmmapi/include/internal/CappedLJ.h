@@ -25,6 +25,12 @@ namespace CappedLJ {
 const double C0 = 29.8, C4 = -360.0, C5 = 547.2, C6 = -217.0;
 
 /**
+ * The bound on (sigma/r)^6 in the bare part of the decapping term on the GPU platforms (x >= 1e-3), which keeps it
+ * finite in single precision, so that a decapping parameter of zero gives zero rather than 0*inf.
+ */
+const double MaxDecapSig6 = 1e18;
+
+/**
  * The capped potential and -r dU/dr at x = r/sigma < 1, in units of 4 epsilon.
  */
 inline void evaluate(double x, double& energy, double& rForce) {

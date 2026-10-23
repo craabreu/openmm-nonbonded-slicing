@@ -412,6 +412,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     decapDefines["CAP_C4"] = cc.doubleToString(CappedLJ::C4);
     decapDefines["CAP_C5"] = cc.doubleToString(CappedLJ::C5);
     decapDefines["CAP_C6"] = cc.doubleToString(CappedLJ::C6);
+    decapDefines["CAP_MAX_SIG6"] = cc.doubleToString(CappedLJ::MaxDecapSig6);
     map<string, string> defines;
     defines.insert(decapDefines.begin(), decapDefines.end());
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
