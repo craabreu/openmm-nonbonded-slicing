@@ -16,10 +16,11 @@
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=ccdb6887"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Energy Slicing Theory" href="theory.html" />
+    <link rel="next" title="Installation" href="install.html" />
     <link rel="prev" title="OpenMM Nonbonded Slicing" href="index.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -38,212 +39,38 @@
 
           <div class="body" role="main">
             
-  <section id="overview">
+  <section class="tex2jax_ignore mathjax_ignore" id="overview">
 <h1>Overview<a class="headerlink" href="#overview" title="Link to this heading">¶</a></h1>
-<p>This <a class="reference external" href="https://openmm.org">OpenMM</a> plugin implements a sliced variant of <a class="reference external" href="https://openmm.org">OpenMM</a>’s NonbondedForce class.
-By partitioning all particles among $n$ disjoint subsets, the total potential energy becomes a linear
-combination of contributions from pairs of subsets like</p>
+<p>This OpenMM plugin implements <code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code>, a variant of OpenMM’s <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>.
+By partitioning all particles among <span class="math notranslate nohighlight">\(n\)</span> disjoint subsets, the total nonbonded potential energy becomes a
+linear combination of contributions from pairs of subsets,</p>
 <div class="math notranslate nohighlight">
-\[E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1} (\lambda^{vdW}_{I,J}E^{vdW}_{I,J}+\lambda^{elec}_{I,J}E^{elec}_{I,J}),\]</div>
-<p>where each slice is defined by subsets <em>I</em> and <em>J</em>, superscripts <em>vdW</em> and <em>elec</em> denote van
-der Waals and electrostatic contributions, <span class="math notranslate nohighlight">\(E_{I,J}\)</span> is the potential energy of all particle pairs
-formed by one particle in subset <em>I</em> and one in subset <em>J</em>, and <span class="math notranslate nohighlight">\(\lambda_{I,J}\)</span> is a scaling parameter.</p>
-<p>The nonbonded energy can be partitioned along a second, independent axis. Slicing by <em>subset</em>, above,
-decides which particle pairs a scaling parameter applies to. Slicing by <em>distance</em>, through an optional
-<em>inner force group</em> (see below), splits every pair interaction into a short-range part, switched off
-smoothly between an inner switching distance and an inner cutoff, and a remainder, so that a multiple
-time-step integrator can advance the two with different time steps. The two partitions compose exactly,</p>
-<div class="math notranslate nohighlight">
-\[E = \sum_{I \le J} \sum_{t \in \{vdW, elec\}} \lambda^{t}_{I,J}
-\left( E^{t,\mathrm{inner}}_{I,J} + E^{t,\mathrm{outer}}_{I,J} \right),\]</div>
-<p>because the inner part of a pair interaction is scaled by the same parameters as the rest of it, and
-each force group reports an energy consistent with its force.</p>
-<p>By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
-scaling parameters into variables and store their values in <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global parameters. Derivatives
-with respect to these variables can be requested and used, for instance, to report individual energy
-slice contributions or sums thereof via <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>’s <code class="docutils literal notranslate"><span class="pre">getState</span></code> method with options
-<code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> and <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>. Derivatives are only computed along with
-the energy: without <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code>, they are NaN.</p>
-<p>A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
-both, of any number of slices. Unless a slice uses the soft-core potential (see below), the energy
-is linear in the scaling parameters, and the derivative with respect to a parameter
-<span class="math notranslate nohighlight">\(\lambda\)</span> is the sum of the unscaled contributions it multiplies:</p>
-<div class="math notranslate nohighlight">
-\[\frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
-+ \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J},\]</div>
-<p>where <span class="math notranslate nohighlight">\(S^{elec}_\lambda\)</span> and <span class="math notranslate nohighlight">\(S^{vdW}_\lambda\)</span> are the sets of slices whose electrostatic
-and van der Waals contributions are scaled by <span class="math notranslate nohighlight">\(\lambda\)</span>. Without soft-core slices, this
-derivative does not depend on the values of the scaling parameters. For instance, a parameter that
-scales both contributions of a single slice <em>I, J</em> yields its full energy
-<span class="math notranslate nohighlight">\(E^{vdW}_{I,J}+E^{elec}_{I,J}\)</span>, while one that scales the electrostatic contributions of
-several slices yields their sum.</p>
-<section id="soft-core-lennard-jones-potential">
-<h2>Soft-core Lennard-Jones Potential<a class="headerlink" href="#soft-core-lennard-jones-potential" title="Link to this heading">¶</a></h2>
-<p>Driving <span class="math notranslate nohighlight">\(\lambda^{vdW}_{I,J}\)</span> to zero with the usual Lennard-Jones potential leaves a
-singularity at <span class="math notranslate nohighlight">\(r = 0\)</span> that makes free-energy calculations hard to converge. A scaling
-parameter added with a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> switches its slice to the soft-core form of
-<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id7" title="Thomas C. Beutler, Alan E. Mark, René C. van Schaik, Paul R. Gerber, and Wilfred F. van Gunsteren. Avoiding singularities and numerical instabilities in free energy calculations based on molecular simulations. Chemical Physics Letters, 222(6):529–539, June 1994. doi:10.1016/0009-2614(94)00397-1.">1</a>]</span>, in which each pair interacts through</p>
-<div class="math notranslate nohighlight">
-\[U(r) = 4 \lambda_E \epsilon \left( s^2 - s \right), \qquad
-s = \frac{1}{\alpha (1 - \lambda_s) + (r/\sigma)^6},\]</div>
-<p>where <span class="math notranslate nohighlight">\(\lambda_E\)</span> is the scaling parameter that multiplies the Lennard-Jones contributions of
-the slice (1 if there is none), <span class="math notranslate nohighlight">\(\lambda_s\)</span> is the softening parameter and <span class="math notranslate nohighlight">\(\alpha\)</span> is
-<code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code>, typically 0.5. The two parameters can be the same,</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambda"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>or different,</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaE"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaS"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>and a slice can be softened without scaling its energy at all (only the second line above). The
-potential remains finite as <span class="math notranslate nohighlight">\(r \to 0\)</span> whenever <span class="math notranslate nohighlight">\(\lambda_s &lt; 1\)</span> and <span class="math notranslate nohighlight">\(\alpha &gt; 0\)</span>,
-and it reduces to the usual one when <span class="math notranslate nohighlight">\(\lambda_s = 1\)</span> or <span class="math notranslate nohighlight">\(\alpha = 0\)</span>. Keep
-<span class="math notranslate nohighlight">\(\lambda_s\)</span> between 0 and 1: for <span class="math notranslate nohighlight">\(\lambda_s &gt; 1\)</span>, the term <span class="math notranslate nohighlight">\(\alpha (1 - \lambda_s)\)</span>
-is negative and the potential becomes singular at
-<span class="math notranslate nohighlight">\(r = \left[ \alpha (\lambda_s - 1) \right]^{1/6} \sigma\)</span>. Since only the Lennard-Jones term is
-softened, scale the Coulomb contribution of the slice with its own parameter
-(<code class="docutils literal notranslate"><span class="pre">includeCoulomb=True,</span> <span class="pre">includeLJ=False</span></code>) and turn it off before softening the Lennard-Jones term.
-Like the other properties of a scaling parameter, <span class="math notranslate nohighlight">\(\alpha\)</span> is fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a>
-is created, while <span class="math notranslate nohighlight">\(\lambda_E\)</span> and <span class="math notranslate nohighlight">\(\lambda_s\)</span> are its global parameters. Soft-core
-slices cannot be combined with an inner force group (see below).</p>
-<p>The derivatives with respect to the two parameters are</p>
-<div class="math notranslate nohighlight">
-\[\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
-\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),\]</div>
-<p>and a parameter that plays both roles gets their sum. The soft-core form applies to the
-direct-space Lennard-Jones term and to 1-4 exceptions, including the additive potential shift at
-the cutoff with LJPME; the reciprocal-space part of LJPME and the long-range dispersion correction
-are not softened, an approximation accurate to
-<span class="math notranslate nohighlight">\(O\left(\alpha (1-\lambda_s) (\sigma/r_c)^6\right)\)</span>. As with the usual potential, do not
-combine LJPME with a switching function: the Reference platform ignores the switching function,
-while the CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM’s
-<code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code> does on each platform.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>For a softened slice, <span class="math notranslate nohighlight">\(\partial U / \partial \lambda_E\)</span> is the soft-core van der Waals
-energy of the slice, which differs from the usual one whenever <span class="math notranslate nohighlight">\(\lambda_s &lt; 1\)</span>, and
-<span class="math notranslate nohighlight">\(\partial U / \partial \lambda_s\)</span> is not an energy. For a parameter that plays both roles,
-the reported derivative is the sum of the two, which is not an energy even at
-<span class="math notranslate nohighlight">\(\lambda = 1\)</span>, where the soft-core and usual potentials coincide. To obtain the usual van der
-Waals energy of the slice, evaluate it in a separate force without the soft-core potential.</p>
-</div>
-<p>With Ewald, PME, or LJPME, the reciprocal-space part can be computed in a separate force group by
-calling <code class="docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code>, as in multiple time stepping. As in <a class="reference external" href="https://openmm.org">OpenMM</a>’s
-NonbondedForce, the terms that subtract the reciprocal-space interactions of excluded pairs and
-exceptions are computed in the direct-space force group by default. Since they only cancel part of
-the reciprocal-space sum, they should be integrated along with it whenever the two groups are
-evaluated at different times <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id5" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="references.html#id6" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
-<code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves them to the reciprocal-space force group, where they are
-also kept when direct space is turned off with <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>.</p>
-</section>
-<section id="force-splitting-for-multiple-time-step-integration">
-<h2>Force splitting for multiple time-step integration<a class="headerlink" href="#force-splitting-for-multiple-time-step-integration" title="Link to this heading">¶</a></h2>
-<p>A SlicedNonbondedForce can place a short-range, force-switched copy of its direct-space pair
-interactions in a separate <em>inner</em> force group, so that a multiple time-step integrator can advance
-it with a small step while the remainder (the rest of direct space, the reciprocal-space sum and its
-exclusion corrections) is advanced with a large one. For a pair at distance <span class="math notranslate nohighlight">\(r\)</span> with bare
-potential <span class="math notranslate nohighlight">\(V(r)\)</span> (Lennard-Jones plus Coulomb, scaled by the slice’s parameters), the inner
-force is</p>
-<div class="math notranslate nohighlight">
-\[\mathbf{F}^\mathrm{inner}(r) = -S(r)\,V'(r)\,\hat{\mathbf{r}}, \qquad
-S = 1 - 10 z^3 + 15 z^4 - 6 z^5, \quad z = \frac{r - r_s}{r_c - r_s},\]</div>
-<p>with <span class="math notranslate nohighlight">\(S = 1\)</span> for <span class="math notranslate nohighlight">\(r \le r_s\)</span> and <span class="math notranslate nohighlight">\(S = 0\)</span> for <span class="math notranslate nohighlight">\(r \ge r_c\)</span>, where
-<span class="math notranslate nohighlight">\(r_s\)</span> and <span class="math notranslate nohighlight">\(r_c\)</span> are the inner switching and cutoff distances. The inner energy is the
-potential <span class="math notranslate nohighlight">\(\hat V\)</span> whose gradient is this force, shifted so that <span class="math notranslate nohighlight">\(\hat V(r_c) = 0\)</span>
-<span class="bibtex-citation" id="id3">[<a class="reference internal" href="references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>; the direct-space group reports <span class="math notranslate nohighlight">\(V - \hat V\)</span> and the corresponding force.
-Every group therefore has an energy consistent with its force, and the groups add up to the
-unsplit result. The closed form of <span class="math notranslate nohighlight">\(\hat V\)</span> used by all platforms is derived in the theory
-section. The same applies to 1-4 exceptions. Scaling parameters, their derivatives and
-parameter offsets apply to both parts.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span> <span class="o">=</span> <span class="n">nonbondedslicing</span><span class="o">.</span><span class="n">SlicedNonbondedForce</span><span class="p">(</span><span class="n">nonbonded</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-<span class="n">force</span><span class="o">.</span><span class="n">setForceGroup</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>               <span class="c1"># direct-space remainder; reciprocal space goes there too</span>
-<span class="n">force</span><span class="o">.</span><span class="n">setInnerForceGroup</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-<span class="n">force</span><span class="o">.</span><span class="n">setInnerSwitchingDistance</span><span class="p">(</span><span class="mf">0.5</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
-<span class="n">force</span><span class="o">.</span><span class="n">setInnerCutoffDistance</span><span class="p">(</span><span class="mf">0.8</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
-<span class="c1"># bonded forces in group 0; steps of 90, 3 and 0.5 fs</span>
-<span class="n">integrator</span> <span class="o">=</span> <span class="n">openmm</span><span class="o">.</span><span class="n">MTSIntegrator</span><span class="p">(</span><span class="mi">90</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">femtoseconds</span><span class="p">,</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">180</span><span class="p">)])</span>
-</pre></div>
-</div>
-<p>The inner force group must differ from the force group of the force and, with Ewald, PME or LJPME,
-from its reciprocal-space force group. It requires <span class="math notranslate nohighlight">\(0 &lt; r_s &lt; r_c \le\)</span> cutoff distance and,
-when the Lennard-Jones switching function is used, <span class="math notranslate nohighlight">\(r_c \le\)</span> switching distance: the inner
-force is the bare Lennard-Jones force times <span class="math notranslate nohighlight">\(S(r)\)</span>, which beyond the switching distance would
-exceed the switched force and leave the remainder with a correction of opposite sign. Since the
-split assumes the bare Lennard-Jones potential, the inner force group cannot be used with soft-core
-scaling parameters (a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code>). The inner force group, switching distance and
-cutoff distance are fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created; changing them afterwards takes
-effect only after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is called.</p>
-<p>On the CUDA and OpenCL platforms, all nonbonded interactions in one force group must use the same
-cutoff, so a Context fails to be created if the inner force group also contains another
-cutoff-based nonbonded force, such as a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html">openmm.CustomNonbondedForce</a>, with a different cutoff.
-Put the inner force group in a group of its own, or in one whose other nonbonded forces use the
-inner cutoff.</p>
-</section>
-<section id="installation">
-<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
-<p>The plugin is distributed on <a class="reference external" href="https://anaconda.org/conda-forge/openmm-nonbonded-slicing">conda-forge</a>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mamba<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>openmm-nonbonded-slicing
-</pre></div>
-</div>
-</section>
-<section id="building-from-source">
-<h2>Building from Source<a class="headerlink" href="#building-from-source" title="Link to this heading">¶</a></h2>
-<p>Requirements:</p>
-<ul class="simple">
-<li><p><a class="reference external" href="https://openmm.org">OpenMM</a> 8.4 or later</p></li>
-<li><p><a class="reference external" href="http://www.cmake.org">CMake</a> 3.17 or later and a C++ compiler</p></li>
-<li><p><a class="reference external" href="http://www.swig.org">SWIG</a>, the same version that built your OpenMM (OpenMM’s conda-forge builds 8.4 and 8.5/8.6 used SWIG 4.4 and 4.5, respectively)</p></li>
-<li><p>Optional: OpenCL headers for the OpenCL platform, and a CUDA toolkit with NVRTC and cuFFT for the CUDA platform</p></li>
-</ul>
-<p>In a conda environment where OpenMM is installed:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>build<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>build
-cmake<span class="w"> </span>..
-make<span class="w"> </span>install
-make<span class="w"> </span>PythonInstall
-</pre></div>
-</div>
-<p>Useful CMake options:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">OPENMM_DIR</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">$CONDA_PREFIX</span></code></p></td>
-<td><p>Where OpenMM is installed</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">OPENMM_VERSION</span></code></p></td>
-<td><p>detected with <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-c</span> <span class="pre">&quot;import</span> <span class="pre">openmm&quot;</span></code></p></td>
-<td><p>OpenMM version, if Python cannot import it</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CMAKE_INSTALL_PREFIX</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">OPENMM_DIR</span></code></p></td>
-<td><p>Where to install the plugin</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">PLUGIN_BUILD_OPENCL_LIB</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ON</span></code> if OpenCL headers are found</p></td>
-<td><p>Build the OpenCL platform</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PLUGIN_BUILD_CUDA_LIB</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ON</span></code> if a CUDA toolkit is found</p></td>
-<td><p>Build the CUDA platform (set <code class="docutils literal notranslate"><span class="pre">CUDAToolkit_ROOT</span></code> to pick a toolkit)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VKFFT_INCLUDE_DIR</span></code></p></td>
-<td><p>downloaded at configure time</p></td>
-<td><p>Directory containing <code class="docutils literal notranslate"><span class="pre">vkFFT.h</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="test-cases">
-<h2>Test Cases<a class="headerlink" href="#test-cases" title="Link to this heading">¶</a></h2>
-<p>From the build directory, run the C++ tests with <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code> (or <code class="docutils literal notranslate"><span class="pre">ctest</span></code>) and the Python tests with <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">PythonTest</span></code>.</p>
-</section>
+\[
+E = \sum_{I=0}^{n-1} \sum_{J=I}^{n-1}
+\left( \lambda^{vdW}_{I,J} E^{vdW}_{I,J} + \lambda^{elec}_{I,J} E^{elec}_{I,J} \right),
+\]</div>
+<p>where each <em>slice</em> is defined by subsets <span class="math notranslate nohighlight">\(I\)</span> and <span class="math notranslate nohighlight">\(J\)</span>, superscripts <em>vdW</em> and <em>elec</em> denote van der Waals
+and electrostatic contributions, <span class="math notranslate nohighlight">\(E_{I,J}\)</span> is the potential energy of all particle pairs formed by one
+particle in subset <span class="math notranslate nohighlight">\(I\)</span> and one in subset <span class="math notranslate nohighlight">\(J\)</span>, and <span class="math notranslate nohighlight">\(\lambda_{I,J}\)</span> is a scaling parameter. With this
+decomposition in place, the plugin offers four capabilities.</p>
+<p><strong>Scaling slices.</strong> By default, every scaling parameter is 1 and the force yields the same energy as the
+NonbondedForce it replaces. Selected scaling parameters can instead be tied to <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global
+parameters, so that the van der Waals and electrostatic contributions of chosen slices are scaled up or
+down while a simulation runs. See <a class="reference internal" href="guide/slicing.html"><span class="doc">Subsets, slices and scaling parameters</span></a>.</p>
+<p><strong>Soft-core Lennard-Jones potential.</strong> A scaling parameter can also soften the Lennard-Jones interactions
+of its slice with the Beutler soft-core potential, which remains finite as particles overlap, so that a
+slice can be decoupled alchemically without the singularity of the usual potential. See
+<a class="reference internal" href="guide/softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>.</p>
+<p><strong>Energy parameter derivatives.</strong> The derivative of the energy with respect to a scaling parameter can be
+requested along with the energy, which gives the energy of a slice or of a group of slices. See
+<a class="reference internal" href="guide/derivatives.html"><span class="doc">Energy parameter derivatives</span></a>.</p>
+<p><strong>Force-group splitting.</strong> With Ewald, PME and LJPME, the reciprocal-space sum can be computed in its own
+force group, together with the terms that correct it for excluded pairs and exceptions
+(<a class="reference internal" href="guide/reciprocal.html"><span class="doc">Reciprocal-space force group and exclusion corrections</span></a>). With any nonbonded method, a short-range, force-switched copy of the
+direct-space interactions can be computed in an <em>inner</em> force group, so that a multiple time-step
+integrator advances it with a smaller step than the rest (<a class="reference internal" href="guide/mts.html"><span class="doc">Inner force group for multiple time stepping</span></a>).</p>
+<p>The formulation behind the sliced lattice sums and the inner force group is in <a class="reference internal" href="theory.html"><span class="doc">Theory</span></a>, measured
+costs are in <a class="reference internal" href="performance.html"><span class="doc">Performance</span></a>, and the class is documented in <a class="reference internal" href="pythonapi/index.html"><span class="doc">Python API</span></a>.</p>
 </section>
 
 
@@ -274,15 +101,11 @@ make<span class="w"> </span>PythonInstall
 
 <h3><a href="index.html">Table of Contents</a></h3>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#soft-core-lennard-jones-potential">Soft-core Lennard-Jones Potential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#force-splitting-for-multiple-time-step-integration">Force splitting for multiple time-step integration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-from-source">Building from Source</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#test-cases">Test Cases</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="theory.html">Energy Slicing Theory</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance</a></li>
 <li class="toctree-l1"><a class="reference internal" href="pythonapi/index.html">Python API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="authors.html">Author</a></li>
@@ -312,7 +135,7 @@ make<span class="w"> </span>PythonInstall
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |
-      <a href="_sources/overview.rst.txt"
+      <a href="_sources/overview.md.txt"
           rel="nofollow">Page source</a>
     </div>
 

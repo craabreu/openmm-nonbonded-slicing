@@ -53,8 +53,10 @@ Changelog
 
 **Documentation**
 
-* Benchmark tables in the theory section remeasured with the device-side reduction of energy
+* Benchmark tables on the performance page remeasured with the device-side reduction of energy
   parameter derivatives proposed in `openmm/openmm#5520 <https://github.com/openmm/openmm/pull/5520>`_.
+* Documentation reorganized into an overview, an installation page, a user guide, a theory page and a
+  performance page; new pages are written in Markdown (MyST).
 
 0.4.0
 -----

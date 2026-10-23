@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Reciprocal-space force group and exclusion corrections &#8212; Nonbonded Slicing 0.4.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
+    <script src="../_static/documentation_options.js?v=6c02275b"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Inner force group for multiple time stepping" href="mts.html" />
+    <link rel="prev" title="Energy parameter derivatives" href="derivatives.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section class="tex2jax_ignore mathjax_ignore" id="reciprocal-space-force-group-and-exclusion-corrections">
+<h1>Reciprocal-space force group and exclusion corrections<a class="headerlink" href="#reciprocal-space-force-group-and-exclusion-corrections" title="Link to this heading">¶</a></h1>
+<section id="what-it-does">
+<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
+<p>With Ewald, PME or LJPME, the reciprocal-space sum can be computed in a separate force group by calling
+<code class="docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code>, as in OpenMM’s <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html">openmm.NonbondedForce</a>. A multiple time-step integrator
+can then evaluate the reciprocal-space sum, which varies slowly, less often than the direct-space
+interactions.</p>
+<p>The reciprocal-space sum implicitly includes the interactions of excluded pairs and exceptions, and the
+terms that subtract them are, by default, computed in the direct-space force group, as NonbondedForce does.
+Since these terms only cancel part of the reciprocal-space sum, they should be integrated along with it
+whenever the two groups are evaluated at different times; otherwise, the cancellation is incomplete and the
+slow force acquires a fast, intramolecular component <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id5" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="../references.html#id6" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
+<code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves these terms to the reciprocal-space force group.</p>
+</section>
+<section id="setting-it-up">
+<h2>Setting it up<a class="headerlink" href="#setting-it-up" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">setNonbondedMethod</span><span class="p">(</span><span class="n">nbs</span><span class="o">.</span><span class="n">SlicedNonbondedForce</span><span class="o">.</span><span class="n">PME</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setForceGroup</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>                   <span class="c1"># direct space</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setReciprocalSpaceForceGroup</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>    <span class="c1"># reciprocal space</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setReciprocalExclusions</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>      <span class="c1"># and the exclusion corrections with it</span>
+</pre></div>
+</div>
+</section>
+<section id="restrictions">
+<h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions</span></code> only matters with Ewald, PME or LJPME, when the reciprocal-space force group
+differs from the direct-space one. The default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, keeps the behavior of NonbondedForce.</p></li>
+<li><p>By default, turning off direct space with <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code> also removes the exclusion
+corrections, as in NonbondedForce. With <code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code>, they are kept, so a replacement
+for the direct-space calculation, such as a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html">openmm.CustomNonbondedForce</a>, must then not include them,
+or they are counted twice.</p></li>
+</ul>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo_small.png" alt="Logo" />
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="derivatives.html">Energy parameter derivatives</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Reciprocal-space force group and exclusion corrections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pythonapi/index.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.1</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/guide/reciprocal.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

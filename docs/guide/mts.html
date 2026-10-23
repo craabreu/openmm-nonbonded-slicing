@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Inner force group for multiple time stepping &#8212; Nonbonded Slicing 0.4.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
+    <script src="../_static/documentation_options.js?v=6c02275b"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Theory" href="../theory.html" />
+    <link rel="prev" title="Reciprocal-space force group and exclusion corrections" href="reciprocal.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section class="tex2jax_ignore mathjax_ignore" id="inner-force-group-for-multiple-time-stepping">
+<h1>Inner force group for multiple time stepping<a class="headerlink" href="#inner-force-group-for-multiple-time-stepping" title="Link to this heading">¶</a></h1>
+<section id="what-it-does">
+<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">SlicedNonbondedForce</span></code> can place a short-range, force-switched copy of its direct-space pair
+interactions in a separate <em>inner</em> force group, so that a multiple time-step integrator can advance it
+with a small step while the remainder (the rest of direct space, the reciprocal-space sum and its exclusion
+corrections) is advanced with a large one. For a pair at distance <span class="math notranslate nohighlight">\(r\)</span> with bare potential <span class="math notranslate nohighlight">\(V(r)\)</span>
+(Lennard-Jones plus Coulomb, scaled by the slice’s parameters), the inner force is</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{F}^\mathrm{inner}(r) = -S(r)\,V'(r)\,\hat{\mathbf{r}}, \qquad
+S = 1 - 10 z^3 + 15 z^4 - 6 z^5, \quad z = \frac{r - r_s}{r_c - r_s},
+\]</div>
+<p>with <span class="math notranslate nohighlight">\(S = 1\)</span> for <span class="math notranslate nohighlight">\(r \le r_s\)</span> and <span class="math notranslate nohighlight">\(S = 0\)</span> for <span class="math notranslate nohighlight">\(r \ge r_c\)</span>, where <span class="math notranslate nohighlight">\(r_s\)</span> and <span class="math notranslate nohighlight">\(r_c\)</span> are the inner switching
+and cutoff distances. The inner energy is the potential <span class="math notranslate nohighlight">\(\hat V\)</span> whose gradient is this force, shifted so
+that <span class="math notranslate nohighlight">\(\hat V(r_c) = 0\)</span> <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>; the direct-space group reports <span class="math notranslate nohighlight">\(V - \hat V\)</span> and the
+corresponding force. Every group therefore has an energy consistent with its force, and the groups add up
+to the unsplit result. The same applies to 1-4 exceptions, and scaling parameters, their derivatives and
+parameter offsets apply to both parts. The closed form of <span class="math notranslate nohighlight">\(\hat V\)</span> used by all platforms is derived in
+<a class="reference internal" href="../theory.html"><span class="doc">Theory</span></a>.</p>
+</section>
+<section id="setting-it-up">
+<h2>Setting it up<a class="headerlink" href="#setting-it-up" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span> <span class="o">=</span> <span class="n">nbs</span><span class="o">.</span><span class="n">SlicedNonbondedForce</span><span class="p">(</span><span class="n">nonbonded</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setForceGroup</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>               <span class="c1"># direct-space remainder; reciprocal space goes there too</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerForceGroup</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerSwitchingDistance</span><span class="p">(</span><span class="mf">0.5</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">setInnerCutoffDistance</span><span class="p">(</span><span class="mf">0.8</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">nanometer</span><span class="p">)</span>
+<span class="c1"># bonded forces in group 0; steps of 90, 3 and 0.5 fs</span>
+<span class="n">integrator</span> <span class="o">=</span> <span class="n">mm</span><span class="o">.</span><span class="n">MTSIntegrator</span><span class="p">(</span><span class="mi">90</span><span class="o">*</span><span class="n">unit</span><span class="o">.</span><span class="n">femtoseconds</span><span class="p">,</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">180</span><span class="p">)])</span>
+</pre></div>
+</div>
+<p>If the reciprocal-space sum is also moved to a group of its own with <code class="docutils literal notranslate"><span class="pre">setReciprocalSpaceForceGroup</span></code>, call
+<code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> so that the exclusion corrections go with it (<a class="reference internal" href="reciprocal.html"><span class="doc">Reciprocal-space force group and exclusion corrections</span></a>) and the
+slow group has no fast intramolecular component.</p>
+</section>
+<section id="restrictions">
+<h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The inner force group must differ from the force group of the force and, with Ewald, PME or LJPME, from
+its reciprocal-space force group.</p></li>
+<li><p>The distances must satisfy <span class="math notranslate nohighlight">\(0 &lt; r_s &lt; r_c \le\)</span> cutoff distance and, when the Lennard-Jones switching
+function is used, <span class="math notranslate nohighlight">\(r_c \le\)</span> switching distance: the inner force is the bare Lennard-Jones force times
+<span class="math notranslate nohighlight">\(S(r)\)</span>, which beyond the switching distance would exceed the switched force and leave the remainder with
+a correction of opposite sign.</p></li>
+<li><p>Since the split assumes the bare Lennard-Jones potential, the inner force group cannot be used with
+soft-core scaling parameters (<a class="reference internal" href="softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>).</p></li>
+<li><p>The inner force group requires the direct space to be included (the default; see
+<code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace</span></code>).</p></li>
+<li><p>The inner force group, switching distance and cutoff distance are fixed when a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is
+created; changing them afterwards takes effect only after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is
+called.</p></li>
+<li><p>On the CUDA and OpenCL platforms, all nonbonded interactions in one force group must use the same
+cutoff, so a Context fails to be created if the inner force group also contains another cutoff-based
+nonbonded force, such as a <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomNonbondedForce.html">openmm.CustomNonbondedForce</a>, with a different cutoff. Put the inner force
+group in a group of its own, or in one whose other nonbonded forces use the inner cutoff.</p></li>
+</ul>
+</section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
+<p>On the CUDA and OpenCL platforms, the cost of an inner-group evaluation depends little on the inner cutoff,
+because the inner kernels traverse the neighbor list built for the full cutoff and only skip the pairs
+beyond <span class="math notranslate nohighlight">\(r_c\)</span>. The inner group is therefore not much cheaper than the direct space it is carved from, which
+limits the speedup of multiple time stepping. The <code class="docutils literal notranslate"><span class="pre">--inner-group</span></code> mode of <code class="docutils literal notranslate"><span class="pre">devtools/benchmarks/benchmark.py</span></code>
+measures it.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo_small.png" alt="Logo" />
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="derivatives.html">Energy parameter derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reciprocal.html">Reciprocal-space force group and exclusion corrections</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Inner force group for multiple time stepping</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pythonapi/index.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.1</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/guide/mts.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

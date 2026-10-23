@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Energy parameter derivatives &#8212; Nonbonded Slicing 0.4.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
+    <script src="../_static/documentation_options.js?v=6c02275b"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Reciprocal-space force group and exclusion corrections" href="reciprocal.html" />
+    <link rel="prev" title="Soft-core Lennard-Jones potential" href="softcore.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section class="tex2jax_ignore mathjax_ignore" id="energy-parameter-derivatives">
+<h1>Energy parameter derivatives<a class="headerlink" href="#energy-parameter-derivatives" title="Link to this heading">¶</a></h1>
+<section id="what-it-does">
+<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">addEnergyParameterDerivative</span></code> requests the derivative of the force’s energy with respect to a scaling
+parameter. The derivatives are returned by the <code class="docutils literal notranslate"><span class="pre">getEnergyParameterDerivatives</span></code> method of a
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.State.html">openmm.State</a> obtained with both <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> and <code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambda"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambda"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addEnergyParameterDerivative</span><span class="p">(</span><span class="s2">"lambda"</span><span class="p">)</span>
+<span class="o">...</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">getState</span><span class="p">(</span><span class="n">getEnergy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">getParameterDerivatives</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">energy_01</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">getEnergyParameterDerivatives</span><span class="p">()[</span><span class="s2">"lambda"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Only scaling parameters qualify: requesting the derivative with respect to another global parameter raises
+an exception.</p>
+</section>
+<section id="what-the-derivatives-mean">
+<h2>What the derivatives mean<a class="headerlink" href="#what-the-derivatives-mean" title="Link to this heading">¶</a></h2>
+<p>For a parameter that multiplies the contributions of slices with the usual Lennard-Jones potential, the
+energy is linear in the parameter, and its derivative is the sum of the unscaled contributions it
+multiplies,</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
++ \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J},
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(S^{elec}_\lambda\)</span> and <span class="math notranslate nohighlight">\(S^{vdW}_\lambda\)</span> are the sets of slices whose electrostatic and van der
+Waals contributions are scaled by <span class="math notranslate nohighlight">\(\lambda\)</span>. This derivative does not depend on the values of the scaling
+parameters. A parameter that scales both contributions of a single slice <span class="math notranslate nohighlight">\(I, J\)</span> yields its full energy
+<span class="math notranslate nohighlight">\(E^{vdW}_{I,J} + E^{elec}_{I,J}\)</span>, while one that scales the electrostatic contributions of several slices
+yields their sum. This is how the energy of a slice, or of a group of slices, can be reported.</p>
+<p>A parameter that softens a slice (<a class="reference internal" href="softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>) makes the energy non-linear in it. For a pair of the
+slice, the derivatives with respect to the energy and softening parameters are</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
+\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
+\]</div>
+<p>and the reported derivative depends on the roles the parameter plays:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Reported derivative</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Multiplies the Coulomb contributions of any slices, or the Lennard-Jones contributions of unsoftened slices</p></td>
+<td><p>The sum of the unscaled contributions it multiplies, independent of the parameter values</p></td>
+</tr>
+<tr class="row-odd"><td><p>Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter</p></td>
+<td><p><span class="math notranslate nohighlight">\(\partial U / \partial \lambda_E\)</span> summed over its pairs: the soft-core van der Waals energy of the slice, which differs from the usual energy whenever <span class="math notranslate nohighlight">\(\lambda_s &lt; 1\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p>Softens a slice</p></td>
+<td><p><span class="math notranslate nohighlight">\(\partial U / \partial \lambda_s\)</span> summed over its pairs, which is not an energy</p></td>
+</tr>
+<tr class="row-odd"><td><p>Multiplies the Lennard-Jones contribution of a slice and softens it</p></td>
+<td><p>The sum of the two rows above, which is not an energy, even when the parameter is 1 and the soft-core and usual potentials coincide</p></td>
+</tr>
+</tbody>
+</table>
+<p>The pair terms in the last three rows are multiplied by the switching function when it is used and, with
+LJPME, have the same term evaluated at the cutoff subtracted. To obtain the usual van der Waals energy of a
+softened slice, evaluate it in a separate force without the soft-core potential.</p>
+</section>
+<section id="restrictions">
+<h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Derivatives are only computed along with the energy. A State requested with
+<code class="docutils literal notranslate"><span class="pre">getParameterDerivatives=True</span></code> but without <code class="docutils literal notranslate"><span class="pre">getEnergy=True</span></code> holds NaN for every requested derivative, on
+all platforms. If other forces in the System also contribute derivatives with respect to the same
+parameter, their sum is NaN too. In exchange, steps that compute only forces, such as regular molecular
+dynamics steps, do not pay for the derivatives. Expressions like <code class="docutils literal notranslate"><span class="pre">deriv(energy,</span> <span class="pre">lambda)</span></code> in a
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.CustomIntegrator.html">openmm.CustomIntegrator</a> always compute the energy, so they work as usual.</p>
+</div>
+<p>The cost of an evaluation with derivatives grows with the number of requested derivatives, not with the
+number of slices, since a parameter that scales several slices adds a single derivative; see
+<a class="reference internal" href="../performance.html"><span class="doc">Performance</span></a>. Request derivatives only for the parameters whose energies you need.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo_small.png" alt="Logo" />
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Energy parameter derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reciprocal.html">Reciprocal-space force group and exclusion corrections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pythonapi/index.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.1</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/guide/derivatives.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
