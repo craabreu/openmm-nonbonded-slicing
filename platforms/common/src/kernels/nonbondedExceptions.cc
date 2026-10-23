@@ -13,24 +13,13 @@ real invR = RSQRT(r2);
 real sig2 = invR*exceptionParams.y;
 sig2 *= sig2;
 real sig6 = sig2*sig2*sig2;
-#if HAS_SOFTCORE
-real softcoreAlpha = SOFTCORE_ALPHAS[slice];
-real softLambda = SOFTCORE_LAMBDAS[slice];
-real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
-real s = sig6*q;
-real epss = exceptionParams.z*s;
-real ljForce = 6.0f*epss*(2.0f*s-1.0f)*q;
-real ljEnergy = epss*(s-1.0f);
-real ljSoftDeriv = ljLambda*softcoreAlpha*epss*s*(2.0f*s-1.0f);
-#else
 real ljForce = exceptionParams.z*(12.0f*sig6-6.0f)*sig6;
 real ljEnergy = exceptionParams.z*(sig6-1.0f)*sig6;
-#endif
 real clForce = exceptionParams.x*invR;
 real clEnergy = exceptionParams.x*invR;
 #if INNER_GROUP || SUBTRACT_INNER
-// Inner part: S(r) times the bare force and the shifted potential whose gradient it is. The inner
-// group cannot be used with soft-core slices, so HAS_SOFTCORE is 0 here and ljForce is bare.
+// Inner part: S(r) times the bare force and the shifted potential whose gradient it is.
+// ljForce is the bare force here.
 real innerForceLJ = 0.0f, innerForceCl = 0.0f, innerEnergyLJ = 0.0f, innerEnergyCl = 0.0f;
 if (r2 < INNER_CUTOFF_SQUARED) {
     const real r = SQRT(r2);

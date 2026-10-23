@@ -86,7 +86,7 @@ namespace NonbondedSlicing {
  * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
  * a new Context parameter, then pass its name to :func:`addScalingParameter`.  A scaling parameter can
  * play up to three roles in a slice: multiply its Coulomb contribution, multiply its Lennard-Jones
- * contribution, and soften its Lennard-Jones interactions (see ``softcoreAlpha`` in
+ * contribution, and multiply its decapping term (see ``includeDecapping`` in
  * :func:`addScalingParameter`).  The same scaling parameter can affect multiple slices, and each role of a
  * slice belongs to at most one scaling parameter, so a slice can have up to three scaling parameters.
  *
@@ -300,8 +300,8 @@ public:
     void setParticleSubset(int index, int subset);
     /**
      * Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
-     * particular slice. A scaling parameter can also soften the Lennard-Jones interactions of its
-     * slice, see ``softcoreAlpha``. Its value will scale the interactions between particles of a subset 1
+     * particular slice. A scaling parameter can also multiply the decapping term of its slice, see
+     * ``includeDecapping``. Its value will scale the interactions between particles of a subset 1
      * with those of another (or the same) subset 2. The order of subset definition is irrelevant.
      *
      * Parameters
@@ -320,38 +320,30 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions.  At least one
-     *         of includeCoulomb, includeLJ and softcoreAlpha > 0 must hold
-     *     softcoreAlpha : float, default=0
-     *         if positive, this parameter also softens the Lennard-Jones interactions of the slice
-     *         with the Beutler soft-core potential: each pair interacts through
-     *         :math:`U(r) = 4 \\lambda_E \\epsilon (s^2 - s)` with
-     *         :math:`s = 1/[\\alpha (1 - \\lambda_s) + (r/\\sigma)^6]`, where :math:`\\lambda_E` is
-     *         the slice's Lennard-Jones scaling parameter (1 if there is none), :math:`\\lambda_s` is
-     *         this parameter and :math:`\\alpha` is ``softcoreAlpha`` (typically 0.5). Keep
-     *         :math:`\\lambda_s` between 0 and 1: for :math:`\\lambda_s > 1`, the potential becomes
-     *         singular at :math:`r = [\\alpha (\\lambda_s - 1)]^{1/6} \\sigma`. The potential remains
-     *         finite as :math:`r \\to 0` whenever :math:`\\lambda_s < 1`. Only one scaling parameter
-     *         per slice can soften it. Since only the Lennard-Jones term is softened, scale the
-     *         Coulomb contribution of the slice with its own parameter and turn it off before
-     *         softening the Lennard-Jones term. Soft-core applies to the direct-space Lennard-Jones
-     *         term and to 1-4 exceptions; the dispersion correction and the reciprocal-space part of
-     *         LJPME are not affected. As with the usual potential, do not combine LJPME with a
-     *         switching function: the Reference platform ignores the switching function, while the
-     *         CUDA and OpenCL platforms apply it to the direct-space Lennard-Jones term, as OpenMM's
-     *         ``NonbondedForce`` does on each platform. Derivatives with respect to this parameter
-     *         are :math:`4 \\lambda_E \\epsilon \\alpha s^2 (2 s - 1)`, times the switching function
-     *         when it is used and, with LJPME, minus the same term evaluated at the cutoff. They are
-     *         added to the usual derivative when the same parameter also scales the Lennard-Jones
-     *         energy. This setting is fixed
-     *         at Context creation, like the other arguments of this method. Soft-core scaling
-     *         parameters cannot be used with an inner force group (see :func:`setInnerForceGroup`).
+     *         of includeCoulomb, includeLJ and includeDecapping must hold
+     *     includeDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the decapping term of the slice. In a decapped
+     *         slice, each Lennard-Jones pair interacts through
+     *         :math:`\\lambda_{LJ} u_{cap}(r) + \\lambda_D [u_{LJ}(r) - u_{cap}(r)]`, where
+     *         :math:`u_{LJ}` is the usual potential, :math:`u_{cap}` equals it for :math:`r \\ge \\sigma`
+     *         and is a polynomial with the finite value :math:`119.2 \\epsilon` at :math:`r = 0`
+     *         :cite:`Correa_2022`, :math:`\\lambda_{LJ}` is the slice's Lennard-Jones scaling parameter (1
+     *         if there is none) and :math:`\\lambda_D` is this parameter. The energy is linear in both
+     *         parameters: the derivative with respect to :math:`\\lambda_{LJ}` is the capped van der Waals
+     *         energy of the slice and the one with respect to :math:`\\lambda_D` is its decapping energy,
+     *         and their sum is the usual van der Waals energy. Only one scaling parameter per slice can
+     *         multiply its decapping term. The capped core is finite, so turn the Coulomb contribution of
+     *         the slice on only while :math:`\\lambda_D > 0`. Decapping applies to direct-space pairs and
+     *         1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction apply to the
+     *         capped term, which is the usual potential beyond :math:`\\sigma`. This setting is fixed at
+     *         Context creation, like the other arguments of this method.
      *
      * Returns
      * -------
      *     index : int
      *         the index of scaling parameter that was added
      */
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
     /**
      * Get the number of scaling parameters.
      */
@@ -388,15 +380,14 @@ public:
         }
     }
     /**
-     * Get the soft-core parameter alpha of a scaling parameter, or zero if that parameter does not
-     * soften its slice (see :func:`addScalingParameter`).
+     * Get whether a scaling parameter multiplies the decapping term of its slice (see :func:`addScalingParameter`).
      *
      * Parameters
      * ----------
      *     index : int
      *         the index of the scaling parameter, as returned by :func:`addScalingParameter`
      */
-    double getScalingParameterSoftcoreAlpha(int index) const;
+    bool getScalingParameterIncludeDecapping(int index) const;
     /**
      * Modify an added scaling parameter.
      *
@@ -419,22 +410,21 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions
-     *     softcoreAlpha : float, default=0
-     *         the soft-core parameter of the slice, see :func:`addScalingParameter`
+     *     includeDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the decapping term of the slice, see
+     *         :func:`addScalingParameter`
      */
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha = 0.0);
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
-     * can be used to obtain the value of an energy slice or a sum thereof. For a slice that uses the
-     * soft-core potential (see the ``softcoreAlpha`` argument of :func:`addScalingParameter`) with a
-     * separate softening parameter, the derivative with respect to its Lennard-Jones scaling parameter
-     * is the slice's unscaled soft-core Lennard-Jones energy. The derivative with respect to a
-     * softening parameter, or to a parameter that also softens the slice, is not an energy. The
-     * parameter must have already been added with
+     * can be used to obtain the value of an energy slice or a sum thereof. For a decapped
+     * slice (see the ``includeDecapping`` argument of :func:`addScalingParameter`), the derivative with
+     * respect to its Lennard-Jones scaling parameter is the slice's capped van der Waals energy, and the
+     * one with respect to its decapping parameter is its decapping energy. The parameter must have already been added with
      * :func:`addGlobalParameter` and :func:`addScalingParameter`.
-     * Derivatives are only calculated for scaling parameters (those that multiply the Lennard-Jones
-     * or Coulomb contributions, or soften a slice). Requesting the derivative with respect to non-scaling global
-     * parameters will raise an exception.
+     * Derivatives are only calculated for scaling parameters (those that multiply the Coulomb or
+     * Lennard-Jones contributions or the decapping term of a slice). Requesting the derivative with
+     * respect to non-scaling global parameters will raise an exception.
      *
      * Derivatives are only computed along with the energy: pass both ``getEnergy=True`` and
      * ``getParameterDerivatives=True`` to the Context's ``getState`` method. Without the energy,
@@ -486,8 +476,8 @@ public:
      * distance < inner cutoff distance <= cutoff distance and, if a switching function is used
      * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
      * the inner force never exceeds the switched Lennard-Jones force.  Since the split assumes the
-     * bare Lennard-Jones potential, the inner force group cannot be used with soft-core scaling
-     * parameters (see ``softcoreAlpha`` in :func:`addScalingParameter`).  On the CUDA and OpenCL
+     * bare Lennard-Jones potential, the inner force group cannot be used with decapping scaling
+     * parameters (see ``includeDecapping`` in :func:`addScalingParameter`).  On the CUDA and OpenCL
      * platforms, all nonbonded interactions in one force group must use the same cutoff, so the
      * inner force group should be a group of its own or one whose other nonbonded forces (for
      * instance, a :OpenMM:`CustomNonbondedForce`) use the inner cutoff distance.

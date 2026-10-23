@@ -149,8 +149,8 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         if (!owner.getIncludeDirectSpace())
             throw OpenMMException("SlicedNonbondedForce: the inner force group requires the direct space to be included");
         for (int index = 0; index < owner.getNumScalingParameters(); index++)
-            if (owner.getScalingParameterSoftcoreAlpha(index) > 0.0)
-                throw OpenMMException("SlicedNonbondedForce: the inner force group cannot be used with soft-core scaling parameters");
+            if (owner.getScalingParameterIncludeDecapping(index))
+                throw OpenMMException("SlicedNonbondedForce: the inner force group cannot be used with decapping scaling parameters");
     }
     // The split is set up once, at Context creation, so the inner force group is fixed from here on.
     innerForceGroup = owner.getInnerForceGroup();

@@ -16,7 +16,6 @@
 
 #include "internal/ReferenceSlicedLJCoulombIxn.h"
 #include "internal/ReferenceSlicedPME.h"
-#include "internal/ReferenceSoftcoreLJ.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/OpenMMException.h"
@@ -163,8 +162,8 @@ void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
     reciprocalExclusions = reciprocal;
 }
 
-void ReferenceSlicedLJCoulombIxn::setSoftcoreAlphas(const vector<double>& alphas) {
-    sliceSoftcoreAlphas = alphas;
+void ReferenceSlicedLJCoulombIxn::setDecappedSlices(const vector<bool>& decapped) {
+    decappedSlices = decapped;
 }
 
 void ReferenceSlicedLJCoulombIxn::setInnerSplit(const InnerSplit& split) {
@@ -251,7 +250,6 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
    @param sliceEnergies    the energy of each slice
-   @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -260,7 +258,7 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(
 void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
 ) const {
     typedef complex<double> d_complex;
 
@@ -539,11 +537,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         sig2 *= sig2;
         double sig6 = sig2*sig2*sig2;
         double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-        double lambdaE = sliceLambdas[slice][vdW];
-        double lambdaS = sliceLambdas[slice][soft];
-        double alpha = sliceSoftcoreAlphas[slice];
-        double vdwEnergy, rdUdr, softDeriv;
-        computeSoftcoreLJ(sig6, eps, lambdaE, lambdaS, alpha, vdwEnergy, rdUdr, softDeriv);
+        double vdwEnergy = eps*(sig6-1.0)*sig6;
+        double rdUdr = eps*(12.0*sig6-6.0)*sig6;
         double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
 
         if (ljpme) {
@@ -566,12 +561,7 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
             sig2 = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
             sig2 *= sig2;
             sig6 = sig2*sig2*sig2;
-            // The additive part of the potential shift, in the soft-core form so that the
-            // energy stays continuous at the cutoff
-            double shiftEnergy, shiftRdUdr, shiftSoftDeriv;
-            computeSoftcoreLJ(sig6*inverseCut6, eps, lambdaE, lambdaS, alpha, shiftEnergy, shiftRdUdr, shiftSoftDeriv);
-            double potentialshift = -shiftEnergy;
-            softDeriv -= shiftSoftDeriv;
+            double potentialshift = eps*(1.0-sig6*inverseCut6)*sig6*inverseCut6;
             dalphaR   = alphaDispersionEwald*cutoffDistance;
             dar2 = dalphaR*dalphaR;
             dar4 = dar2*dar2;
@@ -583,11 +573,9 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         if (useSwitch) {
             dEdRvdW -= vdwEnergy*switchDeriv*inverseR;
             vdwEnergy *= switchValue;
-            softDeriv *= switchValue;
         }
 
-        // The inner part is that of the bare potential, since the inner force group cannot be
-        // used with soft-core slices.
+        // The inner part is that of the bare potential.
         if (innerSplit.enabled) {
             double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy;
             calculateInnerPair(ii, jj, atomParameters, r, forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy);
@@ -608,7 +596,6 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 
         // accumulate energies
         sliceEnergies[slice][vdW] += vdwEnergy;
-        sliceSoftDerivs[slice] += softDeriv;
         sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
     }
 
@@ -628,7 +615,6 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
                            exclusions[atomIndex] contains the list of exclusions for that atom
    @param forces           force array (forces added)
    @param sliceEnergies    the energy of each slice
-   @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
    @param includeDirect      true if direct space interactions should be included
    @param includeReciprocal  true if reciprocal space interactions should be included
 
@@ -637,19 +623,19 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
     int numberOfAtoms, vector<Vec3>& atomCoordinates, int numberOfSubsets, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, const vector<set<int>>& exclusions,
-    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs, bool includeDirect, bool includeReciprocal
+    vector<Vec3>& forces, vector<vector<double>>& sliceEnergies, bool includeDirect, bool includeReciprocal
 ) const {
 
     if (ewald || pme || ljpme) {
         calculateEwaldIxn(numberOfAtoms, atomCoordinates, numberOfSubsets, atomSubsets, atomParameters, sliceLambdas, exclusions, forces,
-                          sliceEnergies, sliceSoftDerivs, includeDirect, includeReciprocal);
+                          sliceEnergies, includeDirect, includeReciprocal);
         return;
     }
     if (!includeDirect)
         return;
     if (cutoff) {
         for (auto& pair : *neighborList)
-            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies, sliceSoftDerivs);
+            calculateOneIxn(pair.first, pair.second, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
     }
     else {
         for (int ii = 0; ii < numberOfAtoms; ii++) {
@@ -657,7 +643,7 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
 
             for (int jj = ii+1; jj < numberOfAtoms; jj++)
                 if (exclusions[jj].find(ii) == exclusions[jj].end())
-                    calculateOneIxn(ii, jj, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies, sliceSoftDerivs);
+                    calculateOneIxn(ii, jj, atomCoordinates, atomSubsets, atomParameters, sliceLambdas, forces, sliceEnergies);
         }
     }
 }
@@ -674,14 +660,13 @@ void ReferenceSlicedLJCoulombIxn::calculatePairIxn(
      @param sliceLambda      Coulomb and LJ scaling parameters for each slice
      @param forces           force array (forces added)
      @param sliceEnergies    the energy of each slice
-     @param sliceSoftDerivs  the derivative of each slice's energy with respect to its softness parameter
 
      --------------------------------------------------------------------------------------- */
 
 void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     int ii, int jj, vector<Vec3>& atomCoordinates, const vector<int>& atomSubsets,
     const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<Vec3>& forces,
-    vector<vector<double>>& sliceEnergies, vector<double>& sliceSoftDerivs
+    vector<vector<double>>& sliceEnergies
 ) const {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
@@ -713,8 +698,8 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     double sig6 = sig2*sig2*sig2;
 
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
-    double energy, rdUdr, softDeriv;
-    computeSoftcoreLJ(sig6, eps, sliceLambdas[slice][vdW], sliceLambdas[slice][soft], sliceSoftcoreAlphas[slice], energy, rdUdr, softDeriv);
+    double energy = eps*(sig6-1.0)*sig6;
+    double rdUdr = eps*(12.0*sig6-6.0)*sig6;
     double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
     double dEdRCoul = inverseR*inverseR;
     if (cutoff)
@@ -724,10 +709,8 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     if (useSwitch) {
         dEdRvdW -= energy*switchDeriv*inverseR;
         energy *= switchValue;
-        softDeriv *= switchValue;
     }
-    // The inner part is that of the bare potential, since the inner force group cannot be used
-    // with soft-core slices.
+    // The inner part is that of the bare potential.
     if (innerSplit.enabled) {
         double forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy;
         calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], forceFactorVdw, forceFactorCoul, innerVdwEnergy, innerCoulEnergy);
@@ -737,7 +720,6 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
         sliceEnergies[slice][Coul] -= innerCoulEnergy;
     }
     sliceEnergies[slice][vdW] += energy;
-    sliceSoftDerivs[slice] += softDeriv;
     if (cutoff)
         sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
     else

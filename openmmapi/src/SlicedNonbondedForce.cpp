@@ -137,10 +137,10 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
-int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha) {
+int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping) {
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, softcoreAlpha);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, includeDecapping);
     for (auto param : scalingParameters)
         if (param.clashesWith(info))
             throwException(__FILE__, __LINE__, "Clash detected between scaling parameters");
@@ -158,20 +158,20 @@ void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int
     includeCoulomb = info->includeCoulomb;
 }
 
-void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, double softcoreAlpha) {
+void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping) {
     ASSERT_VALID("Index", index, scalingParameters.size());
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, softcoreAlpha);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, includeDecapping);
     for (int i = 0; i < scalingParameters.size(); i++)
         if (i != index && scalingParameters[i].clashesWith(info))
             throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters[index] = info;
 }
 
-double SlicedNonbondedForce::getScalingParameterSoftcoreAlpha(int index) const {
+bool SlicedNonbondedForce::getScalingParameterIncludeDecapping(int index) const {
     ASSERT_VALID("Index", index, scalingParameters.size());
-    return scalingParameters[index].softcoreAlpha;
+    return scalingParameters[index].includeDecapping;
 }
 
 int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) const {

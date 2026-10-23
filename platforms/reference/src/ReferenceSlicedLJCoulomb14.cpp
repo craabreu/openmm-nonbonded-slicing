@@ -13,7 +13,6 @@
 #include <sstream>
 
 #include "internal/ReferenceSlicedLJCoulomb14.h"
-#include "internal/ReferenceSoftcoreLJ.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 
@@ -56,8 +55,7 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
-       @param softcoreAlpha    the soft-core parameter of the slice (0 for hard-core)
-       @param sliceSoftDeriv  the derivative of the slice's energy with respect to its softness parameter
+       @param decapped         whether the slice is decapped
        @param mode             which part of the interactions to compute
 
    --------------------------------------------------------------------------------------- */
@@ -69,7 +67,7 @@ void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
                                      vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                                     double softcoreAlpha, double& sliceSoftDeriv, Mode mode) {
+                                     bool decapped, Mode mode) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -86,10 +84,9 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
            sig2     *= sig2;
     double sig6      = sig2*sig2*sig2;
 
-    // The full interaction, possibly soft-core. The inner part is that of the bare potential, since
-    // the inner force group cannot be used with soft-core slices.
-    double vdwEnergy, rdUdr, softDeriv;
-    computeSoftcoreLJ(sig6, parameters[1], sliceLambdas[vdW], sliceLambdas[soft], softcoreAlpha, vdwEnergy, rdUdr, softDeriv);
+    // The full interaction. Its inner part is that of the bare potential.
+    double vdwEnergy = parameters[1]*(sig6-1.0)*sig6;
+    double rdUdr = parameters[1]*(12.0*sig6-6.0)*sig6;
     double r = deltaR[0][ReferenceForce::RIndex];
     double innerVdwForce = 0.0, innerCoulForce = 0.0, innerVdwEnergy = 0.0, innerCoulEnergy = 0.0;
     if (mode != Full && r < innerSplit.rc) {
@@ -110,7 +107,6 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         coulForce = innerCoulForce;
         vdwEnergy = innerVdwEnergy;
         coulEnergy = innerCoulEnergy;
-        softDeriv = 0.0;
     }
     else if (mode == Remainder) {
         vdwForce -= innerVdwForce;
@@ -130,6 +126,5 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
 
     // accumulate energies
     sliceEnergies[vdW] += vdwEnergy;
-    sliceSoftDeriv += softDeriv;
     sliceEnergies[Coul] += coulEnergy;
 }

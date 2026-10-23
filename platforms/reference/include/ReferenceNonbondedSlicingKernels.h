@@ -77,7 +77,7 @@ public:
 private:
     static const int Coul = 0;
     static const int vdW = 1;
-    static const int soft = 2;
+    static const int decap = 2;
     class ScalingParameterInfo;
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
@@ -99,7 +99,7 @@ private:
     vector<int> subsets;
     vector<vector<double>> sliceLambdas;
     vector<vector<ScalingParameterInfo>> sliceScalingParams;
-    vector<double> sliceSoftcoreAlphas;
+    vector<bool> decappedSlices;
 };
 
 class ReferenceCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
