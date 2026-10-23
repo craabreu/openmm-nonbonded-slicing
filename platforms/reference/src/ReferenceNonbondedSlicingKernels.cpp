@@ -227,6 +227,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
     clj.setInnerSplit(innerSplit);
+    clj.setDecappedSlices(decappedSlices);
     clj.calculatePairIxn(
         numParticles,
         posData,

@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include "internal/ReferenceSlicedLJCoulomb14.h"
+#include "internal/CappedLJ.h"
 #include "openmm/reference/ReferenceForce.h"
 #include "openmm/reference/SimTKOpenMMUtilities.h"
 
@@ -87,6 +88,9 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     // The full interaction. Its inner part is that of the bare potential.
     double vdwEnergy = parameters[1]*(sig6-1.0)*sig6;
     double rdUdr = parameters[1]*(12.0*sig6-6.0)*sig6;
+    double decapEnergy = 0.0, decapRdUdr = 0.0;
+    if (mode == Full && decapped && sig6 > 1.0)
+        CappedLJ::split(1.0/(inverseR*parameters[0]), parameters[1], vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
     double r = deltaR[0][ReferenceForce::RIndex];
     double innerVdwForce = 0.0, innerCoulForce = 0.0, innerVdwEnergy = 0.0, innerCoulEnergy = 0.0;
     if (mode != Full && r < innerSplit.rc) {
@@ -114,7 +118,7 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         vdwEnergy -= innerVdwEnergy;
         coulEnergy -= innerCoulEnergy;
     }
-    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce;
+    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce + sliceLambdas[decap]*decapRdUdr*inverseR*inverseR;
 
     // accumulate forces
 
@@ -126,5 +130,6 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
 
     // accumulate energies
     sliceEnergies[vdW] += vdwEnergy;
+    sliceEnergies[decap] += decapEnergy;
     sliceEnergies[Coul] += coulEnergy;
 }
