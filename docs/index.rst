@@ -20,7 +20,10 @@ Contents
    :maxdepth: 2
 
    overview
+   install
+   guide/index
    theory
+   performance
    pythonapi/index
    contributing
    authors

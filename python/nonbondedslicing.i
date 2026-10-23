@@ -84,12 +84,11 @@ namespace NonbondedSlicing {
  * potential energy as a NonbondedForce with equal particle and exception parameters.  In addition, you can
  * select one or more slices and multiply their Coulomb and/or Lennard-Jones contributions by variables
  * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
- * a new Context parameter, then pass its name to :func:`addScalingParameter`.  The same scaling parameter
- * can affect multiple slices, and two scaling parameters can affect a single slice, but only if they
- * multiply the Coulomb and Lennard-Jones parts of that slice separately.  A scaling parameter can also
- * soften the Lennard-Jones interactions of its slice (see ``softcoreAlpha`` in :func:`addScalingParameter`),
- * so a slice can have up to three scaling parameters: one for Coulomb, one for Lennard-Jones and one
- * softening parameter.
+ * a new Context parameter, then pass its name to :func:`addScalingParameter`.  A scaling parameter can
+ * play up to three roles in a slice: multiply its Coulomb contribution, multiply its Lennard-Jones
+ * contribution, and soften its Lennard-Jones interactions (see ``softcoreAlpha`` in
+ * :func:`addScalingParameter`).  The same scaling parameter can affect multiple slices, and each role of a
+ * slice belongs to at most one scaling parameter, so a slice can have up to three scaling parameters.
  *
  * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
@@ -231,12 +230,14 @@ public:
      */
     void getLJPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
-     * provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
-     * Simply call setParticleParameters() and setExceptionParameters() to modify this object's parameters, then call
-     * updateParametersInContext() to copy them over to the Context.
+     * Update the particle parameters, particle subsets and exception parameters in a Context to match those stored in
+     * this Force object.  This method provides an efficient method to update certain parameters in an existing Context
+     * without needing to reinitialize it.  Simply call setParticleParameters(), setParticleSubset() and
+     * setExceptionParameters() to modify this object's parameters, then call updateParametersInContext() to copy them
+     * over to the Context.
      *
-     * This method has several limitations.  The only information it updates is the parameters of particles and exceptions.
+     * This method has several limitations.  The only information it updates is the parameters and subsets of particles
+     * and the parameters of exceptions.
      * All other aspects of the Force (the nonbonded method, the cutoff distance, etc.) are unaffected and can only be
      * changed by reinitializing the Context.  Furthermore, only the chargeProd, sigma, and epsilon values of an exception
      * can be changed; the pair of particles involved in the exception cannot change.  Finally, this method cannot be used

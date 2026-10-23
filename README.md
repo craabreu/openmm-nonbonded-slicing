@@ -18,46 +18,47 @@ where each slice is defined by subsets $`I`$ and $`J`$, superscripts _vdW_ and _
 der Waals and electrostatic contributions, $`E_{I,J}`$ is the potential energy of all particle pairs
 formed by one particle in subset $`I`$ and one in subset $`J`$, and $`\lambda_{I,J}`$ is a scaling parameter.
 
-The nonbonded energy can be partitioned along a second, independent axis. Slicing by *subset*, above,
-decides which particle pairs a scaling parameter applies to. Slicing by *distance*, through an optional
-**inner force group**, splits every pair interaction into a short-range part, switched off smoothly
-between an inner switching distance and an inner cutoff, and a remainder, so that a multiple time-step
-integrator can advance the two with different time steps. The two partitions compose exactly,
+The scaling parameters can be tied to [Context] global parameters, so that selected slices are scaled
+while a simulation runs; a scaling parameter can soften the Lennard-Jones interactions of its slice with
+a soft-core potential, for alchemical decoupling without singularities; the derivative of the energy with
+respect to a scaling parameter can be requested along with the energy, which is a way of reporting the
+energies of individual slices; and, for multiple time-step integration, a short-range, force-switched
+copy of the direct-space interactions can be computed in its own force group, as can the reciprocal-space
+sum with Ewald, PME or LJPME. The [documentation] has a user guide for each of these capabilities,
+the theory behind the sliced lattice sums, measured costs and the Python API.
 
-```math
-E = \sum_{I \le J} \sum_{t \in \{vdW, elec\}} \lambda^{t}_{I,J} \left( E^{t,\mathrm{inner}}_{I,J} + E^{t,\mathrm{outer}}_{I,J} \right),
+Example
+=======
+
+```python
+import openmm as mm
+import openmm.app as app
+import openmm.unit as unit
+import nonbondedslicing as nbs
+
+forcefield = app.ForceField("tip3p.xml")
+modeller = app.Modeller(app.Topology(), [])
+modeller.addSolvent(forcefield, boxSize=mm.Vec3(2, 2, 2)*unit.nanometers)
+system = forcefield.createSystem(modeller.topology, nonbondedMethod=app.PME)
+index, nonbonded = next((i, f) for i, f in enumerate(system.getForces()) if isinstance(f, mm.NonbondedForce))
+
+force = nbs.SlicedNonbondedForce(nonbonded, 2)   # two subsets; every particle starts in subset 0
+for atom in range(3):
+    force.setParticleSubset(atom, 1)             # move the first water molecule to subset 1
+force.addGlobalParameter("lambda", 1.0)
+force.addScalingParameter("lambda", 0, 1, True, True)   # lambda scales slice (0, 1)
+force.addEnergyParameterDerivative("lambda")            # dE/dlambda = energy of slice (0, 1)
+system.removeForce(index)
+system.addForce(force)
+
+context = mm.Context(system, mm.VerletIntegrator(1*unit.femtosecond))
+context.setPositions(modeller.positions)
+state = context.getState(getEnergy=True, getParameterDerivatives=True)
+print("Total energy:", state.getPotentialEnergy())
+print("Energy of slice (0, 1):", state.getEnergyParameterDerivatives()["lambda"], "kJ/mol")
+context.setParameter("lambda", 0.0)
+print("Without slice (0, 1):", context.getState(getEnergy=True).getPotentialEnergy())
 ```
-
-because the inner part of a pair interaction is scaled by the same parameters as the rest of it, and
-each force group reports an energy consistent with its force. The inner force group is described in
-the [documentation](https://craabreu.github.io/openmm-nonbonded-slicing/).
-
-By default, all scaling parameters are constant and equal to 1. However, the user can turn selected
-scaling parameters into variables and store their values in [Context] global parameters. Derivatives
-with respect to these variables can be requested and used, for instance, to report individual energy
-slice contributions or sums thereof via [getState] with options `getEnergy=True` and
-`getParameterDerivatives=True`. Derivatives are only computed along with the energy: without
-`getEnergy=True`, they are NaN.
-
-A global parameter can scale the electrostatic contributions, the van der Waals contributions, or
-both, of any number of slices. Since the energy is linear in the scaling parameters, the derivative
-with respect to a parameter $`\lambda`$ is the sum of the unscaled contributions it multiplies:
-
-```math
-\frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J} + \sum_{(I,J) \in S^{vdW}_\lambda} E^{vdW}_{I,J}
-```
-
-where $`S^{elec}_\lambda`$ and $`S^{vdW}_\lambda`$ are the sets of slices whose electrostatic and van der
-Waals contributions are scaled by $`\lambda`$. This derivative does not depend on the values of the
-scaling parameters. For instance, a parameter that scales both contributions of a single slice $`I, J`$
-yields its full energy $`E^{vdW}_{I,J}+E^{elec}_{I,J}`$, while one that scales the electrostatic
-contributions of several slices yields their sum.
-
-Documentation
-=============
-
-Documentation for this plugin is available at [Github Pages](https://craabreu.github.io/openmm-nonbonded-slicing/).
-It includes the Python API and the theory for slicing lattice-sum energy contributions.
 
 Installation
 ============
@@ -89,23 +90,20 @@ upgrading OpenMM if needed; to keep an older OpenMM, pin it in the same command,
 On Intel Macs, OpenMM 8.6 from PyPI only works with Python 3.10, so pip installs the OpenMM 8.5
 release there for Python 3.11 and later.
 
-Instructions for building from source are in the [documentation](https://craabreu.github.io/openmm-nonbonded-slicing/).
+Instructions for building from source are in the [documentation].
 
-Usage
-=====
+Documentation
+=============
 
-```py
-import openmm as mm
-import nonbondedslicing as nbs
-system = mm.System()
-force = nbs.SlicedNonbondedForce(2)
-system.addForce(force)
-```
+The [documentation] is hosted on GitHub Pages. It has a user guide covering subsets and scaling
+parameters, energy parameter derivatives, the soft-core potential and force-group splitting for multiple
+time-step integration, the theory for slicing lattice-sum energy contributions, measured costs and the
+Python API.
 
 
 [NonbondedForce]:       http://docs.openmm.org/latest/api-python/generated/openmm.openmm.NonbondedForce.html
 [Context]:              http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html
-[getState]:             http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html#openmm.openmm.Context.getState
 [OpenMM]:               https://openmm.org
 [conda-forge]:          https://anaconda.org/conda-forge/openmm-nonbonded-slicing
 [PyPI]:                 https://pypi.org/project/openmm-nonbonded-slicing
+[documentation]:        https://craabreu.github.io/openmm-nonbonded-slicing/

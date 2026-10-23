@@ -49,13 +49,15 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinxcontrib.bibtex',
     'sphinx_copybutton',
+    'myst_parser',
 ]
 if os.getenv('SPELLCHECK'):
     extensions += 'sphinxcontrib.spelling',
     spelling_show_suggestions = True
     spelling_lang = 'en_US'
 
-source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext', '.md': 'markdown'}
+myst_enable_extensions = ['dollarmath', 'amsmath']
 master_doc = 'index'
 
 project = 'Nonbonded Slicing'
