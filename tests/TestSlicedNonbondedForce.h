@@ -9,6 +9,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "SlicedNonbondedForce.h"
+#include "internal/CappedLJ.h"
 #include "AssertionUtilities.h"
 #include "openmm/NonbondedForce.h"
 #include "openmm/Context.h"
@@ -1817,9 +1818,15 @@ void testInnerGroupErrors() {
     build([](SlicedNonbondedForce& f) { f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); f.setUseSwitchingFunction(true); f.setSwitchingDistance(0.7); }, false);
     build([](SlicedNonbondedForce& f) { f.setIncludeDirectSpace(false); }, true);
     build([](SlicedNonbondedForce& f) { f.setInnerForceGroup(-1); f.setInnerSwitchingDistance(0.0); }, false);  // disabled: settings ignored
-    // The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
-    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true, 0.5); }, true);
-    build([](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, true); }, false);
+    // Decapped slices need sigma <= r_s (0.5) for every Lennard-Jones pair, particles and exceptions alike; pairs with
+    // zero epsilon do not count
+    auto decap = [](SlicedNonbondedForce& f) { f.addGlobalParameter("lambda", 1.0); f.addScalingParameter("lambda", 0, 0, false, false, true); };
+    build([&](SlicedNonbondedForce& f) { decap(f); }, false);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.setParticleParameters(0, 1.0, 0.6, 0.5); }, true);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.setParticleParameters(0, 1.0, 1.0, 0.0); }, false);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.addException(0, 1, 0.0, 0.6, 0.5); }, true);
+    build([&](SlicedNonbondedForce& f) { decap(f); f.addException(0, 1, 0.0, 0.6, 0.0); }, false);
+    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 1.0, 0.6, 0.5); }, false);   // not decapped
     bool threw = false;
     try {
         SlicedNonbondedForce force(1);
@@ -2290,34 +2297,154 @@ void testInnerGroupFixedAtCreation() {
         assertEqualTo(expected[i], found[i], tol);
 }
 
-void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool useSwitch) {
-    // Two subsets. Slice (0, 1) is scaled by "lambda" (Coulomb and LJ) and uses the soft-core
-    // potential. The difference between the soft-core and the hard-core sliced forces is compared
-    // with a CustomNonbondedForce (and a CustomBondForce for the 1-4 exceptions) that computes
-    // lambda*(U_softcore - U_LJ) for the pairs in that slice. Everything else cancels in the
-    // difference, including the dispersion correction and the LJPME grid terms.
+// The capped Lennard-Jones potential of Correa et al. (J. Chem. Theory Comput. 18, 5876, 2022) in units of 4*epsilon,
+// and -x times its derivative, for x = r/sigma < 1: eq. 5 for the default orders m0 = m1 = 3, and the same conditions
+// solved by hand for m0 = 4, m1 = 2
+double cappedLJ(double x, int m0 = 3, int m1 = 3) {
+    if (m0 == 4 && m1 == 2)
+        return 5.8 - 28.8*pow(x, 5) + 23*pow(x, 6);   // solved by hand from the same conditions
+    return (-868*pow(x, 6) + 2188.8*pow(x, 5) - 1440*pow(x, 4) + 119.2)/4;
+}
+
+double cappedLJRForce(double x, int m0 = 3, int m1 = 3) {
+    if (m0 == 4 && m1 == 2)
+        return -(-5*28.8*pow(x, 5) + 6*23*pow(x, 6));
+    return -(-6*868*pow(x, 6) + 5*2188.8*pow(x, 5) - 4*1440*pow(x, 4))/4;
+}
+
+enum DecapPairKind {DecapPair, DecapException, DecapExcluded};
+
+void testDecappingPair(NonbondedForce::NonbondedMethod method, DecapPairKind kind, double x, int m0 = 3, int m1 = 3) {
+    // One Lennard-Jones pair in slice (0, 1), with "lambdaLJ" scaling its Lennard-Jones contribution and "lambdaD"
+    // multiplying its decapping term. The difference from the same force without decapping is
+    // (lambdaD - lambdaLJ)*Delta, where Delta is the bare minus the capped potential, zero for r >= sigma. The LJPME
+    // grid terms and the dispersion correction cancel in the difference. An excluded pair has no Delta at all.
+
+    const double sigma = 1.0, epsilon = 0.8, cutoff = 3.5, L = 10.0, lambdaLJ = 0.6, lambdaD = 0.3;
+    const double r = x*sigma;
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-6 : 5e-4;
+    auto build = [&](bool decap, System& system) {
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+        force->setCutoffDistance(cutoff);
+        force->setUseDispersionCorrection(true);
+        force->addParticle(0.0, sigma, epsilon);
+        force->addParticle(0.0, sigma, epsilon);
+        force->setParticleSubset(1, 1);
+        force->setCappingOrders(m0, m1);
+        if (kind != DecapPair)
+            force->addException(0, 1, 0.0, sigma, kind == DecapException ? epsilon : 0.0);
+        force->addGlobalParameter("lambdaLJ", lambdaLJ);
+        force->addScalingParameter("lambdaLJ", 0, 1, false, true);
+        force->addEnergyParameterDerivative("lambdaLJ");
+        if (decap) {
+            force->addGlobalParameter("lambdaD", lambdaD);
+            force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+            force->addEnergyParameterDerivative("lambdaD");
+        }
+        system.addForce(force);
+    };
+    System systemDecap, systemPlain;
+    build(true, systemDecap);
+    build(false, systemPlain);
+    VerletIntegrator integratorDecap(0.01), integratorPlain(0.01);
+    Context contextDecap(systemDecap, integratorDecap, platform);
+    Context contextPlain(systemPlain, integratorPlain, platform);
+    vector<Vec3> positions = {Vec3(0, 0, 0), Vec3(r, 0, 0)};
+    contextDecap.setPositions(positions);
+    contextPlain.setPositions(positions);
+
+    double delta = 0.0, deltaRForce = 0.0;
+    if (x < 1 && kind != DecapExcluded) {
+        delta = 4*epsilon*(pow(x, -12) - pow(x, -6) - cappedLJ(x, m0, m1));
+        deltaRForce = 4*epsilon*(12*pow(x, -12) - 6*pow(x, -6) - cappedLJRForce(x, m0, m1));
+    }
+    for (double lambdaDValue : {lambdaD, 0.0, 1.0}) {
+        contextDecap.setParameter("lambdaD", lambdaDValue);
+        int options = State::Energy | State::Forces | State::ParameterDerivatives;
+        State decap = contextDecap.getState(options);
+        State plain = contextPlain.getState(options);
+        double force = (lambdaDValue-lambdaLJ)*deltaRForce/r;
+        double scale = max(1.0, abs(plain.getPotentialEnergy()));
+        assertEqualTo((lambdaDValue-lambdaLJ)*delta/scale, (decap.getPotentialEnergy()-plain.getPotentialEnergy())/scale, tol);
+        assertEqualVec(Vec3(-force, 0, 0), decap.getForces()[0]-plain.getForces()[0], tol);
+        assertEqualVec(Vec3(force, 0, 0), decap.getForces()[1]-plain.getForces()[1], tol);
+        map<string, double> dDecap = decap.getEnergyParameterDerivatives();
+        map<string, double> dPlain = plain.getEnergyParameterDerivatives();
+        assertEqualTo(-delta, dDecap.at("lambdaLJ")-dPlain.at("lambdaLJ"), tol);
+        assertEqualTo(delta, dDecap.at("lambdaD"), tol);
+    }
+}
+
+void testDecappingOverlap(bool asException, bool inner, double x, int m0 = 3, int m1 = 3) {
+    // Two nearly overlapping particles with the decapping term off: the energy is the finite capped potential, which
+    // must not come from the difference of the bare and decapping terms (both of order x^-12). At x = 1e-4, x^-12
+    // overflows single precision, so the result must also not be 0*inf, nor inf-inf in the remainder of an inner group.
+
+    const double sigma = 0.3, epsilon = 0.7, lambdaLJ = 0.4;
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
+    force->addParticle(0.0, sigma, epsilon);
+    force->addParticle(0.0, sigma, epsilon);
+    force->setParticleSubset(1, 1);
+    force->setCappingOrders(m0, m1);
+    if (asException)
+        force->addException(0, 1, 0.0, sigma, epsilon);
+    force->addGlobalParameter("lambdaLJ", lambdaLJ);
+    force->addGlobalParameter("lambdaD", 0.0);
+    force->addScalingParameter("lambdaLJ", 0, 1, false, true);
+    force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    force->addEnergyParameterDerivative("lambdaLJ");
+    if (inner) {
+        force->setInnerForceGroup(1);
+        force->setInnerSwitchingDistance(0.5);
+        force->setInnerCutoffDistance(0.8);
+    }
+    system.addForce(force);
+    VerletIntegrator integrator(0.01);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(x*sigma, 0, 0)});
+    State state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
+    double energy = 4*epsilon*cappedLJ(x, m0, m1);
+    double f = lambdaLJ*4*epsilon*cappedLJRForce(x, m0, m1)/(x*sigma);
+    assertEqualTo(lambdaLJ*energy, state.getPotentialEnergy(), TOL);
+    assertEqualVec(Vec3(-f, 0, 0), state.getForces()[0], TOL);
+    assertEqualVec(Vec3(f, 0, 0), state.getForces()[1], TOL);
+    assertEqualTo(energy, state.getEnergyParameterDerivatives().at("lambdaLJ"), TOL);
+}
+
+void testDecapping(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions, bool useSwitch, bool inner) {
+    // Two subsets. In slice (0, 1), "lambdaLJ" scales the Coulomb and Lennard-Jones contributions and "lambdaD"
+    // multiplies the decapping term. The difference between the decapped and plain sliced forces is compared with a
+    // CustomNonbondedForce (and a CustomBondForce for the 1-4 exceptions) that computes (lambdaD - lambdaLJ)*Delta for
+    // the pairs in that slice. With an inner force group, all of that difference is in the inner group and the
+    // remainder of the two forces is the same.
 
     const int numMolecules = 100;
     const int numParticles = numMolecules*2;
     const double cutoff = 3.5;
     const double L = exceptions ? 7.0 : 10.0;
-    const double alpha = 0.5;
-    const double lambda = 0.4;
-    const bool ljpme = (method == NonbondedForce::LJPME);
+    const double lambdaLJ = 0.4, lambdaD = 0.7;
     const bool useCutoff = (method != NonbondedForce::NoCutoff);
     const bool periodic = (useCutoff && method != NonbondedForce::CutoffNonPeriodic);
     string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
     double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
 
-    System systemSoft, systemHard, systemDiff;
+    System systemDecap, systemPlain, systemDiff;
     for (int i = 0; i < numParticles; i++) {
-        systemSoft.addParticle(1.0);
-        systemHard.addParticle(1.0);
+        systemDecap.addParticle(1.0);
+        systemPlain.addParticle(1.0);
         systemDiff.addParticle(1.0);
     }
-    systemSoft.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-    systemHard.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-    systemDiff.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+    for (System* system : {&systemDecap, &systemPlain, &systemDiff})
+        system->setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
 
     NonbondedForce nonbonded;
     nonbonded.setNonbondedMethod(method);
@@ -2328,12 +2455,12 @@ void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod metho
     nonbonded.setSwitchingDistance(0.8*cutoff);
     vector<Vec3> positions(numParticles);
 
-    // Small charges keep the Coulomb energy from dominating the differences compared below.
-    // The first two molecules have no Lennard-Jones parameters at all.
+    // Each molecule has its two particles 0.87 sigma apart, so that the intramolecular pairs (or 1-4 exceptions) have
+    // decapping terms. Small charges keep the Coulomb energy from dominating the differences compared below. The
+    // first two molecules have no Lennard-Jones parameters at all.
 
     auto q = [](int k) { return 0.2*(1-2*(k%2)); };
     auto lj = [](int k) { return k < 4 ? 0.0 : 1.0; };
-
     int M = (int) pow(numMolecules, 1.0/3.0);
     if (M*M*M < numMolecules)
         M++;
@@ -2351,61 +2478,54 @@ void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod metho
         if (exceptions)
             nonbonded.addException(i, j, q(i)*q(j), 1.0, lj(i)*lj(j));
     }
-
     vector<int> subset(numParticles);
     for (int k = 0; k < numParticles; k++)
         subset[k] = (int) (genrand_real2(sfmt)*2);
 
-    auto makeSliced = [&](bool softcore) {
+    auto makeSliced = [&](bool decap) {
         SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
         for (int k = 0; k < numParticles; k++)
             sliced->setParticleSubset(k, subset[k]);
-        sliced->addGlobalParameter("lambda", lambda);
-        sliced->addScalingParameter("lambda", 0, 1, true, true, softcore ? alpha : 0.0);
-        sliced->addEnergyParameterDerivative("lambda");
+        sliced->addGlobalParameter("lambdaLJ", lambdaLJ);
+        sliced->addScalingParameter("lambdaLJ", 0, 1, true, true);
+        sliced->addEnergyParameterDerivative("lambdaLJ");
+        sliced->addGlobalParameter("lambdaD", lambdaD);
+        if (decap) {
+            sliced->addScalingParameter("lambdaD", 0, 1, false, false, true);
+            sliced->addEnergyParameterDerivative("lambdaD");
+        }
+        if (inner) {
+            // sigma = 1 cannot exceed the inner switching distance
+            sliced->setInnerForceGroup(1);
+            sliced->setInnerSwitchingDistance(1.2);
+            sliced->setInnerCutoffDistance(2.0);
+        }
         return sliced;
     };
-    SlicedNonbondedForce* slicedSoft = makeSliced(true);
-    SlicedNonbondedForce* slicedHard = makeSliced(false);
-    systemSoft.addForce(slicedSoft);
-    systemHard.addForce(slicedHard);
+    systemDecap.addForce(makeSliced(true));
+    systemPlain.addForce(makeSliced(false));
 
-    // lambda*(U_softcore - U_LJ). With LJPME, the sliced force also shifts the additive LJ term
-    // to zero at the cutoff, and the hard-core and soft-core shifts differ.
-
-    stringstream cutoffStr;
-    cutoffStr<<cutoff;
-    string pairExpression = "lambda*4*eps*(ssc*(ssc-1) - sig6*(sig6-1)";
-    if (ljpme)
-        pairExpression += " - scc*(scc-1) + sig6c*(sig6c-1)";
-    pairExpression += ");"
-        "ssc=sig6/(1+alpha*(1-lambda)*sig6); scc=sig6c/(1+alpha*(1-lambda)*sig6c);"
-        "sig6=(sigma/r)^6; sig6c=(sigma/"+cutoffStr.str()+")^6;";
-    string bondExpression = "lambda*4*eps*(ssc*(ssc-1) - sig6*(sig6-1));"
-        "ssc=sig6/(1+alpha*(1-lambda)*sig6); sig6=(sigma/r)^6";
-
-    CustomNonbondedForce* custom = new CustomNonbondedForce(pairExpression+"sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)");
+    string delta = "(lambdaD-lambdaLJ)*step(1-x)*4*eps*(x^(-12)-x^(-6)-(-868*x^6+2188.8*x^5-1440*x^4+119.2)/4); x=r/sigma;";
+    CustomNonbondedForce* custom = new CustomNonbondedForce(delta+"sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)");
     custom->setNonbondedMethod(periodic ? CustomNonbondedForce::CutoffPeriodic : useCutoff ? CustomNonbondedForce::CutoffNonPeriodic : CustomNonbondedForce::NoCutoff);
     custom->setCutoffDistance(cutoff);
-    custom->setUseSwitchingFunction(useSwitch);
-    custom->setSwitchingDistance(0.8*cutoff);
     custom->addPerParticleParameter("sigma");
     custom->addPerParticleParameter("eps");
-    custom->addGlobalParameter("lambda", lambda);
-    custom->addGlobalParameter("alpha", alpha);
-    custom->addEnergyParameterDerivative("lambda");
+    CustomBondForce* bonds = new CustomBondForce(delta);
+    bonds->addPerBondParameter("sigma");
+    bonds->addPerBondParameter("eps");
+    for (auto f : vector<function<void(const string&, double)>>{
+            [&](const string& name, double v) { custom->addGlobalParameter(name, v); custom->addEnergyParameterDerivative(name); },
+            [&](const string& name, double v) { bonds->addGlobalParameter(name, v); bonds->addEnergyParameterDerivative(name); }}) {
+        f("lambdaLJ", lambdaLJ);
+        f("lambdaD", lambdaD);
+    }
     set<int> subset0, subset1;
     for (int k = 0; k < numParticles; k++) {
-        custom->addParticle({lj(k), lj(k)});
+        custom->addParticle({lj(k) == 0 ? 1.0 : lj(k), lj(k)});
         (subset[k] == 0 ? subset0 : subset1).insert(k);
     }
     custom->addInteractionGroup(subset0, subset1);
-    CustomBondForce* bonds = new CustomBondForce(bondExpression);
-    bonds->addPerBondParameter("sigma");
-    bonds->addPerBondParameter("eps");
-    bonds->addGlobalParameter("lambda", lambda);
-    bonds->addGlobalParameter("alpha", alpha);
-    bonds->addEnergyParameterDerivative("lambda");
     if (exceptions)
         for (int k = 0; k < numMolecules; k++) {
             int i = 2*k, j = i+1;
@@ -2416,455 +2536,248 @@ void testSoftcore(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod metho
     systemDiff.addForce(custom);
     systemDiff.addForce(bonds);
 
-    VerletIntegrator integratorSoft(0.01), integratorHard(0.01), integratorDiff(0.01);
-    Context contextSoft(systemSoft, integratorSoft, platform);
-    Context contextHard(systemHard, integratorHard, platform);
+    VerletIntegrator integratorDecap(0.01), integratorPlain(0.01), integratorDiff(0.01);
+    Context contextDecap(systemDecap, integratorDecap, platform);
+    Context contextPlain(systemPlain, integratorPlain, platform);
     Context contextDiff(systemDiff, integratorDiff, platform);
-    contextSoft.setPositions(positions);
-    contextHard.setPositions(positions);
-    contextDiff.setPositions(positions);
+    for (Context* context : {&contextDecap, &contextPlain, &contextDiff})
+        context->setPositions(positions);
 
-    auto check = [&](double lambdaValue) {
-        contextSoft.setParameter("lambda", lambdaValue);
-        contextHard.setParameter("lambda", lambdaValue);
-        contextDiff.setParameter("lambda", lambdaValue);
+    auto compare = [&](int decapGroups, int plainGroups, bool expectDiff) {
         int options = State::Energy | State::Forces | State::ParameterDerivatives;
-        State soft = contextSoft.getState(options);
-        State hard = contextHard.getState(options);
+        State decap = contextDecap.getState(options, false, decapGroups);
+        State plain = contextPlain.getState(options, false, plainGroups);
         State diff = contextDiff.getState(options);
-        assertEqualTo(diff.getPotentialEnergy(), soft.getPotentialEnergy()-hard.getPotentialEnergy(), tol);
-        const vector<Vec3>& forcesSoft = soft.getForces();
-        const vector<Vec3>& forcesHard = hard.getForces();
-        const vector<Vec3>& forcesDiff = diff.getForces();
+        double scale = max(1.0, abs(plain.getPotentialEnergy()));
+        double expectedEnergy = expectDiff ? diff.getPotentialEnergy() : 0.0;
+        assertEqualTo(expectedEnergy/scale, (decap.getPotentialEnergy()-plain.getPotentialEnergy())/scale, tol);
         for (int k = 0; k < numParticles; k++)
-            assertEqualVec(forcesDiff[k], forcesSoft[k]-forcesHard[k], tol);
-        double derivSoft = soft.getEnergyParameterDerivatives().at("lambda");
-        double derivHard = hard.getEnergyParameterDerivatives().at("lambda");
-        double derivDiff = diff.getEnergyParameterDerivatives().at("lambda");
-        assertEqualTo(derivDiff, derivSoft-derivHard, tol);
-    };
-    check(lambda);
-    check(0.0);
-    check(1.0);
-    check(0.75);
-}
-
-void testSoftcoreOverlap() {
-    // Two nearly overlapping particles: the soft-core energy is finite and matches the formula.
-
-    const double sigma = 1.0, epsilon = 1.0, alpha = 0.5, lambda = 0.3, r = 0.01;
-    System system;
-    system.addParticle(1.0);
-    system.addParticle(1.0);
-    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(2);
-    sliced->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-    sliced->addParticle(0.0, sigma, epsilon);
-    sliced->addParticle(0.0, sigma, epsilon);
-    sliced->setParticleSubset(1, 1);
-    sliced->addGlobalParameter("lambda", lambda);
-    sliced->addScalingParameter("lambda", 0, 1, false, true, alpha);
-    sliced->addEnergyParameterDerivative("lambda");
-    system.addForce(sliced);
-    VerletIntegrator integrator(0.01);
-    Context context(system, integrator, platform);
-    context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    State state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
-
-    double sig6 = pow(sigma/r, 6);
-    double s = sig6/(1 + alpha*(1-lambda)*sig6);
-    double energy = lambda*4*epsilon*(s*s - s);
-    double force = lambda*4*epsilon*(2*s - 1)*s*s*6*pow(r, 5)/pow(sigma, 6);
-    double derivative = 4*epsilon*(s*s - s) + lambda*4*epsilon*alpha*s*s*(2*s - 1);
-    assertEqualTo(energy, state.getPotentialEnergy(), TOL);
-    assertEqualVec(Vec3(-force, 0, 0), state.getForces()[0], TOL);
-    assertEqualVec(Vec3(force, 0, 0), state.getForces()[1], TOL);
-    assertEqualTo(derivative, state.getEnergyParameterDerivatives().at("lambda"), TOL);
-}
-
-void testSoftcoreSinglePair(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
-    // A single pair with large sigma, so that the switching function and the LJPME potential shift
-    // at the cutoff have a large effect on the soft-core minus hard-core differences, which are
-    // compared with closed forms (the force through a finite difference of the energy).
-
-    const double sigma = 3.0, epsilon = 10.0, alpha = 0.5, lambda = 0.4;
-    const double cutoff = 3.5, switchDist = 2.8;
-    const bool ljpme = (method == NonbondedForce::LJPME);
-    const bool useCutoff = (method != NonbondedForce::NoCutoff);
-    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
-    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
-
-    NonbondedForce nonbonded;
-    nonbonded.setNonbondedMethod(method);
-    nonbonded.setCutoffDistance(cutoff);
-    nonbonded.setUseDispersionCorrection(false);
-    nonbonded.setEwaldErrorTolerance(1e-4);
-    nonbonded.setUseSwitchingFunction(useSwitch);
-    nonbonded.setSwitchingDistance(switchDist);
-    nonbonded.addParticle(0.0, sigma, epsilon);
-    nonbonded.addParticle(0.0, sigma, epsilon);
-
-    auto makeContext = [&](bool softcore, System& system, VerletIntegrator& integrator) {
-        system.addParticle(1.0);
-        system.addParticle(1.0);
-        system.setDefaultPeriodicBoxVectors(Vec3(10, 0, 0), Vec3(0, 10, 0), Vec3(0, 0, 10));
-        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
-        sliced->setParticleSubset(1, 1);
-        sliced->addGlobalParameter("lambda", lambda);
-        sliced->addScalingParameter("lambda", 0, 1, false, true, softcore ? alpha : 0.0);
-        sliced->addEnergyParameterDerivative("lambda");
-        system.addForce(sliced);
-        return new Context(system, integrator, platform);
-    };
-    System systemSoft, systemHard;
-    VerletIntegrator integratorSoft(0.01), integratorHard(0.01);
-    unique_ptr<Context> contextSoft(makeContext(true, systemSoft, integratorSoft));
-    unique_ptr<Context> contextHard(makeContext(false, systemHard, integratorHard));
-    contextSoft->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    contextHard->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    int options = State::Energy | State::Forces | State::ParameterDerivatives;
-    State soft = contextSoft->getState(options);
-    State hard = contextHard->getState(options);
-
-    // U_softcore - U_LJ and its derivative with respect to lambda (lambda*U_softcore is the energy)
-
-    auto unscaled = [&](double x, double& diff, double& derivCorrection) {
-        double sig6 = pow(sigma/x, 6);
-        double s = sig6/(1 + alpha*(1-lambda)*sig6);
-        diff = 4*epsilon*((s*s - s) - (sig6*sig6 - sig6));
-        derivCorrection = lambda*4*epsilon*alpha*s*s*(2*s - 1);
-    };
-    double diffCut, corrCut;
-    unscaled(cutoff, diffCut, corrCut);
-    auto switchFunction = [&](double x) {
-        if (!useSwitch || x <= switchDist)
-            return 1.0;
-        double t = (x-switchDist)/(cutoff-switchDist);
-        return 1 - 10*t*t*t + 15*t*t*t*t - 6*t*t*t*t*t;
-    };
-    auto energyDifference = [&](double x) {
-        double diff, corr;
-        unscaled(x, diff, corr);
-        if (ljpme)
-            diff -= diffCut;
-        return lambda*switchFunction(x)*diff;
-    };
-    double diff, corr;
-    unscaled(r, diff, corr);
-    double derivative = diff + corr;
-    if (ljpme)
-        derivative -= diffCut + corrCut;
-    derivative *= switchFunction(r);
-    const double h = 1e-5;
-    double force = -(energyDifference(r+h) - energyDifference(r-h))/(2*h);
-
-    assertEqualTo(energyDifference(r), soft.getPotentialEnergy()-hard.getPotentialEnergy(), tol);
-    assertEqualVec(Vec3(-force, 0, 0), soft.getForces()[0]-hard.getForces()[0], tol);
-    assertEqualVec(Vec3(force, 0, 0), soft.getForces()[1]-hard.getForces()[1], tol);
-    assertEqualTo(derivative, soft.getEnergyParameterDerivatives().at("lambda")-hard.getEnergyParameterDerivatives().at("lambda"), tol);
-}
-
-void testSoftcoreSinglePairSeparate(NonbondedForce::NonbondedMethod method, bool useSwitch, double r) {
-    // Like testSoftcoreSinglePair, but with separate energy (lambdaE) and softness (lambdaS) parameters.
-
-    const double sigma = 3.0, epsilon = 10.0, alpha = 0.5, lambdaE = 0.4, lambdaS = 0.7;
-    const double cutoff = 3.5, switchDist = 2.8;
-    const bool ljpme = (method == NonbondedForce::LJPME);
-    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
-    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
-
-    NonbondedForce nonbonded;
-    nonbonded.setNonbondedMethod(method);
-    nonbonded.setCutoffDistance(cutoff);
-    nonbonded.setUseDispersionCorrection(false);
-    nonbonded.setEwaldErrorTolerance(1e-4);
-    nonbonded.setUseSwitchingFunction(useSwitch);
-    nonbonded.setSwitchingDistance(switchDist);
-    nonbonded.addParticle(0.0, sigma, epsilon);
-    nonbonded.addParticle(0.0, sigma, epsilon);
-
-    auto makeContext = [&](bool softcore, System& system, VerletIntegrator& integrator) {
-        system.addParticle(1.0);
-        system.addParticle(1.0);
-        system.setDefaultPeriodicBoxVectors(Vec3(10, 0, 0), Vec3(0, 10, 0), Vec3(0, 0, 10));
-        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
-        sliced->setParticleSubset(1, 1);
-        sliced->addGlobalParameter("lambdaE", lambdaE);
-        sliced->addScalingParameter("lambdaE", 0, 1, false, true);
-        sliced->addEnergyParameterDerivative("lambdaE");
-        if (softcore) {
-            sliced->addGlobalParameter("lambdaS", lambdaS);
-            sliced->addScalingParameter("lambdaS", 0, 1, false, false, alpha);
-            sliced->addEnergyParameterDerivative("lambdaS");
-        }
-        system.addForce(sliced);
-        return new Context(system, integrator, platform);
-    };
-    System systemSoft, systemHard;
-    VerletIntegrator integratorSoft(0.01), integratorHard(0.01);
-    unique_ptr<Context> contextSoft(makeContext(true, systemSoft, integratorSoft));
-    unique_ptr<Context> contextHard(makeContext(false, systemHard, integratorHard));
-    contextSoft->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    contextHard->setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    int options = State::Energy | State::Forces | State::ParameterDerivatives;
-    State soft = contextSoft->getState(options);
-    State hard = contextHard->getState(options);
-
-    // U_softcore - U_LJ and the derivative of U_softcore with respect to lambdaS (divided by lambdaE)
-
-    auto unscaled = [&](double x, double& diff, double& softDeriv) {
-        double sig6 = pow(sigma/x, 6);
-        double s = sig6/(1 + alpha*(1-lambdaS)*sig6);
-        diff = 4*epsilon*((s*s - s) - (sig6*sig6 - sig6));
-        softDeriv = 4*epsilon*alpha*s*s*(2*s - 1);
-    };
-    double diffCut, softCut;
-    unscaled(cutoff, diffCut, softCut);
-    auto switchFunction = [&](double x) {
-        if (!useSwitch || x <= switchDist)
-            return 1.0;
-        double t = (x-switchDist)/(cutoff-switchDist);
-        return 1 - 10*t*t*t + 15*t*t*t*t - 6*t*t*t*t*t;
-    };
-    auto energyDifference = [&](double x) {
-        double diff, deriv;
-        unscaled(x, diff, deriv);
-        if (ljpme)
-            diff -= diffCut;
-        return lambdaE*switchFunction(x)*diff;
-    };
-    double diff, deriv;
-    unscaled(r, diff, deriv);
-    if (ljpme)
-        deriv -= softCut;
-    double softDerivative = lambdaE*switchFunction(r)*deriv;
-    const double h = 1e-5;
-    double force = -(energyDifference(r+h) - energyDifference(r-h))/(2*h);
-
-    assertEqualTo(energyDifference(r), soft.getPotentialEnergy()-hard.getPotentialEnergy(), tol);
-    assertEqualVec(Vec3(-force, 0, 0), soft.getForces()[0]-hard.getForces()[0], tol);
-    assertEqualVec(Vec3(force, 0, 0), soft.getForces()[1]-hard.getForces()[1], tol);
-    assertEqualTo(energyDifference(r)/lambdaE, soft.getEnergyParameterDerivatives().at("lambdaE")-hard.getEnergyParameterDerivatives().at("lambdaE"), tol);
-    assertEqualTo(softDerivative, soft.getEnergyParameterDerivatives().at("lambdaS"), tol);
-}
-
-void testSoftcoreSeparateParameters(OpenMM_SFMT::SFMT& sfmt, NonbondedForce::NonbondedMethod method, bool exceptions) {
-    // Slice (0, 1): "lambdaE" scales Coulomb and LJ, "lambdaS" softens. Soft-core minus hard-core
-    // sliced forces are compared with Custom* forces computing lambdaE*(U_softcore - U_LJ), with
-    // derivatives with respect to both parameters.
-
-    const int numMolecules = 100;
-    const int numParticles = numMolecules*2;
-    const double cutoff = 3.5;
-    const double L = exceptions ? 7.0 : 10.0;
-    const double alpha = 0.5;
-    const bool ljpme = (method == NonbondedForce::LJPME);
-    const bool useCutoff = (method != NonbondedForce::NoCutoff);
-    const bool periodic = (useCutoff && method != NonbondedForce::CutoffNonPeriodic);
-    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
-    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
-
-    System systemSoft, systemHard, systemDiff;
-    for (int i = 0; i < numParticles; i++) {
-        systemSoft.addParticle(1.0);
-        systemHard.addParticle(1.0);
-        systemDiff.addParticle(1.0);
-    }
-    systemSoft.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-    systemHard.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-    systemDiff.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-
-    NonbondedForce nonbonded;
-    nonbonded.setNonbondedMethod(method);
-    nonbonded.setCutoffDistance(cutoff);
-    nonbonded.setUseDispersionCorrection(true);
-    nonbonded.setEwaldErrorTolerance(1e-4);
-    vector<Vec3> positions(numParticles);
-    auto q = [](int k) { return 0.2*(1-2*(k%2)); };
-    int M = (int) pow(numMolecules, 1.0/3.0);
-    if (M*M*M < numMolecules)
-        M++;
-    for (int k = 0; k < numMolecules; k++) {
-        int iz = k/(M*M);
-        int iy = (k - iz*M*M)/M;
-        int ix = k - M*(iy + iz*M);
-        Vec3 center = Vec3(ix+0.5, iy+0.5, iz+0.5)*L/M;
-        Vec3 delta = Vec3(0.5-ix%2, 0.5-iy%2, 0.5-iz%2)/2;
-        int i = 2*k, j = i+1;
-        positions[i] = center + delta;
-        positions[j] = center - delta;
-        nonbonded.addParticle(q(i), 1.0, 1.0);
-        nonbonded.addParticle(q(j), 1.0, 1.0);
-        if (exceptions)
-            nonbonded.addException(i, j, q(i)*q(j), 1.0, 1.0);
-    }
-    vector<int> subset(numParticles);
-    for (int k = 0; k < numParticles; k++)
-        subset[k] = (int) (genrand_real2(sfmt)*2);
-
-    auto makeSliced = [&](bool softcore) {
-        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 2);
-        for (int k = 0; k < numParticles; k++)
-            sliced->setParticleSubset(k, subset[k]);
-        sliced->addGlobalParameter("lambdaE", 1.0);
-        sliced->addGlobalParameter("lambdaS", 1.0);
-        sliced->addScalingParameter("lambdaE", 0, 1, true, true);
-        sliced->addEnergyParameterDerivative("lambdaE");
-        if (softcore) {
-            sliced->addScalingParameter("lambdaS", 0, 1, false, false, alpha);
-            sliced->addEnergyParameterDerivative("lambdaS");
-        }
-        return sliced;
-    };
-    systemSoft.addForce(makeSliced(true));
-    systemHard.addForce(makeSliced(false));
-
-    stringstream cutoffStr;
-    cutoffStr<<cutoff;
-    string pairExpression = "lambdaE*4*eps*(ssc*(ssc-1) - sig6*(sig6-1)";
-    if (ljpme)
-        pairExpression += " - scc*(scc-1) + sig6c*(sig6c-1)";
-    pairExpression += ");"
-        "ssc=sig6/(1+alpha*(1-lambdaS)*sig6); scc=sig6c/(1+alpha*(1-lambdaS)*sig6c);"
-        "sig6=(sigma/r)^6; sig6c=(sigma/"+cutoffStr.str()+")^6;";
-    string bondExpression = "lambdaE*4*eps*(ssc*(ssc-1) - sig6*(sig6-1));"
-        "ssc=sig6/(1+alpha*(1-lambdaS)*sig6); sig6=(sigma/r)^6";
-    CustomNonbondedForce* custom = new CustomNonbondedForce(pairExpression+"sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)");
-    custom->setNonbondedMethod(periodic ? CustomNonbondedForce::CutoffPeriodic : useCutoff ? CustomNonbondedForce::CutoffNonPeriodic : CustomNonbondedForce::NoCutoff);
-    custom->setCutoffDistance(cutoff);
-    custom->addPerParticleParameter("sigma");
-    custom->addPerParticleParameter("eps");
-    custom->addGlobalParameter("lambdaE", 1.0);
-    custom->addGlobalParameter("lambdaS", 1.0);
-    custom->addGlobalParameter("alpha", alpha);
-    custom->addEnergyParameterDerivative("lambdaE");
-    custom->addEnergyParameterDerivative("lambdaS");
-    set<int> subset0, subset1;
-    for (int k = 0; k < numParticles; k++) {
-        custom->addParticle({1.0, 1.0});
-        (subset[k] == 0 ? subset0 : subset1).insert(k);
-    }
-    custom->addInteractionGroup(subset0, subset1);
-    CustomBondForce* bonds = new CustomBondForce(bondExpression);
-    bonds->addPerBondParameter("sigma");
-    bonds->addPerBondParameter("eps");
-    bonds->addGlobalParameter("lambdaE", 1.0);
-    bonds->addGlobalParameter("lambdaS", 1.0);
-    bonds->addGlobalParameter("alpha", alpha);
-    bonds->addEnergyParameterDerivative("lambdaE");
-    bonds->addEnergyParameterDerivative("lambdaS");
-    if (exceptions)
-        for (int k = 0; k < numMolecules; k++) {
-            int i = 2*k, j = i+1;
-            custom->addExclusion(i, j);
-            if (subset[i] != subset[j])
-                bonds->addBond(i, j, {1.0, 1.0});
-        }
-    systemDiff.addForce(custom);
-    systemDiff.addForce(bonds);
-
-    VerletIntegrator integratorSoft(0.01), integratorHard(0.01), integratorDiff(0.01);
-    Context contextSoft(systemSoft, integratorSoft, platform);
-    Context contextHard(systemHard, integratorHard, platform);
-    Context contextDiff(systemDiff, integratorDiff, platform);
-    contextSoft.setPositions(positions);
-    contextHard.setPositions(positions);
-    contextDiff.setPositions(positions);
-
-    auto check = [&](double lambdaE, double lambdaS) {
-        for (Context* context : {&contextSoft, &contextHard, &contextDiff}) {
-            context->setParameter("lambdaE", lambdaE);
-            if (context != &contextHard)
-                context->setParameter("lambdaS", lambdaS);
-        }
-        int options = State::Energy | State::Forces | State::ParameterDerivatives;
-        State soft = contextSoft.getState(options);
-        State hard = contextHard.getState(options);
-        State diff = contextDiff.getState(options);
-        assertEqualTo(diff.getPotentialEnergy(), soft.getPotentialEnergy()-hard.getPotentialEnergy(), tol);
-        const vector<Vec3>& forcesSoft = soft.getForces();
-        const vector<Vec3>& forcesHard = hard.getForces();
-        const vector<Vec3>& forcesDiff = diff.getForces();
-        for (int k = 0; k < numParticles; k++)
-            assertEqualVec(forcesDiff[k], forcesSoft[k]-forcesHard[k], tol);
-        map<string, double> dSoft = soft.getEnergyParameterDerivatives();
-        map<string, double> dHard = hard.getEnergyParameterDerivatives();
+            assertEqualVec(expectDiff ? diff.getForces()[k] : Vec3(), decap.getForces()[k]-plain.getForces()[k], tol);
+        map<string, double> dDecap = decap.getEnergyParameterDerivatives();
+        map<string, double> dPlain = plain.getEnergyParameterDerivatives();
         map<string, double> dDiff = diff.getEnergyParameterDerivatives();
-        assertEqualTo(dDiff.at("lambdaE"), dSoft.at("lambdaE")-dHard.at("lambdaE"), tol);
-        assertEqualTo(dDiff.at("lambdaS"), dSoft.at("lambdaS"), tol);
+        assertEqualTo(expectDiff ? dDiff.at("lambdaLJ") : 0.0, dDecap.at("lambdaLJ")-dPlain.at("lambdaLJ"), tol);
+        assertEqualTo(expectDiff ? dDiff.at("lambdaD") : 0.0, dDecap.at("lambdaD"), tol);
     };
-    check(0.4, 0.7);
-    check(1.0, 0.3);
-    check(0.5, 1.0);
-    check(0.0, 0.5);
+    auto check = [&](double lambdaLJValue, double lambdaDValue) {
+        for (Context* context : {&contextDecap, &contextPlain, &contextDiff}) {
+            context->setParameter("lambdaLJ", lambdaLJValue);
+            context->setParameter("lambdaD", lambdaDValue);
+        }
+        compare(-1, -1, true);
+        if (inner) {
+            compare(1<<1, 1<<1, true);
+            compare(1<<0, 1<<0, false);
+        }
+    };
+    check(lambdaLJ, lambdaD);
+    check(1.0, 0.0);
+    check(0.0, 1.0);
+    check(0.75, 0.75);
 }
 
-void testSoftcoreOverlapSeparate() {
-    // Two nearly overlapping particles with different energy and softness parameters.
+void testDecappingRoles(NonbondedForce::NonbondedMethod method) {
+    // A parameter that both scales the Lennard-Jones contribution and multiplies the decapping term of a slice gives
+    // lambda*(u_cap + Delta) = lambda*u_LJ, and a decapping-only parameter at 1 gives u_cap + Delta = u_LJ: both forces
+    // must match the plain one, derivatives included.
 
-    const double sigma = 1.0, epsilon = 1.0, alpha = 0.5, lambdaE = 0.3, lambdaS = 0.6, r = 0.01;
+    const double x = 0.7, lambda = 0.35;
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-6 : 5e-4;
+    auto run = [&](function<void(SlicedNonbondedForce&)> configure) {
+        System system;
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(10, 0, 0), Vec3(0, 10, 0), Vec3(0, 0, 10));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+        force->setCutoffDistance(3.5);
+        force->addParticle(0.3, 1.0, 0.8);
+        force->addParticle(-0.3, 1.0, 0.8);
+        force->setParticleSubset(1, 1);
+        force->addGlobalParameter("lambda", lambda);
+        configure(*force);
+        system.addForce(force);
+        VerletIntegrator integrator(0.01);
+        Context context(system, integrator, platform);
+        context.setPositions({Vec3(0, 0, 0), Vec3(x, 0, 0)});
+        return context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
+    };
+    State plain = run([](SlicedNonbondedForce& f) { f.addScalingParameter("lambda", 0, 1, false, true); f.addEnergyParameterDerivative("lambda"); });
+    State both = run([](SlicedNonbondedForce& f) { f.addScalingParameter("lambda", 0, 1, false, true, true); f.addEnergyParameterDerivative("lambda"); });
+    assertEqualTo(plain.getPotentialEnergy(), both.getPotentialEnergy(), tol);
+    assertEqualVec(plain.getForces()[1], both.getForces()[1], tol);
+    assertEqualTo(plain.getEnergyParameterDerivatives().at("lambda"), both.getEnergyParameterDerivatives().at("lambda"), tol);
+    State unscaled = run([](SlicedNonbondedForce& f) {});
+    State decapOnly = run([](SlicedNonbondedForce& f) { f.setGlobalParameterDefaultValue(0, 1.0); f.addScalingParameter("lambda", 0, 1, false, false, true); });
+    assertEqualTo(unscaled.getPotentialEnergy(), decapOnly.getPotentialEnergy(), tol);
+    assertEqualVec(unscaled.getForces()[1], decapOnly.getForces()[1], tol);
+}
+
+void testInnerGroupDecappingUpdate() {
+    // updateParametersInContext must reject a sigma above the inner switching distance in a decapped slice and leave
+    // the Context unchanged.
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::CutoffNonPeriodic);
+    force->setCutoffDistance(1.0);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->setParticleSubset(1, 1);
+    force->addGlobalParameter("lambdaD", 0.5);
+    force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    force->setInnerForceGroup(1);
+    force->setInnerSwitchingDistance(0.5);
+    force->setInnerCutoffDistance(0.8);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.25, 0, 0)});
+    double energy = context.getState(State::Energy).getPotentialEnergy();
+    force->setParticleParameters(1, 0.0, 0.8, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+    force->setParticleParameters(1, 0.0, 0.4, 0.5);
+    force->updateParametersInContext(context);
+}
+
+void testDecappingSwitchingErrors() {
+    // The decapping term is not switched, so with a switching function the sigma of every Lennard-Jones pair of a
+    // decapped slice cannot exceed the switching distance (0.5 here), at Context creation and in
+    // updateParametersInContext. Without a switching function, or with NoCutoff, any sigma is accepted.
+
+    auto build = [](function<void(SlicedNonbondedForce&)> configure, bool expectFailure) {
+        System system;
+        system.addParticle(1.0);
+        system.addParticle(1.0);
+        system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
+        force->setCutoffDistance(1.0);
+        force->setUseSwitchingFunction(true);
+        force->setSwitchingDistance(0.5);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->addParticle(0.0, 0.3, 0.5);
+        force->setParticleSubset(1, 1);
+        force->addGlobalParameter("lambdaD", 1.0);
+        force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+        configure(*force);
+        system.addForce(force);
+        VerletIntegrator integrator(0.001);
+        bool threw = false;
+        try {
+            Context context(system, integrator, platform);
+        }
+        catch (const OpenMMException&) {
+            threw = true;
+        }
+        ASSERT_EQUAL(expectFailure, threw);
+    };
+    build([](SlicedNonbondedForce& f) {}, false);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setParticleParameters(1, 0.0, 0.8, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 1.0, 0.0); }, false);   // zero epsilon
+    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.0, 0.6, 0.5); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setUseSwitchingFunction(false); }, false);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 0.8, 0.5); f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); }, false);
+
+    System system;
+    system.addParticle(1.0);
+    system.addParticle(1.0);
+    system.setDefaultPeriodicBoxVectors(Vec3(3, 0, 0), Vec3(0, 3, 0), Vec3(0, 0, 3));
+    SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+    force->setNonbondedMethod(SlicedNonbondedForce::CutoffPeriodic);
+    force->setCutoffDistance(1.0);
+    force->setUseSwitchingFunction(true);
+    force->setSwitchingDistance(0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->addParticle(0.0, 0.3, 0.5);
+    force->setParticleSubset(1, 1);
+    force->addGlobalParameter("lambdaD", 0.5);
+    force->addScalingParameter("lambdaD", 0, 1, false, false, true);
+    system.addForce(force);
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.25, 0, 0)});
+    double energy = context.getState(State::Energy).getPotentialEnergy();
+    force->setParticleParameters(1, 0.0, 0.8, 0.5);
+    ASSERT(throwsException([&]() { force->updateParametersInContext(context); }));
+    assertEqualTo(energy, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+}
+
+void testCappingOrders() {
+    // The orders must be between 1 and 6. For every pair, the polynomial has its first m0 derivatives null at x = 0 (it
+    // has no powers 1, ..., m0), matches x^-12 - x^-6 and its first m1 derivatives at x = 1, decreases on [0, 1], and
+    // has -x times its derivative as the force term. The default orders reproduce eq. 5 of Correa et al. (2022).
+
+    SlicedNonbondedForce force(2);
+    ASSERT_EQUAL(3, force.getCappingOrderAtZero());
+    ASSERT_EQUAL(3, force.getCappingOrderAtSigma());
+    for (auto orders : vector<pair<int, int>>{{0, 3}, {3, 0}, {7, 3}, {3, 7}})
+        ASSERT(throwsException([&]() { force.setCappingOrders(orders.first, orders.second); }));
+    force.setCappingOrders(4, 2);
+    ASSERT_EQUAL(4, force.getCappingOrderAtZero());
+    ASSERT_EQUAL(2, force.getCappingOrderAtSigma());
+
+    auto fallingFactorial = [](int p, int n) {
+        double result = 1.0;
+        for (int k = 0; k < n; k++)
+            result *= p-k;
+        return result;
+    };
+    for (int m0 = 1; m0 <= 6; m0++)
+        for (int m1 = 1; m1 <= 6; m1++) {
+            CappedLJ capped(m0, m1);
+            const vector<double>& a = capped.getCoefficients();
+            ASSERT_EQUAL(m1, (int) a.size());
+            for (int n = 0; n <= m1; n++) {
+                double derivative = (n == 0 ? capped.getConstant() : 0.0);
+                for (int j = 0; j < m1; j++)
+                    derivative += a[j]*fallingFactorial(m0+1+j, n);
+                double expected = fallingFactorial(-12, n)-fallingFactorial(-6, n);
+                ASSERT_EQUAL_TOL(expected, derivative, 1e-7);   // coefficients reach 1e5 at the highest orders
+            }
+            double previous = capped.getConstant(), energy, rForce;
+            for (int i = 1; i <= 100; i++) {
+                double x = 0.01*i;
+                capped.evaluate(x, energy, rForce);
+                ASSERT(energy <= previous+1e-12);
+                previous = energy;
+                double h = 1e-6, ePlus, eMinus, unused;
+                capped.evaluate(x+h, ePlus, unused);
+                capped.evaluate(x-h, eMinus, unused);
+                ASSERT_EQUAL_TOL(-x*(ePlus-eMinus)/(2*h), rForce, 1e-5);
+            }
+        }
+    CappedLJ standard;
+    ASSERT_EQUAL_TOL(29.8, standard.getConstant(), 1e-12);
+    ASSERT_EQUAL_TOL(-360.0, standard.getCoefficients()[0], 1e-12);
+    ASSERT_EQUAL_TOL(547.2, standard.getCoefficients()[1], 1e-12);
+    ASSERT_EQUAL_TOL(-217.0, standard.getCoefficients()[2], 1e-12);
+
+    // The orders are fixed when a Context is created
     System system;
     system.addParticle(1.0);
     system.addParticle(1.0);
     SlicedNonbondedForce* sliced = new SlicedNonbondedForce(2);
     sliced->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-    sliced->addParticle(0.0, sigma, epsilon);
-    sliced->addParticle(0.0, sigma, epsilon);
+    sliced->addParticle(0.0, 1.0, 1.0);
+    sliced->addParticle(0.0, 1.0, 1.0);
     sliced->setParticleSubset(1, 1);
-    sliced->addGlobalParameter("lambdaE", lambdaE);
-    sliced->addGlobalParameter("lambdaS", lambdaS);
-    sliced->addScalingParameter("lambdaE", 0, 1, false, true);
-    sliced->addScalingParameter("lambdaS", 0, 1, false, false, alpha);
-    sliced->addEnergyParameterDerivative("lambdaE");
-    sliced->addEnergyParameterDerivative("lambdaS");
+    sliced->addGlobalParameter("lambdaD", 0.0);
+    sliced->addScalingParameter("lambdaD", 0, 1, false, false, true);
     system.addForce(sliced);
     VerletIntegrator integrator(0.01);
     Context context(system, integrator, platform);
-    context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    State state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
-
-    double sig6 = pow(sigma/r, 6);
-    double s = sig6/(1 + alpha*(1-lambdaS)*sig6);
-    double energy = lambdaE*4*epsilon*(s*s - s);
-    double force = lambdaE*4*epsilon*(2*s - 1)*s*s*6*pow(r, 5)/pow(sigma, 6);
-    double dE = 4*epsilon*(s*s - s);
-    double dS = lambdaE*4*epsilon*alpha*s*s*(2*s - 1);
-    assertEqualTo(energy, state.getPotentialEnergy(), TOL);
-    assertEqualVec(Vec3(-force, 0, 0), state.getForces()[0], TOL);
-    assertEqualVec(Vec3(force, 0, 0), state.getForces()[1], TOL);
-    assertEqualTo(dE, state.getEnergyParameterDerivatives().at("lambdaE"), TOL);
-    assertEqualTo(dS, state.getEnergyParameterDerivatives().at("lambdaS"), TOL);
-}
-
-void testSoftnessOnly() {
-    // A softness parameter on a slice with no Lennard-Jones scaling parameter: lambdaE is 1.
-
-    const double sigma = 1.0, epsilon = 1.0, alpha = 0.5, lambdaS = 0.4, r = 0.9;
-    System system;
-    system.addParticle(1.0);
-    system.addParticle(1.0);
-    SlicedNonbondedForce* sliced = new SlicedNonbondedForce(2);
-    sliced->setNonbondedMethod(SlicedNonbondedForce::NoCutoff);
-    sliced->addParticle(0.0, sigma, epsilon);
-    sliced->addParticle(0.0, sigma, epsilon);
-    sliced->setParticleSubset(1, 1);
-    sliced->addGlobalParameter("lambdaS", lambdaS);
-    sliced->addScalingParameter("lambdaS", 0, 1, false, false, alpha);
-    sliced->addEnergyParameterDerivative("lambdaS");
-    system.addForce(sliced);
-    VerletIntegrator integrator(0.01);
-    Context context(system, integrator, platform);
-    context.setPositions({Vec3(0, 0, 0), Vec3(r, 0, 0)});
-    State state = context.getState(State::Energy | State::Forces | State::ParameterDerivatives);
-
-    double sig6 = pow(sigma/r, 6);
-    double s = sig6/(1 + alpha*(1-lambdaS)*sig6);
-    double energy = 4*epsilon*(s*s - s);
-    double force = 4*epsilon*(2*s - 1)*s*s*6*pow(r, 5)/pow(sigma, 6);
-    double dS = 4*epsilon*alpha*s*s*(2*s - 1);
-    assertEqualTo(energy, state.getPotentialEnergy(), TOL);
-    assertEqualVec(Vec3(-force, 0, 0), state.getForces()[0], TOL);
-    assertEqualVec(Vec3(force, 0, 0), state.getForces()[1], TOL);
-    assertEqualTo(dS, state.getEnergyParameterDerivatives().at("lambdaS"), TOL);
+    context.setPositions({Vec3(0, 0, 0), Vec3(0.5, 0, 0)});
+    double before = context.getState(State::Energy).getPotentialEnergy();
+    sliced->setCappingOrders(4, 2);
+    assertEqualTo(before, context.getState(State::Energy).getPotentialEnergy(), 1e-6);
+    context.reinitialize(true);
+    assertEqualTo(4*cappedLJ(0.5, 4, 2), context.getState(State::Energy).getPotentialEnergy(), TOL);
+    assertEqualTo(4*cappedLJ(0.5), before, TOL);
 }
 
 void testErrors() {
@@ -2890,22 +2803,18 @@ void testErrors() {
     force.setScalingParameter(0, "a", 2, 2, true, true);
     force.addScalingParameter("c", 0, 1, true, false);
 
-    // Soft-core entries: alpha must be finite and non-negative, an entry needs a role, and a slice
-    // has at most one softness parameter.
+    // Decapping entries: an entry needs a role, and a slice has at most one decapping parameter.
 
     ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false); }));
-    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, -0.5); }));
-    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, numeric_limits<double>::quiet_NaN()); }));
-    ASSERT(throwsException([&]() { force.addScalingParameter("c", 0, 2, false, false, numeric_limits<double>::infinity()); }));
-    int soft = force.addScalingParameter("c", 0, 2, false, false, 0.5);
-    assertEqualTo(0.5, force.getScalingParameterSoftcoreAlpha(soft), 0.0);
-    assertEqualTo(0.0, force.getScalingParameterSoftcoreAlpha(0), 0.0);
-    ASSERT(throwsException([&]() { force.getScalingParameterSoftcoreAlpha(force.getNumScalingParameters()); }));
-    ASSERT(throwsException([&]() { force.addScalingParameter("b", 2, 0, true, false, 0.3); }));
+    int decap = force.addScalingParameter("c", 0, 2, false, false, true);
+    ASSERT(force.getScalingParameterIncludeDecapping(decap));
+    ASSERT(!force.getScalingParameterIncludeDecapping(0));
+    ASSERT(throwsException([&]() { force.getScalingParameterIncludeDecapping(force.getNumScalingParameters()); }));
+    ASSERT(throwsException([&]() { force.addScalingParameter("b", 2, 0, true, false, true); }));
     force.addScalingParameter("b", 2, 0, true, false);
-    force.setScalingParameter(soft, "c", 0, 2, false, true, 0.0);
-    assertEqualTo(0.0, force.getScalingParameterSoftcoreAlpha(soft), 0.0);
-    force.setScalingParameter(soft, "c", 0, 2, false, true, 0.5);
+    force.setScalingParameter(decap, "c", 0, 2, false, true, false);
+    ASSERT(!force.getScalingParameterIncludeDecapping(decap));
+    force.setScalingParameter(decap, "c", 0, 2, false, true, true);
     force.addEnergyParameterDerivative("c");
 
     ASSERT(throwsException([&]() { force.addEnergyParameterDerivative("unknown"); }));
@@ -2925,133 +2834,18 @@ void testErrors() {
     VerletIntegrator integrator(0.01);
     ASSERT(throwsException([&]() { Context context(system, integrator, platform); }));
 
-    // A softness-only scaling parameter is valid on its own: the slice is softened at full strength.
+    // A decapping-only scaling parameter is valid on its own: the slice's Lennard-Jones scaling is 1.
 
     System system2;
     system2.addParticle(1.0);
-    SlicedNonbondedForce* softOnly = new SlicedNonbondedForce(2);
-    softOnly->addParticle(1.0, 1.0, 1.0);
-    softOnly->addGlobalParameter("q", 1.0);
-    softOnly->addScalingParameter("q", 0, 1, false, false, 0.5);
-    softOnly->addEnergyParameterDerivative("q");
-    system2.addForce(softOnly);
+    SlicedNonbondedForce* decapOnly = new SlicedNonbondedForce(2);
+    decapOnly->addParticle(1.0, 1.0, 1.0);
+    decapOnly->addGlobalParameter("q", 1.0);
+    decapOnly->addScalingParameter("q", 0, 1, false, false, true);
+    decapOnly->addEnergyParameterDerivative("q");
+    system2.addForce(decapOnly);
     VerletIntegrator integrator2(0.01);
     Context context2(system2, integrator2, platform);
-}
-
-void testSoftcoreRoleCombinations(NonbondedForce::NonbondedMethod method) {
-    // Three subsets and scaling parameters that cover every role at once: "a" scales the LJ term of
-    // slice (0, 1) and softens slice (0, 2); "b" scales the Coulomb term of slice (0, 1) and softens
-    // slices (0, 1) and (1, 2); "d" scales and softens slice (2, 2). Each derivative must match a
-    // central finite difference of the energy. The same system with one parameter per role must
-    // give the same energy and forces, and derivatives whose sums match those of the shared ones.
-    // The GPU test binaries do not register the plugin's Reference kernels, so both checks use the
-    // tested platform.
-
-    const int numParticles = 48;
-    const int M = 4;
-    const double spacing = 1.3;
-    const double L = M*spacing;
-    const double cutoff = 2.5;
-    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
-    double tol = precision == "double" ? 1e-4 : (precision == "mixed" ? 1e-3 : 5e-3);
-
-    NonbondedForce nonbonded;
-    nonbonded.setNonbondedMethod(method);
-    nonbonded.setCutoffDistance(cutoff);
-    nonbonded.setUseDispersionCorrection(true);
-    nonbonded.setEwaldErrorTolerance(1e-5);
-    vector<Vec3> positions(numParticles);
-    auto q = [](int k) { return 0.2*(1-2*(k%2)); };
-    for (int k = 0; k < numParticles; k++) {
-        int iz = k/(M*M);
-        int iy = (k - iz*M*M)/M;
-        int ix = k - M*(iy + iz*M);
-        positions[k] = Vec3(ix+0.5, iy+0.5, iz+0.5)*spacing + Vec3(sin(1.7*k), sin(2.3*k+1), sin(3.1*k+2))*0.05;
-        nonbonded.addParticle(q(k), 1.0+0.05*(k%3), 0.8+0.1*(k%4));
-    }
-    // Exceptions between particles of different subsets (k, k+1) and of the same subset (k, k+3).
-    for (int k = 0; k < numParticles; k += 2)
-        nonbonded.addException(k, k+1, 0.5*q(k)*q(k+1), 1.0, 0.5);
-    for (int k = 1; k+3 < numParticles; k += 6)
-        nonbonded.addException(k, k+3, 0.5*q(k)*q(k+3), 1.0, 0.5);
-
-    struct Role {
-        string parameter;
-        int subset1, subset2;
-        bool includeCoulomb, includeLJ;
-        double alpha;
-    };
-    vector<Role> sharedRoles = {
-        {"a", 0, 1, false, true, 0.0},
-        {"a", 0, 2, false, false, 0.5},
-        {"b", 0, 1, true, false, 0.4},
-        {"b", 1, 2, false, false, 0.6},
-        {"d", 2, 2, true, true, 0.5}
-    };
-    vector<Role> splitRoles = {
-        {"aE", 0, 1, false, true, 0.0},
-        {"aS", 0, 2, false, false, 0.5},
-        {"bC", 0, 1, true, false, 0.0},
-        {"bS1", 0, 1, false, false, 0.4},
-        {"bS2", 1, 2, false, false, 0.6},
-        {"dE", 2, 2, true, true, 0.0},
-        {"dS", 2, 2, false, false, 0.5}
-    };
-    // Split parameters take the value of the shared parameter named by their first letter.
-    map<string, double> values = {{"a", 0.6}, {"b", 0.7}, {"d", 0.5}};
-    auto buildSystem = [&](System& system, const vector<Role>& roles) {
-        system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
-        for (int k = 0; k < numParticles; k++)
-            system.addParticle(1.0);
-        SlicedNonbondedForce* sliced = new SlicedNonbondedForce(nonbonded, 3);
-        for (int k = 0; k < numParticles; k++)
-            sliced->setParticleSubset(k, k%3);
-        set<string> added;
-        for (auto& role : roles) {
-            if (added.insert(role.parameter).second)
-                sliced->addGlobalParameter(role.parameter, values[role.parameter.substr(0, 1)]);
-            sliced->addScalingParameter(role.parameter, role.subset1, role.subset2, role.includeCoulomb, role.includeLJ, role.alpha);
-        }
-        for (const string& parameter : added)
-            sliced->addEnergyParameterDerivative(parameter);
-        system.addForce(sliced);
-    };
-    System system, splitSystem;
-    buildSystem(system, sharedRoles);
-    buildSystem(splitSystem, splitRoles);
-
-    VerletIntegrator integrator(0.01), splitIntegrator(0.01);
-    Context context(system, integrator, platform);
-    Context splitContext(splitSystem, splitIntegrator, platform);
-    context.setPositions(positions);
-    splitContext.setPositions(positions);
-    int options = State::Energy | State::Forces | State::ParameterDerivatives;
-    State state = context.getState(options);
-    State splitState = splitContext.getState(options);
-    map<string, double> derivs = state.getEnergyParameterDerivatives();
-    map<string, double> splitDerivs = splitState.getEnergyParameterDerivatives();
-    assertEnergy(state, splitState, tol);
-    assertForces(state, splitState, tol);
-
-    // Finite differences: a small step on the Reference platform, a larger one elsewhere to keep
-    // the rounding errors of the energy small.
-    bool reference = platform.getName() == "Reference";
-    double h = reference ? 1e-4 : 1e-2;
-    double fdTol = reference ? 1e-5 : tol;
-    for (auto& entry : values) {
-        context.setParameter(entry.first, entry.second+h);
-        double energyPlus = context.getState(State::Energy).getPotentialEnergy();
-        context.setParameter(entry.first, entry.second-h);
-        double energyMinus = context.getState(State::Energy).getPotentialEnergy();
-        context.setParameter(entry.first, entry.second);
-        assertEqualTo((energyPlus-energyMinus)/(2*h), derivs[entry.first], fdTol);
-        double sum = 0.0;
-        for (auto& split : splitDerivs)
-            if (split.first[0] == entry.first[0])
-                sum += split.second;
-        assertEqualTo(derivs[entry.first], sum, tol);
-    }
 }
 
 void runPlatformTests();
@@ -3072,6 +2866,8 @@ int main(int argc, char* argv[]) {
         testErrors();
         testLJPMEWithoutCharges();
         testInnerGroupErrors();
+        testInnerGroupDecappingUpdate();
+        testDecappingSwitchingErrors();
         for (bool asException : {false, true}) {
             testInnerGroupPair(asException, 0.5, 0.8);
             testInnerGroupPair(asException, 0.79, 0.8);
@@ -3127,27 +2923,33 @@ int main(int argc, char* argv[]) {
             for (int numSubsets : {2, 3})
                 for (auto exceptions : {false, true})
                     testScalingParameterSeparation(sfmt, method, numSubsets, exceptions);
-        testSoftcoreOverlap();
+        for (auto method : nonbondedMethods)
+            for (auto kind : {DecapPair, DecapException, DecapExcluded})
+                for (double x : {0.5, 0.8, 0.999, 1.001, 1.3})
+                    testDecappingPair(method, kind, x);
+        for (bool asException : {false, true})
+            for (bool inner : {false, true})
+                for (double x : {0.02, 1e-4})
+                    testDecappingOverlap(asException, inner, x);
+        // Capping orders other than the default
+        for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::PME, NonbondedForce::LJPME})
+            for (auto kind : {DecapPair, DecapException})
+                for (double x : {0.5, 0.999})
+                    testDecappingPair(method, kind, x, 4, 2);
+        for (bool inner : {false, true})
+            testDecappingOverlap(false, inner, 1e-4, 4, 2);
+        testCappingOrders();
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
-                testSoftcore(sfmt, method, exceptions, false);
-        testSoftcore(sfmt, NonbondedForce::CutoffPeriodic, true, true);
-        testSoftcore(sfmt, NonbondedForce::PME, true, true);
-        testSoftcoreSinglePair(NonbondedForce::CutoffPeriodic, true, 3.2);
-        testSoftcoreSinglePair(NonbondedForce::PME, true, 3.2);
-        testSoftcoreSinglePair(NonbondedForce::LJPME, false, 3.3);
-        testSoftcoreSinglePair(NonbondedForce::NoCutoff, false, 3.2);
-        testSoftcoreSinglePairSeparate(NonbondedForce::CutoffPeriodic, true, 3.2);
-        testSoftcoreSinglePairSeparate(NonbondedForce::PME, true, 3.2);
-        testSoftcoreSinglePairSeparate(NonbondedForce::LJPME, false, 3.3);
-        testSoftcoreSinglePairSeparate(NonbondedForce::NoCutoff, false, 3.2);
-        testSoftcoreOverlapSeparate();
-        testSoftnessOnly();
+                testDecapping(sfmt, method, exceptions, false, false);
+        testDecapping(sfmt, NonbondedForce::CutoffPeriodic, true, true, false);
+        testDecapping(sfmt, NonbondedForce::PME, false, true, false);
         for (auto method : nonbondedMethods)
             for (auto exceptions : {false, true})
-                testSoftcoreSeparateParameters(sfmt, method, exceptions);
-        for (auto method : {NonbondedForce::CutoffPeriodic, NonbondedForce::PME, NonbondedForce::LJPME})
-            testSoftcoreRoleCombinations(method);
+                testDecapping(sfmt, method, exceptions, false, true);
+        testDecapping(sfmt, NonbondedForce::PME, false, true, true);
+        for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::PME, NonbondedForce::LJPME})
+            testDecappingRoles(method);
         runPlatformTests();
     }
     catch(const exception& e) {

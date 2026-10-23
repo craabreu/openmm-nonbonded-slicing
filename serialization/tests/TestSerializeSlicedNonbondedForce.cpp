@@ -38,6 +38,7 @@ void testSerialization() {
     force.setInnerForceGroup(3);
     force.setInnerCutoffDistance(0.8);
     force.setInnerSwitchingDistance(0.5);
+    force.setCappingOrders(4, 2);
     force.setUseCuFFT(false);
     force.setReciprocalExclusions(true);
     double alpha = 0.5;
@@ -61,8 +62,8 @@ void testSerialization() {
     force.addScalingParameter("lambda", 0, 1, true, true);
     force.addScalingParameter("lambda", 1, 1, false, true);
     force.addEnergyParameterDerivative("lambda");
-    force.addScalingParameter("scale1", 1, 2, false, false, 0.5);
-    force.addScalingParameter("lambda", 0, 0, false, true, 0.25);
+    force.addScalingParameter("scale1", 1, 2, false, false, true);
+    force.addScalingParameter("lambda", 0, 0, false, true, true);
 
     // Serialize and then deserialize it.
 
@@ -86,6 +87,8 @@ void testSerialization() {
     ASSERT_EQUAL(force.getInnerForceGroup(), force2.getInnerForceGroup());
     ASSERT_EQUAL(force.getInnerCutoffDistance(), force2.getInnerCutoffDistance());
     ASSERT_EQUAL(force.getInnerSwitchingDistance(), force2.getInnerSwitchingDistance());
+    ASSERT_EQUAL(force.getCappingOrderAtZero(), force2.getCappingOrderAtZero());
+    ASSERT_EQUAL(force.getCappingOrderAtSigma(), force2.getCappingOrderAtSigma());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     ASSERT_EQUAL(force.getNumExceptions(), force2.getNumExceptions());
     ASSERT_EQUAL(force.getNumGlobalParameters(), force2.getNumGlobalParameters());
@@ -97,7 +100,7 @@ void testSerialization() {
     ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
     ASSERT_EQUAL(force.getReciprocalExclusions(), force2.getReciprocalExclusions());
     for (int i = 0; i < force.getNumScalingParameters(); i++)
-        ASSERT_EQUAL(force.getScalingParameterSoftcoreAlpha(i), force2.getScalingParameterSoftcoreAlpha(i));
+        ASSERT_EQUAL(force.getScalingParameterIncludeDecapping(i), force2.getScalingParameterIncludeDecapping(i));
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -255,8 +258,8 @@ void testMissingInnerForceGroup() {
 }
 
 void testDeserializeVersion1() {
-    // Files written before the soft-core potential and the inner force group have version 1, no
-    // alpha on scaling parameters, and no inner force group properties.
+    // Files written before decapping and the inner force group have version 1, no
+    // decapping flag on scaling parameters, and no inner force group properties.
 
     SlicedNonbondedForce force(2);
     force.addParticle(1, 0.1, 0.01);
@@ -270,39 +273,21 @@ void testDeserializeVersion1() {
     size_t pos = xml.find("version=\"2\"");
     ASSERT(pos != string::npos);
     xml.replace(pos, 11, "version=\"1\"");
-    ASSERT_EQUAL(1, eraseAttribute(xml, "softcoreAlpha"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "includeDecapping"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "cappingOrderAtZero"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "cappingOrderAtSigma"));
     stringstream buffer2(xml);
     SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
     ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
     ASSERT_EQUAL(force.getParticleSubset(1), copy->getParticleSubset(1));
     ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
-    ASSERT_EQUAL(0.0, copy->getScalingParameterSoftcoreAlpha(0));
+    ASSERT(!copy->getScalingParameterIncludeDecapping(0));
     ASSERT_EQUAL(-1, copy->getInnerForceGroup());
-    delete copy;
-}
-
-void testIgnoresSoftcoreSlicesNode() {
-    // Files written by pre-release builds had a SoftcoreSlices node, which is ignored.
-
-    SlicedNonbondedForce force(2);
-    force.addParticle(1, 0.1, 0.01);
-    force.addParticle(-1, 0.2, 0.02);
-    force.setParticleSubset(1, 1);
-    force.addGlobalParameter("lambda", 0.5);
-    force.addScalingParameter("lambda", 0, 1, true, true);
-    stringstream buffer;
-    XmlSerializer::serialize<SlicedNonbondedForce>(&force, "Force", buffer);
-    string xml = buffer.str();
-    size_t pos = xml.rfind("</Force>");
-    ASSERT(pos != string::npos);
-    xml.insert(pos, "<SoftcoreSlices><Slice subset1=\"0\" subset2=\"1\" alpha=\"0.5\"/></SoftcoreSlices>");
-    stringstream buffer2(xml);
-    SlicedNonbondedForce* copy = XmlSerializer::deserialize<SlicedNonbondedForce>(buffer2);
-    ASSERT_EQUAL(1, copy->getNumScalingParameters());
-    ASSERT_EQUAL(0.0, copy->getScalingParameterSoftcoreAlpha(0));
+    ASSERT_EQUAL(3, copy->getCappingOrderAtZero());
+    ASSERT_EQUAL(3, copy->getCappingOrderAtSigma());
     delete copy;
 }
 
@@ -310,7 +295,6 @@ int main() {
     try {
         testSerialization();
         testDeserializeVersion1();
-        testIgnoresSoftcoreSlicesNode();
         testMissingUseCuFFT();
         testMissingReciprocalExclusions();
         testMissingInnerForceGroup();

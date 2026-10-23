@@ -19,10 +19,10 @@ NonbondedForce it replaces. Selected scaling parameters can instead be tied to {
 parameters, so that the van der Waals and electrostatic contributions of chosen slices are scaled up or
 down while a simulation runs. See {doc}`guide/slicing`.
 
-**Soft-core Lennard-Jones potential.** A scaling parameter can also soften the Lennard-Jones interactions
-of its slice with the Beutler soft-core potential, which remains finite as particles overlap, so that a
-slice can be decoupled alchemically without the singularity of the usual potential. See
-{doc}`guide/softcore`.
+**Capped Lennard-Jones potential.** A scaling parameter can multiply the decapping term of its slice, which
+splits its Lennard-Jones interactions into a capped term, finite as particles overlap, and the rest of the
+usual potential, so that a slice can be decoupled alchemically without the singularity of the usual
+potential while the energy stays linear in every parameter. See {doc}`guide/decapping`.
 
 **Energy parameter derivatives.** The derivative of the energy with respect to a scaling parameter can be
 requested along with the energy, which gives the energy of a slice or of a group of slices. See

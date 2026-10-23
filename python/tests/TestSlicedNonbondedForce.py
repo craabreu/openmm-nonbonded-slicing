@@ -98,40 +98,78 @@ def testParameterClash():
         mm.Context(system, mm.VerletIntegrator(0.01), platform)
 
 
-def testSoftcoreAPI():
+def testDecappingAPI():
     force = plugin.SlicedNonbondedForce(3)
     force.addParticle(0.0, 1.0, 1.0)
     force.addGlobalParameter("lambda", 1.0)
     index = force.addScalingParameter("lambda", 0, 1, False, True)
-    assert force.getScalingParameterSoftcoreAlpha(index) == 0.0
+    assert not force.getScalingParameterIncludeDecapping(index)
     assert force.getScalingParameter(index) == ["lambda", 0, 1, False, True]
-    force.setScalingParameter(index, "lambda", 1, 0, False, True, 0.5)
-    assert force.getScalingParameterSoftcoreAlpha(index) == 0.5
+    force.setScalingParameter(index, "lambda", 1, 0, False, True, True)
+    assert force.getScalingParameterIncludeDecapping(index)
     assert force.getScalingParameter(index) == ["lambda", 1, 0, False, True]
-    for bad in (-1.0, float("nan"), float("inf")):
-        with pytest.raises(Exception):
-            force.addScalingParameter("lambda", 0, 2, False, False, bad)
     with pytest.raises(Exception):
         force.addScalingParameter("lambda", 0, 2, False, False)
     with pytest.raises(Exception):
-        force.addScalingParameter("lambda", 0, 1, True, False, 0.3)
-    soft = force.addScalingParameter("lambda", 0, 2, False, False, 0.25)
+        force.addScalingParameter("lambda", 0, 1, True, False, True)
+    decap = force.addScalingParameter("lambda", 0, 2, False, False, True)
     with pytest.raises(Exception):
-        force.getScalingParameterSoftcoreAlpha(force.getNumScalingParameters())
+        force.getScalingParameterIncludeDecapping(force.getNumScalingParameters())
     clone = copy.deepcopy(force)
-    assert clone.getScalingParameterSoftcoreAlpha(index) == 0.5
-    assert clone.getScalingParameterSoftcoreAlpha(soft) == 0.25
+    assert clone.getScalingParameterIncludeDecapping(index)
+    assert clone.getScalingParameterIncludeDecapping(decap)
+
+
+def testCappingOrdersAPI():
+    force = plugin.SlicedNonbondedForce(2)
+    assert (force.getCappingOrderAtZero(), force.getCappingOrderAtSigma()) == (3, 3)
+    for orders in ((0, 3), (3, 0), (7, 3), (3, 7)):
+        with pytest.raises(Exception):
+            force.setCappingOrders(*orders)
+    force.setCappingOrders(4, 2)
+    assert (force.getCappingOrderAtZero(), force.getCappingOrderAtSigma()) == (4, 2)
+    clone = copy.deepcopy(force)
+    assert (clone.getCappingOrderAtZero(), clone.getCappingOrderAtSigma()) == (4, 2)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
-def testSoftcore(platformName, precision):
-    """Soft-core minus hard-core sliced energies match a CustomNonbondedForce."""
+def testCappingOrders(platformName, precision):
+    """The capped energy with orders (4, 2), 4*epsilon*(5.8 - 28.8*x^5 + 23*x^6), and with the default ones."""
+    def energy(orders, x):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+        force.addParticle(0.0, 1.0, 0.5)
+        force.addParticle(0.0, 1.0, 0.5)
+        force.setParticleSubset(1, 1)
+        force.addGlobalParameter("lambdaD", 0.0)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        if orders is not None:
+            force.setCappingOrders(*orders)
+        system.addForce(force)
+        platform = mm.Platform.getPlatformByName(platformName)
+        properties = {} if platformName == "Reference" else {"Precision": precision}
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(x, 0, 0)])
+        return value(context.getState(getEnergy=True).getPotentialEnergy())
+
+    tol = 1e-6 if platformName == "Reference" or precision == "double" else 1e-4
+    for x in (0.0001, 0.5, 0.9):
+        ASSERT_EQUAL_TOL(2*(5.8 - 28.8*x**5 + 23*x**6), energy((4, 2), x), tol)
+        ASSERT_EQUAL_TOL(2*(-868*x**6 + 2188.8*x**5 - 1440*x**4 + 119.2)/4, energy(None, x), tol)
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testDecapping(platformName, precision):
+    """Decapped minus plain sliced energies match (lambdaD - lambdaLJ)*Delta from Custom forces."""
     random.seed(1)
     numMolecules = 100
     numParticles = 2*numMolecules
     boxSize = 10.0
     cutoff = 3.5
-    alpha, lam = 0.5, 0.4
+    lamLJ, lamD = 0.4, 0.7
 
     nonbonded = mm.NonbondedForce()
     nonbonded.setNonbondedMethod(mm.NonbondedForce.PME)
@@ -162,34 +200,36 @@ def testSoftcore(platformName, precision):
             system.addForce(force)
         return system
 
-    def makeSliced(softcore):
+    def makeSliced(decap):
         sliced = plugin.SlicedNonbondedForce(nonbonded, 2)
         for i, s in enumerate(subsets):
             sliced.setParticleSubset(i, s)
-        sliced.addGlobalParameter("lambda", lam)
-        sliced.addScalingParameter("lambda", 0, 1, True, True, alpha if softcore else 0.0)
-        sliced.addEnergyParameterDerivative("lambda")
+        sliced.addGlobalParameter("lambdaLJ", lamLJ)
+        sliced.addGlobalParameter("lambdaD", lamD)
+        sliced.addScalingParameter("lambdaLJ", 0, 1, True, True)
+        sliced.addEnergyParameterDerivative("lambdaLJ")
+        if decap:
+            sliced.addScalingParameter("lambdaD", 0, 1, False, False, True)
+            sliced.addEnergyParameterDerivative("lambdaD")
         return sliced
 
-    expression = ("lambda*4*eps*(ssc*(ssc-1) - sig6*(sig6-1));"
-                  "ssc=sig6/(1+alpha*(1-lambda)*sig6); sig6=(sigma/r)^6;")
+    expression = ("(lambdaD-lambdaLJ)*step(1-x)*4*eps*(x^(-12)-x^(-6)-(-868*x^6+2188.8*x^5-1440*x^4+119.2)/4);"
+                  "x=r/sigma;")
     custom = mm.CustomNonbondedForce(expression + "sigma=0.5*(sigma1+sigma2); eps=sqrt(eps1*eps2)")
     custom.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
     custom.setCutoffDistance(cutoff)
     custom.addPerParticleParameter("sigma")
     custom.addPerParticleParameter("eps")
-    custom.addGlobalParameter("lambda", lam)
-    custom.addGlobalParameter("alpha", alpha)
-    custom.addEnergyParameterDerivative("lambda")
-    for _ in range(numParticles):
-        custom.addParticle([1.0, 1.0])
-    custom.addInteractionGroup({i for i, s in enumerate(subsets) if s == 0}, {i for i, s in enumerate(subsets) if s == 1})
     bonds = mm.CustomBondForce(expression)
     bonds.addPerBondParameter("sigma")
     bonds.addPerBondParameter("eps")
-    bonds.addGlobalParameter("lambda", lam)
-    bonds.addGlobalParameter("alpha", alpha)
-    bonds.addEnergyParameterDerivative("lambda")
+    for force in (custom, bonds):
+        for name, value_ in (("lambdaLJ", lamLJ), ("lambdaD", lamD)):
+            force.addGlobalParameter(name, value_)
+            force.addEnergyParameterDerivative(name)
+    for _ in range(numParticles):
+        custom.addParticle([1.0, 1.0])
+    custom.addInteractionGroup({i for i, s in enumerate(subsets) if s == 0}, {i for i, s in enumerate(subsets) if s == 1})
     for k in range(numMolecules):
         i, j = 2*k, 2*k+1
         custom.addExclusion(i, j)
@@ -207,63 +247,21 @@ def testSoftcore(platformName, precision):
         tol = 1e-4
     else:
         tol = 1e-3 if precision == "mixed" else 5e-3
-    for value in (lam, 0.0, 1.0):
+    for lj, d in ((lamLJ, lamD), (1.0, 0.0), (0.0, 1.0)):
         states = []
         for context in contexts:
-            context.setParameter("lambda", value)
+            context.setParameter("lambdaLJ", lj)
+            context.setParameter("lambdaD", d)
             states.append(context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True))
-        soft, hard, diff = states
-        ASSERT_EQUAL_TOL(diff.getPotentialEnergy(), soft.getPotentialEnergy() - hard.getPotentialEnergy(), tol)
-        for fs, fh, fd in zip(soft.getForces(), hard.getForces(), diff.getForces()):
-            ASSERT_EQUAL_VEC(fd, fs - fh, tol)
-        derivs = [state.getEnergyParameterDerivatives()["lambda"] for state in states]
-        ASSERT_EQUAL_TOL(derivs[2], derivs[0] - derivs[1], tol)
-
-
-@pytest.mark.parametrize("platformName, precision", cases)
-def testSoftcoreSeparateParameters(platformName, precision):
-    """Different energy and softness parameters: energy, forces and both derivatives vs closed forms."""
-    sigma, epsilon, alpha, lambdaE, lambdaS, r = 1.0, 1.0, 0.5, 0.3, 0.6, 0.9
-    system = mm.System()
-    system.addParticle(1.0)
-    system.addParticle(1.0)
-    force = plugin.SlicedNonbondedForce(2)
-    force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
-    force.addParticle(0.0, sigma, epsilon)
-    force.addParticle(0.0, sigma, epsilon)
-    force.setParticleSubset(1, 1)
-    force.addGlobalParameter("lambdaE", lambdaE)
-    force.addGlobalParameter("lambdaS", lambdaS)
-    force.addScalingParameter("lambdaE", 0, 1, False, True)
-    force.addScalingParameter("lambdaS", 0, 1, False, False, alpha)
-    force.addEnergyParameterDerivative("lambdaE")
-    force.addEnergyParameterDerivative("lambdaS")
-    system.addForce(force)
-    platform = mm.Platform.getPlatformByName(platformName)
-    properties = {} if platformName == "Reference" else {"Precision": precision}
-    context = mm.Context(system, mm.VerletIntegrator(0.01), platform, properties)
-    context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(r, 0, 0)])
-    state = context.getState(getEnergy=True, getForces=True, getParameterDerivatives=True)
-    tol = 1e-4 if platformName == "Reference" or precision == "double" else 1e-3
-
-    sig6 = (sigma/r)**6
-    s = sig6/(1 + alpha*(1 - lambdaS)*sig6)
-    energy = lambdaE*4*epsilon*(s*s - s)
-    fx = lambdaE*4*epsilon*(2*s - 1)*s*s*6*r**5/sigma**6
-    ASSERT_EQUAL_TOL(energy, state.getPotentialEnergy(), tol)
-    ASSERT_EQUAL_VEC(mm.Vec3(-fx, 0, 0), state.getForces()[0], tol)
-    ASSERT_EQUAL_VEC(mm.Vec3(fx, 0, 0), state.getForces()[1], tol)
-    derivs = state.getEnergyParameterDerivatives()
-    ASSERT_EQUAL_TOL(4*epsilon*(s*s - s), derivs["lambdaE"], tol)
-    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*alpha*s*s*(2*s - 1), derivs["lambdaS"], tol)
-
-    # Changing the softness parameter alone changes the energy; the energy parameter alone scales it.
-
-    context.setParameter("lambdaS", 1.0)
-    hard = context.getState(getEnergy=True).getPotentialEnergy()
-    ASSERT_EQUAL_TOL(lambdaE*4*epsilon*(sig6*sig6 - sig6), hard, tol)
-    context.setParameter("lambdaE", 0.0)
-    ASSERT_EQUAL_TOL(0.0, context.getState(getEnergy=True).getPotentialEnergy(), tol)
+        decap, plain, diff = states
+        scale = max(1.0, abs(value(plain.getPotentialEnergy())))
+        ASSERT_EQUAL_TOL(value(diff.getPotentialEnergy())/scale,
+                         (value(decap.getPotentialEnergy()) - value(plain.getPotentialEnergy()))/scale, tol)
+        for fd_, fp, fx in zip(decap.getForces(), plain.getForces(), diff.getForces()):
+            ASSERT_EQUAL_VEC(fx, fd_ - fp, tol)
+        dDecap, dPlain, dDiff = (state.getEnergyParameterDerivatives() for state in states)
+        ASSERT_EQUAL_TOL(dDiff["lambdaLJ"], dDecap["lambdaLJ"] - dPlain["lambdaLJ"], tol)
+        ASSERT_EQUAL_TOL(dDiff["lambdaD"], dDecap["lambdaD"], tol)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)
@@ -748,27 +746,42 @@ def testInnerGroupAccessors():
     ASSERT_EQUAL_TOL(0.5, copy_.getInnerSwitchingDistance().value_in_unit(unit.nanometer), 1e-12)
 
 
-def testInnerGroupWithSoftcore():
-    # The inner split assumes the bare Lennard-Jones potential, so it cannot be used with soft-core slices
-    def makeContext(softcoreAlpha):
+@pytest.mark.parametrize("platformName, precision", cases)
+def testInnerGroupWithDecapping(platformName, precision):
+    # Decapping terms go entirely to the inner group, which needs sigma <= the inner switching distance
+    def makeContext(sigma):
         system = mm.System()
         for _ in range(2):
             system.addParticle(1.0)
-        force = plugin.SlicedNonbondedForce(1)
-        force.addParticle(1.0, 0.3, 0.5)
-        force.addParticle(-1.0, 0.3, 0.5)
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.CutoffNonPeriodic)
+        force.setCutoffDistance(1.0)
+        force.addParticle(0.0, sigma, 0.5)
+        force.addParticle(0.0, sigma, 0.5)
+        force.setParticleSubset(1, 1)
         force.setInnerForceGroup(1)
         force.setInnerSwitchingDistance(0.5)
         force.setInnerCutoffDistance(0.8)
-        force.addGlobalParameter("lambda", 1.0)
-        force.addScalingParameter("lambda", 0, 0, False, True, softcoreAlpha)
+        force.addGlobalParameter("lambdaLJ", 0.6)
+        force.addGlobalParameter("lambdaD", 0.3)
+        force.addScalingParameter("lambdaLJ", 0, 1, False, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
         system.addForce(force)
-        platform = mm.Platform.getPlatformByName("Reference")
-        return mm.Context(system, mm.VerletIntegrator(0.001), platform)
+        platform = mm.Platform.getPlatformByName(platformName)
+        properties = {} if platformName == "Reference" else {"Precision": precision}
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(0.9*sigma, 0, 0)])
+        return context
 
-    with pytest.raises(mm.OpenMMException, match="inner force group cannot be used with soft-core"):
-        makeContext(0.5)
-    makeContext(0.0)
+    with pytest.raises(mm.OpenMMException, match="cannot exceed the inner switching distance"):
+        makeContext(0.6)
+    context = makeContext(0.3)
+    x = 0.9
+    delta = 4*0.5*(x**-12 - x**-6 - (-868*x**6 + 2188.8*x**5 - 1440*x**4 + 119.2)/4)
+    inner = value(context.getState(getEnergy=True, groups={1}).getPotentialEnergy())
+    context.setParameter("lambdaD", 0.6)
+    tol = 1e-5 if platformName == "Reference" or precision == "double" else 1e-3
+    ASSERT_EQUAL_TOL(inner + 0.3*delta, value(context.getState(getEnergy=True, groups={1}).getPotentialEnergy()), tol)
 
 
 @pytest.mark.parametrize("platformName, precision", cases)

@@ -4,6 +4,10 @@ u.f = exceptionParams.w;
 int slice = u.i;
 real clLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
+#if HAS_DECAPPING
+const real decapLambda = DECAP_LAMBDAS[slice];
+real decapEnergy = 0.0f, decapForce = 0.0f;
+#endif
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if APPLY_PERIODIC
 APPLY_PERIODIC_TO_DELTA(delta)
@@ -13,24 +17,13 @@ real invR = RSQRT(r2);
 real sig2 = invR*exceptionParams.y;
 sig2 *= sig2;
 real sig6 = sig2*sig2*sig2;
-#if HAS_SOFTCORE
-real softcoreAlpha = SOFTCORE_ALPHAS[slice];
-real softLambda = SOFTCORE_LAMBDAS[slice];
-real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
-real s = sig6*q;
-real epss = exceptionParams.z*s;
-real ljForce = 6.0f*epss*(2.0f*s-1.0f)*q;
-real ljEnergy = epss*(s-1.0f);
-real ljSoftDeriv = ljLambda*softcoreAlpha*epss*s*(2.0f*s-1.0f);
-#else
 real ljForce = exceptionParams.z*(12.0f*sig6-6.0f)*sig6;
 real ljEnergy = exceptionParams.z*(sig6-1.0f)*sig6;
-#endif
 real clForce = exceptionParams.x*invR;
 real clEnergy = exceptionParams.x*invR;
 #if INNER_GROUP || SUBTRACT_INNER
-// Inner part: S(r) times the bare force and the shifted potential whose gradient it is. The inner
-// group cannot be used with soft-core slices, so HAS_SOFTCORE is 0 here and ljForce is bare.
+// Inner part: S(r) times the bare force and the shifted potential whose gradient it is.
+// ljForce is the bare force here.
 real innerForceLJ = 0.0f, innerForceCl = 0.0f, innerEnergyLJ = 0.0f, innerEnergyCl = 0.0f;
 if (r2 < INNER_CUTOFF_SQUARED) {
     const real r = SQRT(r2);
@@ -98,6 +91,12 @@ if (r2 < INNER_CUTOFF_SQUARED) {
 #endif
 }
 #endif
+#if SUBTRACT_INNER && HAS_DECAPPING
+// Below sigma, the remainder of a decapped slice has no Lennard-Jones force; dropping the bare force from both sides of
+// the difference keeps it from becoming inf-inf in single precision as r -> 0
+if (IS_DECAPPED && sig6 > 1.0f)
+    ljForce = innerForceLJ = 0.0f;
+#endif
 #if INNER_GROUP
 ljForce = innerForceLJ;
 clForce = innerForceCl;
@@ -109,8 +108,34 @@ clForce -= innerForceCl;
 ljEnergy -= innerEnergyLJ;
 clEnergy -= innerEnergyCl;
 #endif
+#if HAS_DECAPPING && !SUBTRACT_INNER
+// Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). Here ljForce and
+// ljEnergy are bare, and with an inner group sigma cannot exceed INNER_SWITCH, where the inner part is the whole force
+// and its energy is the bare one minus the constant subtracted below.
+if (IS_DECAPPED && sig6 > 1.0f) {
+    const real x = RECIP(invR*exceptionParams.y);
+    const real xp = CAP_XPOW;
+    const real capEnergy = exceptionParams.z*(CAP_C0 + xp*(CAP_POLY));
+    const real capForce = -exceptionParams.z*xp*(CAP_RPOLY);
+    const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+    decapForce = exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
+    decapEnergy = exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;
+    ljForce = capForce;
+    ljEnergy = capEnergy;
+#if INNER_GROUP
+    real sigma6 = exceptionParams.y*exceptionParams.y;
+    sigma6 = sigma6*sigma6*sigma6;
+    ljEnergy -= exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
+#endif
+}
+#endif
+#if HAS_DECAPPING
+real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda*decapForce)*invR*invR;
+energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda*decapEnergy;
+#else
 real dEdR = (ljLambda*ljForce + clLambda*clForce)*invR*invR;
 energy += clLambda*clEnergy + ljLambda*ljEnergy;
+#endif
 delta *= dEdR;
 real3 force1 = -delta;
 real3 force2 = delta;

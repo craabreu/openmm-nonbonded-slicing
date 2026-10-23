@@ -19,7 +19,9 @@ that $\hat V(r_c) = 0$ {cite}`Abreu_2020`; the direct-space group reports $V - \
 corresponding force. Every group therefore has an energy consistent with its force, and the groups add up
 to the unsplit result. The same applies to 1-4 exceptions, and scaling parameters, their derivatives and
 parameter offsets apply to both parts. The closed form of $\hat V$ used by all platforms is derived in
-{doc}`../theory`.
+{doc}`../theory`. In a decapped slice ({doc}`decapping`), the potential below $\sigma$ is the capped one
+plus the decapping term instead of the bare one; since $\sigma \le r_s$, the inner group takes all of it
+there, and the remainder is unchanged.
 
 ## Setting it up
 
@@ -45,8 +47,8 @@ slow group has no fast intramolecular component.
   function is used, $r_c \le$ switching distance: the inner force is the bare Lennard-Jones force times
   $S(r)$, which beyond the switching distance would exceed the switched force and leave the remainder with
   a correction of opposite sign.
-* Since the split assumes the bare Lennard-Jones potential, the inner force group cannot be used with
-  soft-core scaling parameters ({doc}`softcore`).
+* With decapped slices ({doc}`decapping`), the inner group takes all of the capped and decapping terms below
+  $\sigma$, so the $\sigma$ of every Lennard-Jones pair of a decapped slice cannot exceed $r_s$.
 * The inner force group requires the direct space to be included (the default; see
   `setIncludeDirectSpace`).
 * The inner force group, switching distance and cutoff distance are fixed when a {OpenMM}`Context` is
