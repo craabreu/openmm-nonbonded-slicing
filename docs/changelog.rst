@@ -14,20 +14,18 @@ Changelog
   (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
   1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
-* A scaling parameter added with a positive ``softcoreAlpha`` (sixth argument of
-  ``addScalingParameter``) softens its slice with the Beutler soft-core Lennard-Jones potential.
-  The softening parameter can be the one that scales the slice's Lennard-Jones energy or a
-  separate one, and derivatives with respect to both are reported. Available on all platforms and
-  with every nonbonded method (with LJPME, as for the usual potential, without a switching
-  function). With a separate softening parameter, the derivative with respect to the Lennard-Jones
-  scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
-  When one parameter plays both roles, its derivative also contains the derivative with respect to
-  the softening parameter and is not an energy, even when its value is 1.
+* A scaling parameter added with ``includeDecapping=True`` (sixth argument of ``addScalingParameter``)
+  multiplies the decapping term of its slice: each Lennard-Jones pair of the slice is split into a capped
+  potential, finite at r = 0 and multiplied by the slice's Lennard-Jones scaling parameter, and the rest of
+  the usual potential, which is zero beyond sigma (Correa et al., J. Chem. Theory Comput. 18, 5876, 2022).
+  The energy stays linear in every parameter, so the derivatives are the capped and decapping energies of the
+  slice. Available on all platforms, with every nonbonded method and with the inner force group. With a
+  switching function or an inner force group, the sigma of the Lennard-Jones pairs of decapped slices cannot
+  exceed the switching distance or the inner switching distance.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,
-  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``). It cannot be combined with soft-core
-  scaling parameters.
+  ``setInnerCutoffDistance``, ``setInnerSwitchingDistance``).
 
 **Bug fixes**
 

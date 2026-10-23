@@ -4,7 +4,7 @@
 :maxdepth: 1
 
 slicing
-softcore
+decapping
 derivatives
 reciprocal
 mts

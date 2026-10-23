@@ -45,8 +45,8 @@ slow group has no fast intramolecular component.
   function is used, $r_c \le$ switching distance: the inner force is the bare Lennard-Jones force times
   $S(r)$, which beyond the switching distance would exceed the switched force and leave the remainder with
   a correction of opposite sign.
-* Since the split assumes the bare Lennard-Jones potential, the inner force group cannot be used with
-  soft-core scaling parameters ({doc}`softcore`).
+* With decapped slices ({doc}`decapping`), the inner group takes all of the capped and decapping terms below
+  $\sigma$, so the $\sigma$ of every Lennard-Jones pair of a decapped slice cannot exceed $r_s$.
 * The inner force group requires the direct space to be included (the default; see
   `setIncludeDirectSpace`).
 * The inner force group, switching distance and cutoff distance are fixed when a {OpenMM}`Context` is
