@@ -4,6 +4,11 @@
     int slice = isExcluded ? 0 : SUBSET1>SUBSET2 ? SUBSET1*(SUBSET1+1)/2+SUBSET2 : SUBSET2*(SUBSET2+1)/2+SUBSET1;
     real clLambda = LAMBDA[slice].x;
     real ljLambda = LAMBDA[slice].y;
+#if HAS_DECAPPING
+    // The decapping term of a decapped slice (see CappedLJ.h), zero unless r < sigma
+    const real decapLambda = DECAP_LAMBDA[slice];
+    real decapEnergy = 0.0f, decapForce = 0.0f;
+#endif
 #if HAS_COULOMB
     const real qq = ONE_4PI_EPS0*CHARGE1*CHARGE2;
 #else
@@ -20,8 +25,7 @@
 #if INNER_GROUP || SUBTRACT_INNER
     // Inner part of the interaction: S(r) times the bare force, and the shifted potential whose
     // gradient it is (the energy terms are only needed when the energy is requested). It is always
-    // the bare Lennard-Jones potential: the inner group cannot be used with soft-core slices, so
-    // HAS_SOFTCORE is 0 whenever INNER_GROUP or SUBTRACT_INNER is 1.
+    // the bare Lennard-Jones potential.
     real innerForce = 0.0f, innerEnergyLJ = 0.0f, innerEnergyCl = 0.0f;
     const bool insideInner = (!isExcluded && r2 < INNER_CUTOFF_SQUARED);
 #if SUBTRACT_INNER
@@ -30,6 +34,10 @@
     // difference of two large, nearly equal terms, and the inner energies are then zero. With Ewald, the
     // Coulomb remainder is erfc(alpha*r)/r - e_1(r), which has no such constant.
     const bool innerIsBare = (insideInner && r <= INNER_SWITCH);
+#endif
+#if INNER_GROUP && HAS_DECAPPING
+    bool decapped = false;
+    real capEnergy = 0.0f;
 #endif
     if (insideInner) {
         real innerSwitch = 1.0f;
@@ -40,6 +48,27 @@
         real innerForceLJ = 0.0f;
 #if HAS_LENNARD_JONES
         innerForceLJ = epssig6*(12.0f*sig6 - 6.0f);
+#if SUBTRACT_INNER && HAS_DECAPPING
+        // Below sigma, the remainder of a decapped slice has no Lennard-Jones force. Dropping the bare force from both
+        // sides of the difference keeps it from becoming inf-inf in single precision as r -> 0.
+        if (IS_DECAPPED && sig6 > 1.0f)
+            innerForceLJ = 0.0f;
+#endif
+#if INNER_GROUP && HAS_DECAPPING
+        // Below sigma, which cannot exceed INNER_SWITCH, the inner force is the whole force, so the inner group takes
+        // the capped force of a decapped slice and all of its decapping term; the remainder gets neither.
+        decapped = (IS_DECAPPED && sig6 > 1.0f);
+        if (decapped) {
+            const real x = RECIP(invR*sig);
+            const real xp = CAP_XPOW;
+            capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+            const real capForce = -eps*xp*(CAP_RPOLY);
+            const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+            decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+            decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+            innerForceLJ = capForce;
+        }
+#endif
 #endif
         innerForce = innerSwitch*(ljLambda*innerForceLJ + clLambda*qq*invR);
 #ifdef INCLUDE_ENERGY
@@ -95,6 +124,10 @@
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
         innerEnergyLJ = eps*(sigma6*sigma6*e12 - sigma6*e6);
+#if INNER_GROUP && HAS_DECAPPING
+        if (decapped)
+            innerEnergyLJ = capEnergy - eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
+#endif
 #endif
 #endif
     }
@@ -104,6 +137,10 @@
     real ljEnergy = innerEnergyLJ;
     real clEnergy = innerEnergyCl;
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
+#if HAS_DECAPPING
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
     dEdR += insideInner ? tempForce*invR*invR : 0;
 #else
 #if USE_EWALD
@@ -125,27 +162,33 @@
     real clEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
-#if HAS_SOFTCORE
-    // Beutler soft-core potential: s replaces sig6 and reduces to it when alpha = 0 or the softness
-    // parameter is 1. ljSoftDeriv is the derivative of ljLambda*ljEnergy with respect to that parameter.
-    const real softcoreAlpha = SOFTCORE_ALPHA[slice];
-    const real softLambda = SOFTCORE_LAMBDA[slice];
-    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
-    const real s = sig6*q;
-    real epss = eps*s;
-    tempForce = 6.0f*epss*(2.0f*s - 1.0f)*q;
-    real ljEnergy = includeInteraction ? epss*(s - 1.0f) : 0;
-    real ljSoftDeriv = includeInteraction ? ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
-#else
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
+    // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+        const real capForce = -eps*xp*(CAP_RPOLY);
+        const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+        tempForce = capForce;
+        ljEnergy = capEnergy;
+    }
+#endif
+#if HAS_DECAPPING && SUBTRACT_INNER
+    if (IS_DECAPPED && sig6 > 1.0f)
+        tempForce = 0.0f;   // see the inner part above
+#endif
 #if SUBTRACT_INNER
     if (innerIsBare) {
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
         ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
     }
-#endif
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -154,9 +197,6 @@
         real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
         tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
         ljEnergy *= switchValue;
-#if HAS_SOFTCORE
-        ljSoftDeriv *= switchValue;
-#endif
     }
     #endif
 #if DO_LJPME
@@ -182,27 +222,18 @@
     // instead of tempEnergy here, the includeInteraction mask is correctly applied.
     sig2 = sig*sig;
     sig6 = sig2*sig2*sig2*INVCUT6;
-#if HAS_SOFTCORE
-    // The additive part of the potential shift, in the soft-core form so that the energy
-    // stays continuous at the cutoff
-    const real qc = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
-    const real sc = sig6*qc;
-    epss = eps*sc;
-    ljPmeEnergy += epss*(1.0f - sc);
-    const real shiftDeriv = ljLambda*softcoreAlpha*epss*sc*(2.0f*sc - 1.0f);
-#else
     epssig6 = eps*sig6;
     // The additive part of the potential shift
     ljPmeEnergy += epssig6*(1.0f - sig6);
-#endif
     // The multiplicative part of the potential shift
     ljPmeEnergy += MULTSHIFT6*c6;
     ljEnergy += includeInteraction ? ljPmeEnergy : 0;
-#if HAS_SOFTCORE
-    ljSoftDeriv -= includeInteraction ? shiftDeriv : 0;
-#endif
 #endif
     tempForce *= ljLambda;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
     tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
 #if SUBTRACT_INNER
     tempForce -= innerForce;
@@ -226,25 +257,33 @@
 #endif
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
-#if HAS_SOFTCORE
-    const real softcoreAlpha = SOFTCORE_ALPHA[slice];
-    const real softLambda = SOFTCORE_LAMBDA[slice];
-    const real q = RECIP(1.0f + softcoreAlpha*(1.0f-softLambda)*sig6);
-    const real s = sig6*q;
-    const real epss = eps*s;
-    tempForce = 6.0f*epss*(2.0f*s - 1.0f)*q;
-    real ljEnergy = includeInteraction ? epss*(s - 1.0f) : 0;
-    real ljSoftDeriv = includeInteraction ? ljLambda*softcoreAlpha*epss*s*(2.0f*s - 1.0f) : 0;
-#else
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
+    // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
+        const real capForce = -eps*xp*(CAP_RPOLY);
+        const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
+        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+        tempForce = capForce;
+        ljEnergy = capEnergy;
+    }
+#endif
+#if HAS_DECAPPING && SUBTRACT_INNER
+    if (IS_DECAPPED && sig6 > 1.0f)
+        tempForce = 0.0f;   // see the inner part above
+#endif
 #if SUBTRACT_INNER
     if (innerIsBare) {
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
         ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
     }
-#endif
 #endif
     #if USE_LJ_SWITCH
     if (r > LJ_SWITCH_CUTOFF) {
@@ -253,12 +292,13 @@
         real switchDeriv = x*x*(3*LJ_SWITCH_C3+x*(4*LJ_SWITCH_C4+x*5*LJ_SWITCH_C5));
         tempForce = tempForce*switchValue - ljEnergy*switchDeriv*r;
         ljEnergy *= switchValue;
-#if HAS_SOFTCORE
-        ljSoftDeriv *= switchValue;
-#endif
     }
     #endif
     tempForce *= ljLambda;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
 #if SUBTRACT_INNER
     ljEnergy -= innerEnergyLJ;
 #endif

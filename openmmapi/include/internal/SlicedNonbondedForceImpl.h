@@ -41,11 +41,15 @@ public:
     void getLJPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     static double calcDispersionCorrection(const System& system, const SlicedNonbondedForce& force);
     static std::vector<double> calcDispersionCorrections(const System& system, const SlicedNonbondedForce& force);
+    static double getMaxDecappedSigma(const SlicedNonbondedForce& force, const std::vector<bool>& decappedSlices);
 private:
     static double evalIntegral(double r, double rs, double rc, double sigma);
+    void checkDecappedSigma(const SlicedNonbondedForce& force) const;
     const SlicedNonbondedForce& owner;
     Kernel kernel;
     int innerForceGroup;
+    std::vector<bool> decappedSlices;
+    double switchingDistance, innerSwitchingDistance;
 };
 
 } // namespace NonbondedSlicing

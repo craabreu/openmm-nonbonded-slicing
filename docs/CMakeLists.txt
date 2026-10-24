@@ -19,7 +19,7 @@ file(GLOB STAGING_INPUT_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     "guide/index.md"
     "guide/slicing.md"
     "guide/derivatives.md"
-    "guide/softcore.md"
+    "guide/decapping.md"
     "guide/reciprocal.md"
     "guide/mts.md"
 )

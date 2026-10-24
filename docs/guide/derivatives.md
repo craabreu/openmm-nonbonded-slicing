@@ -20,9 +20,8 @@ an exception.
 
 ## What the derivatives mean
 
-For a parameter that multiplies the contributions of slices with the usual Lennard-Jones potential, the
-energy is linear in the parameter, and its derivative is the sum of the unscaled contributions it
-multiplies,
+For a parameter that multiplies the contributions of slices, the energy is linear in the parameter, and its
+derivative is the sum of the unscaled contributions it multiplies,
 
 $$
 \frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
@@ -35,26 +34,11 @@ parameters. A parameter that scales both contributions of a single slice $I, J$ 
 $E^{vdW}_{I,J} + E^{elec}_{I,J}$, while one that scales the electrostatic contributions of several slices
 yields their sum. This is how the energy of a slice, or of a group of slices, can be reported.
 
-A parameter that softens a slice ({doc}`softcore`) makes the energy non-linear in it. For a pair of the
-slice, the derivatives with respect to the energy and softening parameters are
-
-$$
-\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
-\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
-$$
-
-and the reported derivative depends on the roles the parameter plays:
-
-| Parameter | Reported derivative |
-|---|---|
-| Multiplies the Coulomb contributions of any slices, or the Lennard-Jones contributions of unsoftened slices | The sum of the unscaled contributions it multiplies, independent of the parameter values |
-| Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter | $\partial U / \partial \lambda_E$ summed over its pairs: the soft-core van der Waals energy of the slice, which differs from the usual energy whenever $\lambda_s < 1$ |
-| Softens a slice | $\partial U / \partial \lambda_s$ summed over its pairs, which is not an energy |
-| Multiplies the Lennard-Jones contribution of a slice and softens it | The sum of the two rows above, which is not an energy, even when the parameter is 1 and the soft-core and usual potentials coincide |
-
-The pair terms in the last three rows are multiplied by the switching function when it is used and, with
-LJPME, have the same term evaluated at the cutoff subtracted. To obtain the usual van der Waals energy of a
-softened slice, evaluate it in a separate force without the soft-core potential.
+The energy remains linear with decapped slices ({doc}`decapping`). The derivative with respect to the
+Lennard-Jones scaling parameter of a decapped slice is its capped van der Waals energy, and the derivative
+with respect to its decapping parameter is its decapping energy; their sum is the usual van der Waals energy
+of the slice. A parameter that plays both roles in a slice yields the usual van der Waals energy, as it
+would without decapping.
 
 ## Restrictions
 
