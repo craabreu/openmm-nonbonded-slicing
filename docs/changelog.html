@@ -50,20 +50,20 @@ so both should be evaluated together when they are integrated with different tim
 (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
 1798, 2010). With this option, these terms are also kept when <code class="docutils literal notranslate"><span class="pre">setIncludeDirectSpace(False)</span></code>
 is used. The default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, keeps the behavior of OpenMM’s <code class="docutils literal notranslate"><span class="pre">NonbondedForce</span></code>.</p></li>
-<li><p>A scaling parameter added with a positive <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> (sixth argument of
-<code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code>) softens its slice with the Beutler soft-core Lennard-Jones potential.
-The softening parameter can be the one that scales the slice’s Lennard-Jones energy or a
-separate one, and derivatives with respect to both are reported. Available on all platforms and
-with every nonbonded method (with LJPME, as for the usual potential, without a switching
-function). With a separate softening parameter, the derivative with respect to the Lennard-Jones
-scaling parameter of a softened slice is its soft-core van der Waals energy, not the usual one.
-When one parameter plays both roles, its derivative also contains the derivative with respect to
-the softening parameter and is not an energy, even when its value is 1.</p></li>
+<li><p>A scaling parameter added with <code class="docutils literal notranslate"><span class="pre">includeDecapping=True</span></code> (sixth argument of <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code>)
+multiplies the decapping term of its slice: each Lennard-Jones pair of the slice is split into a
+capped potential, finite at r = 0 and multiplied by the slice’s Lennard-Jones scaling parameter, and
+the rest of the usual potential, which is zero beyond sigma (Correa et al., J. Chem. Theory Comput.
+18, 5876, 2022). The energy stays linear in every parameter, so the derivatives are the capped and
+decapping energies of the slice. The polynomial core is defined by the orders of the derivatives that
+vanish at r = 0 and that match the usual potential at r = sigma, both 3 by default
+(<code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code>). Available on all platforms, with every nonbonded method and with the inner
+force group. With a switching function or an inner force group, the sigma of the Lennard-Jones pairs
+of decapped slices cannot exceed the switching distance or the inner switching distance.</p></li>
 <li><p>Inner force group: a force-switched short-range copy of the direct-space interactions (particle
 pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
 integration, with an energy consistent with its force (<code class="docutils literal notranslate"><span class="pre">setInnerForceGroup</span></code>,
-<code class="docutils literal notranslate"><span class="pre">setInnerCutoffDistance</span></code>, <code class="docutils literal notranslate"><span class="pre">setInnerSwitchingDistance</span></code>). It cannot be combined with soft-core
-scaling parameters.</p></li>
+<code class="docutils literal notranslate"><span class="pre">setInnerCutoffDistance</span></code>, <code class="docutils literal notranslate"><span class="pre">setInnerSwitchingDistance</span></code>).</p></li>
 </ul>
 <p><strong>Bug fixes</strong></p>
 <ul class="simple">

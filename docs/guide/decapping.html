@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Capped Lennard-Jones potential &#8212; Nonbonded Slicing 0.4.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d72ef124" />
+    <script src="../_static/documentation_options.js?v=6c02275b"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=ccdb6887"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Energy parameter derivatives" href="derivatives.html" />
+    <link rel="prev" title="Subsets, slices and scaling parameters" href="slicing.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section class="tex2jax_ignore mathjax_ignore" id="capped-lennard-jones-potential">
+<h1>Capped Lennard-Jones potential<a class="headerlink" href="#capped-lennard-jones-potential" title="Link to this heading">¶</a></h1>
+<section id="what-it-does">
+<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
+<p>Driving the Lennard-Jones scaling parameter of a slice to zero with the usual potential leaves a singularity
+at <span class="math notranslate nohighlight">\(r = 0\)</span> that makes free-energy calculations hard to converge. A scaling parameter added with
+<code class="docutils literal notranslate"><span class="pre">includeDecapping=True</span></code> multiplies the <em>decapping</em> term of its slice, which splits each Lennard-Jones pair
+of the slice into a capped term and a decapping term <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id7" title="Gabriela B. Correa, Jessica C. S. L. Maciel, Frederico W. Tavares, and Charlles R. A. Abreu. A new formulation for the concerted alchemical calculation of van der waals and coulomb components of solvation free energies. Journal of Chemical Theory and Computation, 18(10):5876–5889, 2022. doi:10.1021/acs.jctc.2c00563.">1</a>]</span>, in the spirit of the capping of
+<span class="bibtex-citation" id="id2">[<a class="reference internal" href="../references.html#id8" title="Floris P. Buelens and Helmut Grubmüller. Linear-scaling soft-core scheme for alchemical free energy calculations. Journal of Computational Chemistry, 33(1):25–33, 2012. doi:10.1002/jcc.21938.">2</a>]</span> and the linear basis functions of <span class="bibtex-citation" id="id3">[<a class="reference internal" href="../references.html#id9" title="Levi N. Naden, Tri T. Pham, and Michael R. Shirts. Linear basis function approach to efficient alchemical free energy calculations. 1. removal of uncoupled solvent molecules. Journal of Chemical Theory and Computation, 10(3):1128–1149, 2014. doi:10.1021/ct4009188.">3</a>]</span>:</p>
+<div class="math notranslate nohighlight">
+\[
+U(r) = \lambda_{LJ}\, u_{cap}(r) + \lambda_D \left[ u_{LJ}(r) - u_{cap}(r) \right],
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(u_{LJ}\)</span> is the usual potential, <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> is the scaling parameter that multiplies the
+Lennard-Jones contributions of the slice (1 if there is none), <span class="math notranslate nohighlight">\(\lambda_D\)</span> is the decapping parameter, and</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+u_{cap}(r) = \begin{cases}
+4 \epsilon\, c(r/\sigma), &amp; r &lt; \sigma \\
+u_{LJ}(r), &amp; r \ge \sigma
+\end{cases}
+\end{split}\]</div>
+<p>is a polynomial core. It is defined by two orders, <span class="math notranslate nohighlight">\(m_0\)</span> and <span class="math notranslate nohighlight">\(m_1\)</span>: <span class="math notranslate nohighlight">\(c(x)\)</span> is the polynomial of degree $m_0</p>
+<ul class="simple">
+<li><p>m_1<span class="math notranslate nohighlight">\( whose first \)</span>m_0<span class="math notranslate nohighlight">\( derivatives vanish at \)</span>x = 0<span class="math notranslate nohighlight">\( and whose value and first \)</span>m_1<span class="math notranslate nohighlight">\( derivatives match
+those of \)</span>x^{-12} - x^{-6}<span class="math notranslate nohighlight">\( at \)</span>x = 1<span class="math notranslate nohighlight">\(. The first condition leaves the terms \)</span>a_0<span class="math notranslate nohighlight">\( and \)</span>a_k x^k<span class="math notranslate nohighlight">\( for \)</span>k =
+m_0 + 1, \dots, m_0 + m_1<span class="math notranslate nohighlight">\(, and the second fixes their \)</span>m_1 + 1<span class="math notranslate nohighlight">\( coefficients. The core thus joins the usual
+potential smoothly, up to the \)</span>m_1<span class="math notranslate nohighlight">\(-th derivative, at \)</span>r = \sigma<span class="math notranslate nohighlight">\( and takes the finite value \)</span>4 \epsilon,
+a_0<span class="math notranslate nohighlight">\( at \)</span>r = 0<span class="math notranslate nohighlight">\(. The default orders, \)</span>m_0 = m_1 = 3$, give</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[
+c(x) = 29.8 - 360 x^4 + 547.2 x^5 - 217 x^6,
+\]</div>
+<p>with a core of <span class="math notranslate nohighlight">\(119.2\,\epsilon\)</span>. The decapping term vanishes for <span class="math notranslate nohighlight">\(r \ge \sigma\)</span>, and <span class="math notranslate nohighlight">\(\lambda_D =
+\lambda_{LJ}\)</span> gives the usual potential.</p>
+<p>The energy is linear in both parameters. The derivative with respect to <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> is the capped van der
+Waals energy of the slice, the one with respect to <span class="math notranslate nohighlight">\(\lambda_D\)</span> is its decapping energy, and their sum is the
+usual van der Waals energy (<a class="reference internal" href="derivatives.html"><span class="doc">Energy parameter derivatives</span></a>). One evaluation therefore gives the energy at any pair of
+values, which is what reweighting estimators such as MBAR need.</p>
+</section>
+<section id="setting-it-up">
+<h2>Setting it up<a class="headerlink" href="#setting-it-up" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambdaQ"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambdaLJ"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaQ"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaLJ"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The orders are set for the whole force with <code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code>, from 1 to 6 each. Lowering <span class="math notranslate nohighlight">\(m_0\)</span> or raising
+<span class="math notranslate nohighlight">\(m_1\)</span> raises the core, <span class="math notranslate nohighlight">\(4 \epsilon\, a_0\)</span>, in units of <span class="math notranslate nohighlight">\(\epsilon\)</span>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(m_0\)</span> \ <span class="math notranslate nohighlight">\(m_1\)</span></p></th>
+<th class="head"><p>1</p></th>
+<th class="head"><p>2</p></th>
+<th class="head"><p>3</p></th>
+<th class="head"><p>4</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>2</p></td>
+<td><p>8.0</p></td>
+<td><p>50.0</p></td>
+<td><p>206.0</p></td>
+<td><p>684.0</p></td>
+</tr>
+<tr class="row-odd"><td><p>3</p></td>
+<td><p>6.0</p></td>
+<td><p>32.4</p></td>
+<td><p>119.2</p></td>
+<td><p>361.3</p></td>
+</tr>
+<tr class="row-even"><td><p>4</p></td>
+<td><p>4.8</p></td>
+<td><p>23.2</p></td>
+<td><p>78.1</p></td>
+<td><p>219.7</p></td>
+</tr>
+<tr class="row-odd"><td><p>5</p></td>
+<td><p>4.0</p></td>
+<td><p>17.7</p></td>
+<td><p>55.4</p></td>
+<td><p>146.7</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">setCappingOrders</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>    <span class="c1"># a core of 684 epsilon</span>
+</pre></div>
+</div>
+<p>A coupling path switches on the capped term first (<span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> from 0 to 1 with <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span>), then
+the decapping term, and finally the Coulomb term. The stages can overlap: <span class="bibtex-citation" id="id4">[<a class="reference internal" href="../references.html#id7" title="Gabriela B. Correa, Jessica C. S. L. Maciel, Frederico W. Tavares, and Charlles R. A. Abreu. A new formulation for the concerted alchemical calculation of van der waals and coulomb components of solvation free energies. Journal of Chemical Theory and Computation, 18(10):5876–5889, 2022. doi:10.1021/acs.jctc.2c00563.">1</a>]</span> couples all
+three in one sweep of a master parameter <span class="math notranslate nohighlight">\(\lambda\)</span> with smoothstep functions <span class="math notranslate nohighlight">\(h_k(\lambda)\)</span> that start and
+finish at <span class="math notranslate nohighlight">\((0, 0.7)\)</span>, <span class="math notranslate nohighlight">\((0.4, 0.8)\)</span> and <span class="math notranslate nohighlight">\((0.6, 1.0)\)</span> for the capped, decapping and Coulomb terms. OpenMM
+cannot make one global parameter a function of another, so set <code class="docutils literal notranslate"><span class="pre">lambdaLJ</span></code>, <code class="docutils literal notranslate"><span class="pre">lambdaD</span></code> and <code class="docutils literal notranslate"><span class="pre">lambdaQ</span></code> from
+<span class="math notranslate nohighlight">\(\lambda\)</span> at each state; for <span class="math notranslate nohighlight">\(\lambda\)</span>-dynamics, apply the chain rule to the three derivatives.</p>
+<p>The capped term is the usual potential beyond <span class="math notranslate nohighlight">\(\sigma\)</span>, so the cutoff, the switching function, LJPME and the
+dispersion correction apply to it exactly and are multiplied by <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span>. The decapping term is not
+switched, so with a switching function the <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a decapped slice (pairs
+with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span> excluded) cannot exceed the switching distance; this is checked when a Context is
+created and by <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but not for parameter offsets. Decapping is available on all
+platforms and with every nonbonded method, for direct-space pairs and 1-4 exceptions. Like the other
+properties of a scaling parameter, the decapping role and the capping orders are fixed when a
+<a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created, while <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> and <span class="math notranslate nohighlight">\(\lambda_D\)</span> are its global parameters.</p>
+</section>
+<section id="restrictions">
+<h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Only one scaling parameter per slice can multiply its decapping term.</p></li>
+<li><p>The capped core is finite, so charges of opposite sign can collapse onto it. Turn the Coulomb contribution
+of a slice on only while <span class="math notranslate nohighlight">\(\lambda_D &gt; 0\)</span>.</p></li>
+<li><p>With the default orders, the height of the core, <span class="math notranslate nohighlight">\(119.2\,\epsilon\)</span>, is only a few <span class="math notranslate nohighlight">\(k_B T\)</span> for atoms with
+small <span class="math notranslate nohighlight">\(\epsilon\)</span>, which then overlap often at <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span>. The decapping energy of such overlaps is
+large, so raise the core with <code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code> or place enough states near <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span> to keep the
+estimates converged. Higher orders give larger coefficients that partly cancel near <span class="math notranslate nohighlight">\(r = \sigma\)</span>, which
+costs some single-precision accuracy there.</p></li>
+<li><p>With an inner force group (<a class="reference internal" href="mts.html"><span class="doc">Inner force group for multiple time stepping</span></a>), the inner group takes all of the capped and decapping terms below
+<span class="math notranslate nohighlight">\(\sigma\)</span>. The <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a decapped slice (pairs with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span>
+excluded) cannot exceed the inner switching distance. This is checked when a Context is created and by
+<code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but not for parameter offsets.</p></li>
+</ul>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo_small.png" alt="Logo" />
+    
+    <h1 class="logo logo-name">Nonbonded Slicing</h1>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+
+
+
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Capped Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="derivatives.html">Energy parameter derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reciprocal.html">Reciprocal-space force group and exclusion corrections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pythonapi/index.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../authors.html">Author</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2022-2026, Charlles Abreu. Project based on OpenMM.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.1</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/guide/decapping.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

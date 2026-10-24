@@ -24,6 +24,8 @@ SlicedNonbondedForce
         addParticle_usingRVdw
         addScalingParameter
         createExceptionsFromBonds
+        getCappingOrderAtSigma
+        getCappingOrderAtZero
         getCutoffDistance
         getEnergyParameterDerivativeName
         getEwaldErrorTolerance
@@ -60,11 +62,12 @@ SlicedNonbondedForce
         getReciprocalExclusions
         getReciprocalSpaceForceGroup
         getScalingParameter
-        getScalingParameterSoftcoreAlpha
+        getScalingParameterIncludeDecapping
         getSwitchingDistance
         getUseCuFFT
         getUseDispersionCorrection
         getUseSwitchingFunction
+        setCappingOrders
         setCutoffDistance
         setEwaldErrorTolerance
         setExceptionParameterOffset

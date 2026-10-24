@@ -21,7 +21,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reciprocal-space force group and exclusion corrections" href="reciprocal.html" />
-    <link rel="prev" title="Soft-core Lennard-Jones potential" href="softcore.html" />
+    <link rel="prev" title="Capped Lennard-Jones potential" href="decapping.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
   
@@ -59,9 +59,8 @@ an exception.</p>
 </section>
 <section id="what-the-derivatives-mean">
 <h2>What the derivatives mean<a class="headerlink" href="#what-the-derivatives-mean" title="Link to this heading">¶</a></h2>
-<p>For a parameter that multiplies the contributions of slices with the usual Lennard-Jones potential, the
-energy is linear in the parameter, and its derivative is the sum of the unscaled contributions it
-multiplies,</p>
+<p>For a parameter that multiplies the contributions of slices, the energy is linear in the parameter, and its
+derivative is the sum of the unscaled contributions it multiplies,</p>
 <div class="math notranslate nohighlight">
 \[
 \frac{\partial E}{\partial \lambda} = \sum_{(I,J) \in S^{elec}_\lambda} E^{elec}_{I,J}
@@ -72,38 +71,11 @@ Waals contributions are scaled by <span class="math notranslate nohighlight">\(\
 parameters. A parameter that scales both contributions of a single slice <span class="math notranslate nohighlight">\(I, J\)</span> yields its full energy
 <span class="math notranslate nohighlight">\(E^{vdW}_{I,J} + E^{elec}_{I,J}\)</span>, while one that scales the electrostatic contributions of several slices
 yields their sum. This is how the energy of a slice, or of a group of slices, can be reported.</p>
-<p>A parameter that softens a slice (<a class="reference internal" href="softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>) makes the energy non-linear in it. For a pair of the
-slice, the derivatives with respect to the energy and softening parameters are</p>
-<div class="math notranslate nohighlight">
-\[
-\frac{\partial U}{\partial \lambda_E} = 4 \epsilon (s^2 - s), \qquad
-\frac{\partial U}{\partial \lambda_s} = 4 \lambda_E \epsilon \alpha s^2 (2 s - 1),
-\]</div>
-<p>and the reported derivative depends on the roles the parameter plays:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Reported derivative</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Multiplies the Coulomb contributions of any slices, or the Lennard-Jones contributions of unsoftened slices</p></td>
-<td><p>The sum of the unscaled contributions it multiplies, independent of the parameter values</p></td>
-</tr>
-<tr class="row-odd"><td><p>Multiplies the Lennard-Jones contribution of a softened slice, with a separate softening parameter</p></td>
-<td><p><span class="math notranslate nohighlight">\(\partial U / \partial \lambda_E\)</span> summed over its pairs: the soft-core van der Waals energy of the slice, which differs from the usual energy whenever <span class="math notranslate nohighlight">\(\lambda_s &lt; 1\)</span></p></td>
-</tr>
-<tr class="row-even"><td><p>Softens a slice</p></td>
-<td><p><span class="math notranslate nohighlight">\(\partial U / \partial \lambda_s\)</span> summed over its pairs, which is not an energy</p></td>
-</tr>
-<tr class="row-odd"><td><p>Multiplies the Lennard-Jones contribution of a slice and softens it</p></td>
-<td><p>The sum of the two rows above, which is not an energy, even when the parameter is 1 and the soft-core and usual potentials coincide</p></td>
-</tr>
-</tbody>
-</table>
-<p>The pair terms in the last three rows are multiplied by the switching function when it is used and, with
-LJPME, have the same term evaluated at the cutoff subtracted. To obtain the usual van der Waals energy of a
-softened slice, evaluate it in a separate force without the soft-core potential.</p>
+<p>The energy remains linear with decapped slices (<a class="reference internal" href="decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>). The derivative with respect to the
+Lennard-Jones scaling parameter of a decapped slice is its capped van der Waals energy, and the derivative
+with respect to its decapping parameter is its decapping energy; their sum is the usual van der Waals energy
+of the slice. A parameter that plays both roles in a slice yields the usual van der Waals energy, as it
+would without decapping.</p>
 </section>
 <section id="restrictions">
 <h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
@@ -154,7 +126,7 @@ number of slices, since a parameter that scales several slices adds a single der
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decapping.html">Capped Lennard-Jones potential</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Energy parameter derivatives</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reciprocal.html">Reciprocal-space force group and exclusion corrections</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>

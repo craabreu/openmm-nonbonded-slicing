@@ -49,7 +49,7 @@ interactions.</p>
 terms that subtract them are, by default, computed in the direct-space force group, as NonbondedForce does.
 Since these terms only cancel part of the reciprocal-space sum, they should be integrated along with it
 whenever the two groups are evaluated at different times; otherwise, the cancellation is incomplete and the
-slow force acquires a fast, intramolecular component <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id5" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">2</a>, <a class="reference internal" href="../references.html#id6" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">3</a>]</span>. Calling
+slow force acquires a fast, intramolecular component <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id5" title="Piero Procacci, Massimo Marchi, and Glenn J. Martyna. Electrostatic calculations and multiple time scales in molecular dynamics simulation of flexible molecular systems. The Journal of Chemical Physics, 108(21):8799–8803, June 1998. URL: http://dx.doi.org/10.1063/1.476326, doi:10.1063/1.476326.">4</a>, <a class="reference internal" href="../references.html#id6" title="Joseph A. Morrone, Ruhong Zhou, and B. J. Berne. Molecular dynamics with multiple time scales: how to avoid pitfalls. Journal of Chemical Theory and Computation, 6(6):1798–1804, May 2010. URL: http://dx.doi.org/10.1021/ct100054k, doi:10.1021/ct100054k.">5</a>]</span>. Calling
 <code class="docutils literal notranslate"><span class="pre">setReciprocalExclusions(True)</span></code> moves these terms to the reciprocal-space force group.</p>
 </section>
 <section id="setting-it-up">
@@ -106,7 +106,7 @@ or they are counted twice.</p></li>
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="slicing.html">Subsets, slices and scaling parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decapping.html">Capped Lennard-Jones potential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="derivatives.html">Energy parameter derivatives</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Reciprocal-space force group and exclusion corrections</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>

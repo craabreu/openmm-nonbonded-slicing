@@ -20,7 +20,7 @@
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Soft-core Lennard-Jones potential" href="softcore.html" />
+    <link rel="next" title="Capped Lennard-Jones potential" href="decapping.html" />
     <link rel="prev" title="User Guide" href="index.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
@@ -82,26 +82,25 @@ it. A scaling parameter is a global parameter, declared with <code class="docuti
 </div>
 <p>The order of the two subsets in <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> is irrelevant. The same parameter can be applied to
 any number of slices, and a slice can take one parameter for its Coulomb part and another for its
-Lennard-Jones part. A sixth argument, <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code>, makes a parameter also soften the Lennard-Jones
-interactions of its slice; see <a class="reference internal" href="softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>.</p>
+Lennard-Jones part. A sixth argument, <code class="docutils literal notranslate"><span class="pre">includeDecapping</span></code>, makes a parameter multiply the decapping term of
+its slice; see <a class="reference internal" href="decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>.</p>
 </section>
 <section id="restrictions">
 <h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>A scaling parameter must have been added with <code class="docutils literal notranslate"><span class="pre">addGlobalParameter</span></code>, and it cannot double as the
-parameter of a particle or exception parameter offset.</p></li>
+<li><p>A scaling parameter must have been added with <code class="docutils literal notranslate"><span class="pre">addGlobalParameter</span></code>, and it cannot double as the parameter
+of a particle or exception parameter offset.</p></li>
 <li><p>Every call to <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> must give the parameter at least one role in the slice: Coulomb
-(<code class="docutils literal notranslate"><span class="pre">includeCoulomb</span></code>), Lennard-Jones (<code class="docutils literal notranslate"><span class="pre">includeLJ</span></code>) or softening (<code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>), and each role of a
-slice belongs to at most one parameter. A second parameter for a role that is already taken is an
-error.</p></li>
-<li><p>The set of scaling parameters, their roles and their <code class="docutils literal notranslate"><span class="pre">softcoreAlpha</span></code> values are read when a Context is
-created. Changes made afterwards with <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> or <code class="docutils literal notranslate"><span class="pre">setScalingParameter</span></code> take effect only
-after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code> method is called. The <em>values</em> of the parameters, in contrast, are
-read at every evaluation and can be changed at any time with the Context’s <code class="docutils literal notranslate"><span class="pre">setParameter</span></code> method.</p></li>
+(<code class="docutils literal notranslate"><span class="pre">includeCoulomb</span></code>), Lennard-Jones (<code class="docutils literal notranslate"><span class="pre">includeLJ</span></code>) or decapping (<code class="docutils literal notranslate"><span class="pre">includeDecapping</span></code>), and each role of a
+slice belongs to at most one parameter. A second parameter for a role that is already taken is an error.</p></li>
+<li><p>The set of scaling parameters and their roles are read when a Context is created. Changes made afterwards
+with <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> or <code class="docutils literal notranslate"><span class="pre">setScalingParameter</span></code> take effect only after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code>
+method is called. The <em>values</em> of the parameters, in contrast, are read at every evaluation and can be
+changed at any time with the Context’s <code class="docutils literal notranslate"><span class="pre">setParameter</span></code> method.</p></li>
 <li><p>Particle parameters, exception parameters and particle subsets can be changed in an existing Context with
 <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, with the same limitations as in NonbondedForce: other settings, such as the
-nonbonded method and the cutoff, are not updated (reinitialize the Context instead), the pair of
-particles of an exception cannot change, and particles or exceptions cannot be added.</p></li>
+nonbonded method and the cutoff, are not updated (reinitialize the Context instead), the pair of particles
+of an exception cannot change, and particles or exceptions cannot be added.</p></li>
 </ul>
 </section>
 </section>
@@ -138,7 +137,7 @@ particles of an exception cannot change, and particles or exceptions cannot be a
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Subsets, slices and scaling parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="softcore.html">Soft-core Lennard-Jones potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decapping.html">Capped Lennard-Jones potential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="derivatives.html">Energy parameter derivatives</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reciprocal.html">Reciprocal-space force group and exclusion corrections</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mts.html">Inner force group for multiple time stepping</a></li>

@@ -64,7 +64,7 @@ focuses on the reciprocal-space and background energy parts.</p>
 <h2>Sliced Background Energy<a class="headerlink" href="#sliced-background-energy" title="Link to this heading">¶</a></h2>
 <p>In the case of systems with non-zero net charge, it is necessary to add the energy of
 interaction with a neutralizing background charge. The background energy is given by
-<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">5</a>]</span></p>
+<span class="bibtex-citation" id="id1">[<a class="reference internal" href="references.html#id3" title="Francisco Figueirido, Gabriela S. Del Buono, and Ronald M. Levy. On finite-size effects in computer simulations using the ewald potential. The Journal of Chemical Physics, 103(14):6133–6142, October 1995. URL: http://dx.doi.org/10.1063/1.470721, doi:10.1063/1.470721.">7</a>]</span></p>
 <div class="math notranslate nohighlight">
 \[E_{bg} = \frac{Q^2}{8\epsilon_0 V \alpha^2}.\]</div>
 <p>where <span class="math notranslate nohighlight">\(Q = \sum_{i=1}^N q_i\)</span> is the total charge of the system.
@@ -140,7 +140,7 @@ S_I(\mathbf k) \cdot S_J(\mathbf k).\]</div>
 <section id="sliced-pme-implementation">
 <h2>Sliced PME Implementation<a class="headerlink" href="#sliced-pme-implementation" title="Link to this heading">¶</a></h2>
 <p>Each subset-specific structure factor <span class="math notranslate nohighlight">\(S(\mathbf k)\)</span> can be calculated using the smooth
-Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">6</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
+Particle Mesh Ewald method <span class="bibtex-citation" id="id2">[<a class="reference internal" href="references.html#id2" title="Ulrich Essmann, Lalith Perera, Max L. Berkowitz, Tom Darden, Hsing Lee, and Lee G. Pedersen. A smooth particle mesh ewald method. The Journal of Chemical Physics, 103(19):8577–8593, November 1995. URL: http://dx.doi.org/10.1063/1.470117, doi:10.1063/1.470117.">8</a>]</span>. This requires <em>n</em> FFT calculations for evaluating
 all slices. In the case of forces, <em>n</em> additional inverse FFT calculations are necessary.
 Therefore, in a single processor and for a fixed number of particles, the computational effort
 scales approximately linearly with the number of subsets (not the number of slices). In a GPU, as
@@ -151,7 +151,7 @@ package <a class="reference external" href="https://github.com/DTolm/VkFFT">vkFF
 <h2>Inner Force Group Energy<a class="headerlink" href="#inner-force-group-energy" title="Link to this heading">¶</a></h2>
 <p>When an inner force group is enabled, the inner force of a pair is <span class="math notranslate nohighlight">\(S(r)\)</span> times the bare
 Lennard-Jones plus Coulomb force, where <span class="math notranslate nohighlight">\(S\)</span> is the quintic switch of the force-directed
-switching scheme of <span class="bibtex-citation" id="id3">[<a class="reference internal" href="references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">4</a>]</span>. Writing the bare potential as <span class="math notranslate nohighlight">\(V(r) = \sum_n c_n r^{-n}\)</span>
+switching scheme of <span class="bibtex-citation" id="id3">[<a class="reference internal" href="references.html#id4" title="Charlles R. A. Abreu and Mark E. Tuckerman. Molecular dynamics with very large time steps for the calculation of solvation free energies. Journal of Chemical Theory and Computation, 16(12):7314–7327, November 2020. URL: http://dx.doi.org/10.1021/acs.jctc.0c00698, doi:10.1021/acs.jctc.0c00698.">6</a>]</span>. Writing the bare potential as <span class="math notranslate nohighlight">\(V(r) = \sum_n c_n r^{-n}\)</span>
 with <span class="math notranslate nohighlight">\(n \in \{12, 6, 1\}\)</span>, the energy whose gradient is that force, shifted to vanish at the
 inner cutoff <span class="math notranslate nohighlight">\(r_c\)</span>, is <span class="math notranslate nohighlight">\(\hat V(r) = \sum_n c_n e_n(r)\)</span> with</p>
 <div class="math notranslate nohighlight">
@@ -197,6 +197,11 @@ on all platforms and <span class="math notranslate nohighlight">\(e_1\)</span> o
 <span class="math notranslate nohighlight">\(10^{-9}\)</span> relative). These errors affect only the energies: the inner force is computed
 directly as <span class="math notranslate nohighlight">\(S(r)\)</span> times the bare force. The Reference platform and the constants of the GPU
 kernels are computed by the same code, in <code class="docutils literal notranslate"><span class="pre">InnerSplit.h</span></code>.</p>
+<p>In a decapped slice (<a class="reference internal" href="guide/decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>), the Lennard-Jones potential below <span class="math notranslate nohighlight">\(\sigma\)</span> is not
+the bare one. Since <span class="math notranslate nohighlight">\(\sigma\)</span> cannot exceed <span class="math notranslate nohighlight">\(r_s\)</span>, where <span class="math notranslate nohighlight">\(S = 1\)</span>, the inner group takes
+the whole interaction there: the capped force with energy <span class="math notranslate nohighlight">\(u_{cap}(r) - K_{LJ}\)</span>, where
+<span class="math notranslate nohighlight">\(K_{LJ} = 4\epsilon(\sigma^{12} K_{12} - \sigma^6 K_6)\)</span> is the constant the remainder reports for
+<span class="math notranslate nohighlight">\(r \le r_s\)</span>, and all of the decapping term. The remainder is the same as for the bare potential.</p>
 </section>
 </section>
 

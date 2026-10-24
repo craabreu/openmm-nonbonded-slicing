@@ -57,10 +57,10 @@ decomposition in place, the plugin offers four capabilities.</p>
 NonbondedForce it replaces. Selected scaling parameters can instead be tied to <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> global
 parameters, so that the van der Waals and electrostatic contributions of chosen slices are scaled up or
 down while a simulation runs. See <a class="reference internal" href="guide/slicing.html"><span class="doc">Subsets, slices and scaling parameters</span></a>.</p>
-<p><strong>Soft-core Lennard-Jones potential.</strong> A scaling parameter can also soften the Lennard-Jones interactions
-of its slice with the Beutler soft-core potential, which remains finite as particles overlap, so that a
-slice can be decoupled alchemically without the singularity of the usual potential. See
-<a class="reference internal" href="guide/softcore.html"><span class="doc">Soft-core Lennard-Jones potential</span></a>.</p>
+<p><strong>Capped Lennard-Jones potential.</strong> A scaling parameter can multiply the decapping term of its slice, which
+splits its Lennard-Jones interactions into a capped term, finite as particles overlap, and the rest of the
+usual potential, so that a slice can be decoupled alchemically without the singularity of the usual
+potential while the energy stays linear in every parameter. See <a class="reference internal" href="guide/decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>.</p>
 <p><strong>Energy parameter derivatives.</strong> The derivative of the energy with respect to a scaling parameter can be
 requested along with the energy, which gives the energy of a slice or of a group of slices. See
 <a class="reference internal" href="guide/derivatives.html"><span class="doc">Energy parameter derivatives</span></a>.</p>
