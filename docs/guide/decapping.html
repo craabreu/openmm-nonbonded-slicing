@@ -61,20 +61,18 @@ u_{cap}(r) = \begin{cases}
 u_{LJ}(r), &amp; r \ge \sigma
 \end{cases}
 \end{split}\]</div>
-<p>is a polynomial core. It is defined by two orders, <span class="math notranslate nohighlight">\(m_0\)</span> and <span class="math notranslate nohighlight">\(m_1\)</span>: <span class="math notranslate nohighlight">\(c(x)\)</span> is the polynomial of degree $m_0</p>
-<ul class="simple">
-<li><p>m_1<span class="math notranslate nohighlight">\( whose first \)</span>m_0<span class="math notranslate nohighlight">\( derivatives vanish at \)</span>x = 0<span class="math notranslate nohighlight">\( and whose value and first \)</span>m_1<span class="math notranslate nohighlight">\( derivatives match
-those of \)</span>x^{-12} - x^{-6}<span class="math notranslate nohighlight">\( at \)</span>x = 1<span class="math notranslate nohighlight">\(. The first condition leaves the terms \)</span>a_0<span class="math notranslate nohighlight">\( and \)</span>a_k x^k<span class="math notranslate nohighlight">\( for \)</span>k =
-m_0 + 1, \dots, m_0 + m_1<span class="math notranslate nohighlight">\(, and the second fixes their \)</span>m_1 + 1<span class="math notranslate nohighlight">\( coefficients. The core thus joins the usual
-potential smoothly, up to the \)</span>m_1<span class="math notranslate nohighlight">\(-th derivative, at \)</span>r = \sigma<span class="math notranslate nohighlight">\( and takes the finite value \)</span>4 \epsilon,
-a_0<span class="math notranslate nohighlight">\( at \)</span>r = 0<span class="math notranslate nohighlight">\(. The default orders, \)</span>m_0 = m_1 = 3$, give</p></li>
-</ul>
+<p>is a polynomial core. It is defined by two orders, <span class="math notranslate nohighlight">\(m_0\)</span> and <span class="math notranslate nohighlight">\(m_1\)</span>: <span class="math notranslate nohighlight">\(c(x)\)</span> is the polynomial of degree
+<span class="math notranslate nohighlight">\(m_0 + m_1\)</span> whose first <span class="math notranslate nohighlight">\(m_0\)</span> derivatives vanish at <span class="math notranslate nohighlight">\(x = 0\)</span> and whose value and first <span class="math notranslate nohighlight">\(m_1\)</span> derivatives
+match those of <span class="math notranslate nohighlight">\(x^{-12} - x^{-6}\)</span> at <span class="math notranslate nohighlight">\(x = 1\)</span>. The first condition leaves the terms <span class="math notranslate nohighlight">\(a_0\)</span> and <span class="math notranslate nohighlight">\(a_k x^k\)</span> for
+<span class="math notranslate nohighlight">\(k = m_0 + 1, \dots, m_0 + m_1\)</span>, and the second fixes their <span class="math notranslate nohighlight">\(m_1 + 1\)</span> coefficients. The core thus joins the
+usual potential smoothly, up to the <span class="math notranslate nohighlight">\(m_1\)</span>-th derivative, at <span class="math notranslate nohighlight">\(r = \sigma\)</span> and takes the finite value
+<span class="math notranslate nohighlight">\(4 \epsilon\, a_0\)</span> at <span class="math notranslate nohighlight">\(r = 0\)</span>. The default orders, <span class="math notranslate nohighlight">\(m_0 = m_1 = 3\)</span>, give</p>
 <div class="math notranslate nohighlight">
 \[
 c(x) = 29.8 - 360 x^4 + 547.2 x^5 - 217 x^6,
 \]</div>
-<p>with a core of <span class="math notranslate nohighlight">\(119.2\,\epsilon\)</span>. The decapping term vanishes for <span class="math notranslate nohighlight">\(r \ge \sigma\)</span>, and <span class="math notranslate nohighlight">\(\lambda_D =
-\lambda_{LJ}\)</span> gives the usual potential.</p>
+<p>with a core of <span class="math notranslate nohighlight">\(119.2\,\epsilon\)</span>. The decapping term vanishes for <span class="math notranslate nohighlight">\(r \ge \sigma\)</span>, and
+<span class="math notranslate nohighlight">\(\lambda_D = \lambda_{LJ}\)</span> gives the usual potential.</p>
 <p>The energy is linear in both parameters. The derivative with respect to <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> is the capped van der
 Waals energy of the slice, the one with respect to <span class="math notranslate nohighlight">\(\lambda_D\)</span> is its decapping energy, and their sum is the
 usual van der Waals energy (<a class="reference internal" href="derivatives.html"><span class="doc">Energy parameter derivatives</span></a>). One evaluation therefore gives the energy at any pair of
@@ -91,40 +89,66 @@ values, which is what reweighting estimators such as MBAR need.</p>
 </pre></div>
 </div>
 <p>The orders are set for the whole force with <code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code>, from 1 to 6 each. Lowering <span class="math notranslate nohighlight">\(m_0\)</span> or raising
-<span class="math notranslate nohighlight">\(m_1\)</span> raises the core, <span class="math notranslate nohighlight">\(4 \epsilon\, a_0\)</span>, in units of <span class="math notranslate nohighlight">\(\epsilon\)</span>:</p>
+<span class="math notranslate nohighlight">\(m_1\)</span> raises the core, <span class="math notranslate nohighlight">\(4 \epsilon\, a_0\)</span>, given here in units of <span class="math notranslate nohighlight">\(\epsilon\)</span> (rows: <span class="math notranslate nohighlight">\(m_0\)</span>; columns: <span class="math notranslate nohighlight">\(m_1\)</span>):</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(m_0\)</span> \ <span class="math notranslate nohighlight">\(m_1\)</span></p></th>
+<tr class="row-odd"><th class="head"><p></p></th>
 <th class="head"><p>1</p></th>
 <th class="head"><p>2</p></th>
 <th class="head"><p>3</p></th>
 <th class="head"><p>4</p></th>
+<th class="head"><p>5</p></th>
+<th class="head"><p>6</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>2</p></td>
+<tr class="row-even"><td><p><strong>1</strong></p></td>
+<td><p>12.0</p></td>
+<td><p>92.0</p></td>
+<td><p>440.0</p></td>
+<td><p>1640.0</p></td>
+<td><p>5184.0</p></td>
+<td><p>14523.4</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>2</strong></p></td>
 <td><p>8.0</p></td>
 <td><p>50.0</p></td>
 <td><p>206.0</p></td>
 <td><p>684.0</p></td>
+<td><p>1969.7</p></td>
+<td><p>5108.1</p></td>
 </tr>
-<tr class="row-odd"><td><p>3</p></td>
+<tr class="row-even"><td><p><strong>3</strong></p></td>
 <td><p>6.0</p></td>
 <td><p>32.4</p></td>
 <td><p>119.2</p></td>
 <td><p>361.3</p></td>
+<td><p>964.4</p></td>
+<td><p>2345.7</p></td>
 </tr>
-<tr class="row-even"><td><p>4</p></td>
+<tr class="row-odd"><td><p><strong>4</strong></p></td>
 <td><p>4.8</p></td>
 <td><p>23.2</p></td>
 <td><p>78.1</p></td>
 <td><p>219.7</p></td>
+<td><p>550.7</p></td>
+<td><p>1268.7</p></td>
 </tr>
-<tr class="row-odd"><td><p>5</p></td>
+<tr class="row-even"><td><p><strong>5</strong></p></td>
 <td><p>4.0</p></td>
 <td><p>17.7</p></td>
 <td><p>55.4</p></td>
 <td><p>146.7</p></td>
+<td><p>348.7</p></td>
+<td><p>766.8</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>6</strong></p></td>
+<td><p>3.4</p></td>
+<td><p>14.1</p></td>
+<td><p>41.7</p></td>
+<td><p>104.7</p></td>
+<td><p>237.8</p></td>
+<td><p>502.3</p></td>
 </tr>
 </tbody>
 </table>
