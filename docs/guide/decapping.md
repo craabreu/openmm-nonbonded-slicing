@@ -22,19 +22,19 @@ u_{LJ}(r), & r \ge \sigma
 \end{cases}
 $$
 
-is a polynomial core. It is defined by two orders, $m_0$ and $m_1$: $c(x)$ is the polynomial of degree $m_0
-+ m_1$ whose first $m_0$ derivatives vanish at $x = 0$ and whose value and first $m_1$ derivatives match
-those of $x^{-12} - x^{-6}$ at $x = 1$. The first condition leaves the terms $a_0$ and $a_k x^k$ for $k =
-m_0 + 1, \dots, m_0 + m_1$, and the second fixes their $m_1 + 1$ coefficients. The core thus joins the usual
-potential smoothly, up to the $m_1$-th derivative, at $r = \sigma$ and takes the finite value $4 \epsilon\,
-a_0$ at $r = 0$. The default orders, $m_0 = m_1 = 3$, give
+is a polynomial core. It is defined by two orders, $m_0$ and $m_1$: $c(x)$ is the polynomial of degree
+$m_0 + m_1$ whose first $m_0$ derivatives vanish at $x = 0$ and whose value and first $m_1$ derivatives
+match those of $x^{-12} - x^{-6}$ at $x = 1$. The first condition leaves the terms $a_0$ and $a_k x^k$ for
+$k = m_0 + 1, \dots, m_0 + m_1$, and the second fixes their $m_1 + 1$ coefficients. The core thus joins the
+usual potential smoothly, up to the $m_1$-th derivative, at $r = \sigma$ and takes the finite value
+$4 \epsilon\, a_0$ at $r = 0$. The default orders, $m_0 = m_1 = 3$, give
 
 $$
 c(x) = 29.8 - 360 x^4 + 547.2 x^5 - 217 x^6,
 $$
 
-with a core of $119.2\,\epsilon$. The decapping term vanishes for $r \ge \sigma$, and $\lambda_D =
-\lambda_{LJ}$ gives the usual potential.
+with a core of $119.2\,\epsilon$. The decapping term vanishes for $r \ge \sigma$, and
+$\lambda_D = \lambda_{LJ}$ gives the usual potential.
 
 The energy is linear in both parameters. The derivative with respect to $\lambda_{LJ}$ is the capped van der
 Waals energy of the slice, the one with respect to $\lambda_D$ is its decapping energy, and their sum is the
