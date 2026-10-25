@@ -22,19 +22,19 @@ u_{LJ}(r), & r \ge \sigma
 \end{cases}
 $$
 
-is a polynomial core. It is defined by two orders, $m_0$ and $m_1$: $c(x)$ is the polynomial of degree $m_0
-+ m_1$ whose first $m_0$ derivatives vanish at $x = 0$ and whose value and first $m_1$ derivatives match
-those of $x^{-12} - x^{-6}$ at $x = 1$. The first condition leaves the terms $a_0$ and $a_k x^k$ for $k =
-m_0 + 1, \dots, m_0 + m_1$, and the second fixes their $m_1 + 1$ coefficients. The core thus joins the usual
-potential smoothly, up to the $m_1$-th derivative, at $r = \sigma$ and takes the finite value $4 \epsilon\,
-a_0$ at $r = 0$. The default orders, $m_0 = m_1 = 3$, give
+is a polynomial core. It is defined by two orders, $m_0$ and $m_1$: $c(x)$ is the polynomial of degree
+$m_0 + m_1$ whose first $m_0$ derivatives vanish at $x = 0$ and whose value and first $m_1$ derivatives
+match those of $x^{-12} - x^{-6}$ at $x = 1$. The first condition leaves the terms $a_0$ and $a_k x^k$ for
+$k = m_0 + 1, \dots, m_0 + m_1$, and the second fixes their $m_1 + 1$ coefficients. The core thus joins the
+usual potential smoothly, up to the $m_1$-th derivative, at $r = \sigma$ and takes the finite value
+$4 \epsilon\, a_0$ at $r = 0$. The default orders, $m_0 = m_1 = 3$, give
 
 $$
 c(x) = 29.8 - 360 x^4 + 547.2 x^5 - 217 x^6,
 $$
 
-with a core of $119.2\,\epsilon$. The decapping term vanishes for $r \ge \sigma$, and $\lambda_D =
-\lambda_{LJ}$ gives the usual potential.
+with a core of $119.2\,\epsilon$. The decapping term vanishes for $r \ge \sigma$, and
+$\lambda_D = \lambda_{LJ}$ gives the usual potential.
 
 The energy is linear in both parameters. The derivative with respect to $\lambda_{LJ}$ is the capped van der
 Waals energy of the slice, the one with respect to $\lambda_D$ is its decapping energy, and their sum is the
@@ -53,14 +53,16 @@ force.addScalingParameter("lambdaD", 0, 1, False, False, True)
 ```
 
 The orders are set for the whole force with `setCappingOrders`, from 1 to 6 each. Lowering $m_0$ or raising
-$m_1$ raises the core, $4 \epsilon\, a_0$, in units of $\epsilon$:
+$m_1$ raises the core, $4 \epsilon\, a_0$, given here in units of $\epsilon$ (rows: $m_0$; columns: $m_1$):
 
-| $m_0$ \ $m_1$ | 1 | 2 | 3 | 4 |
-|---|---|---|---|---|
-| 2 | 8.0 | 50.0 | 206.0 | 684.0 |
-| 3 | 6.0 | 32.4 | 119.2 | 361.3 |
-| 4 | 4.8 | 23.2 | 78.1 | 219.7 |
-| 5 | 4.0 | 17.7 | 55.4 | 146.7 |
+| | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| **1** | 12.0 | 92.0 | 440.0 | 1640.0 | 5184.0 | 14523.4 |
+| **2** | 8.0 | 50.0 | 206.0 | 684.0 | 1969.7 | 5108.1 |
+| **3** | 6.0 | 32.4 | 119.2 | 361.3 | 964.4 | 2345.7 |
+| **4** | 4.8 | 23.2 | 78.1 | 219.7 | 550.7 | 1268.7 |
+| **5** | 4.0 | 17.7 | 55.4 | 146.7 | 348.7 | 766.8 |
+| **6** | 3.4 | 14.1 | 41.7 | 104.7 | 237.8 | 502.3 |
 
 ```python
 force.setCappingOrders(2, 4)    # a core of 684 epsilon
