@@ -53,14 +53,16 @@ force.addScalingParameter("lambdaD", 0, 1, False, False, True)
 ```
 
 The orders are set for the whole force with `setCappingOrders`, from 1 to 6 each. Lowering $m_0$ or raising
-$m_1$ raises the core, $4 \epsilon\, a_0$, in units of $\epsilon$:
+$m_1$ raises the core, $4 \epsilon\, a_0$, given here in units of $\epsilon$ (rows: $m_0$; columns: $m_1$):
 
-| $m_0$ \ $m_1$ | 1 | 2 | 3 | 4 |
-|---|---|---|---|---|
-| 2 | 8.0 | 50.0 | 206.0 | 684.0 |
-| 3 | 6.0 | 32.4 | 119.2 | 361.3 |
-| 4 | 4.8 | 23.2 | 78.1 | 219.7 |
-| 5 | 4.0 | 17.7 | 55.4 | 146.7 |
+| | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| **1** | 12.0 | 92.0 | 440.0 | 1640.0 | 5184.0 | 14523.4 |
+| **2** | 8.0 | 50.0 | 206.0 | 684.0 | 1969.7 | 5108.1 |
+| **3** | 6.0 | 32.4 | 119.2 | 361.3 | 964.4 | 2345.7 |
+| **4** | 4.8 | 23.2 | 78.1 | 219.7 | 550.7 | 1268.7 |
+| **5** | 4.0 | 17.7 | 55.4 | 146.7 | 348.7 | 766.8 |
+| **6** | 3.4 | 14.1 | 41.7 | 104.7 | 237.8 | 502.3 |
 
 ```python
 force.setCappingOrders(2, 4)    # a core of 684 epsilon
