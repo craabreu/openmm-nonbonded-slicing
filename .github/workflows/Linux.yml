@@ -79,7 +79,8 @@ jobs:
         run: |
           cd build
           # On the CPU OpenCL device each precision takes ~10 min; mixed covers the shared kernels
-          ctest --output-on-failure --parallel 4 --exclude-regex 'TestCuda|TestOpenCLSlicedNonbondedForce(Single|Double)'
+          # pocl gets double-precision FFTs wrong (the same test passes on NVIDIA's OpenCL)
+          ctest --output-on-failure --parallel 4 --exclude-regex 'TestCuda|TestOpenCLSlicedNonbondedForce(Single|Double)|TestOpenCLVkFFT3DDouble'
 
       - name: "Run Python test"
         shell: bash -l {0}
