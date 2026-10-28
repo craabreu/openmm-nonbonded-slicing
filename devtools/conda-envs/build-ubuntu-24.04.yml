@@ -10,7 +10,7 @@ dependencies:
   - libcufft-dev
   - gxx_linux-64 =@COMPILER_VERSION@
   - make
-  - ocl-icd-system
+  - pocl-cpu
   - opencl-headers
   - openmm =@OPENMM_VERSION@
   - pip >=22.2
