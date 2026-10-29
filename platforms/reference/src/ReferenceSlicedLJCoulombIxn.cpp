@@ -35,7 +35,8 @@ using namespace OpenMM;
    --------------------------------------------------------------------------------------- */
 
 ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false),
-            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false) {
+            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false),
+            coulombDecapping(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -168,6 +169,11 @@ void ReferenceSlicedLJCoulombIxn::setDecappedSlices(const vector<bool>& decapped
 
 void ReferenceSlicedLJCoulombIxn::setCappedLJ(const CappedLJ& capped) {
     cappedLJ = capped;
+}
+
+void ReferenceSlicedLJCoulombIxn::setCoulombDecapping(bool decapping, const CappedCoulomb& capped) {
+    coulombDecapping = decapping;
+    cappedCoulomb = capped;
 }
 
 void ReferenceSlicedLJCoulombIxn::setInnerSplit(const InnerSplit& split) {
@@ -546,8 +552,9 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         }
         double alphaR = alphaEwald*r;
 
-        double dEdRCoul = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*inverseR*inverseR;
-        dEdRCoul *= erfc(alphaR) + 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI;
+        double qq = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
+        double coulEnergy = qq*inverseR*erfc(alphaR);
+        double coulRdUdr = qq*inverseR*(erfc(alphaR) + 2*alphaR*exp(-alphaR*alphaR)/SQRT_PI);
 
         double sig = atomParameters[ii][SigIndex] +  atomParameters[jj][SigIndex];
         double sig2 = inverseR*sig;
@@ -560,8 +567,12 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). With an
         // inner force group, both belong to the inner part.
         double decapEnergy = 0.0, decapRdUdr = 0.0;
-        if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
+        if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0) {
             cappedLJ.split(1.0/(inverseR*sig), eps, vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
+            if (coulombDecapping)
+                splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapEnergy, decapRdUdr);
+        }
+        double dEdRCoul = coulRdUdr*inverseR*inverseR;
         // With an inner force group, the remainder of a decapped pair below sigma has no bare Lennard-Jones term, only
         // the constant of the inner split, which is set directly rather than as the difference of two terms of order x^-12
         bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
@@ -630,9 +641,35 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         // accumulate energies
         sliceEnergies[slice][vdW] += vdwEnergy;
         sliceEnergies[slice][decap] += decapEnergy;
-        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR*erfc(alphaR);
+        sliceEnergies[slice][Coul] += coulEnergy;
     }
 
+}
+
+/**---------------------------------------------------------------------------------------
+
+   Cap the Coulomb interaction of a pair of a decapped slice below sigma: its 1/r part is replaced by the capped
+   potential, and the difference joins the decapping term. On input, coulEnergy and coulRdUdr hold the full direct-space
+   Coulomb energy and -r dU/dr of the pair (whatever the method), which must include the bare 1/r term.
+
+   @param inverseR     1/r
+   @param sig          sigma
+   @param qq           q_i q_j/(4 pi eps0)
+   @param coulEnergy   the Coulomb energy (in/out)
+   @param coulRdUdr    -r dU/dr of the Coulomb term (in/out)
+   @param decapEnergy  the decapping energy (added to)
+   @param decapRdUdr   -r dU/dr of the decapping term (added to)
+
+   --------------------------------------------------------------------------------------- */
+
+void ReferenceSlicedLJCoulombIxn::splitCoulomb(double inverseR, double sig, double qq, double& coulEnergy, double& coulRdUdr,
+                                               double& decapEnergy, double& decapRdUdr) const {
+    double bareEnergy = qq*inverseR, bareRdUdr = qq*inverseR, decapQEnergy, decapQRdUdr;
+    cappedCoulomb.split(1.0/(inverseR*sig), qq/sig, bareEnergy, bareRdUdr, decapQEnergy, decapQRdUdr);
+    coulEnergy += bareEnergy - qq*inverseR;
+    coulRdUdr += bareRdUdr - qq*inverseR;
+    decapEnergy += decapQEnergy;
+    decapRdUdr += decapQRdUdr;
 }
 
 
@@ -734,22 +771,24 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     double eps = atomParameters[ii][EpsIndex]*atomParameters[jj][EpsIndex];
     double energy = eps*(sig6-1.0)*sig6;
     double rdUdr = eps*(12.0*sig6-6.0)*sig6;
+    double qq = ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex];
+    double coulEnergy = cutoff ? qq*(inverseR+krf*r2-crf) : qq*inverseR;
+    double coulRdUdr = cutoff ? qq*(inverseR-2.0*krf*r2) : qq*inverseR;
 
     // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). With an
     // inner force group, both belong to the inner part.
     double decapEnergy = 0.0, decapRdUdr = 0.0;
-    if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0)
+    if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0) {
         cappedLJ.split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
+        if (coulombDecapping)
+            splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapEnergy, decapRdUdr);
+    }
     // See calculatePairIxn
     bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
     if (decappedRemainder)
         energy = rdUdr = 0.0;
     double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
-    double dEdRCoul = inverseR*inverseR;
-    if (cutoff)
-        dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR-2.0f*krf*r2);
-    else
-        dEdRCoul *= ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+    double dEdRCoul = coulRdUdr*inverseR*inverseR;
     if (useSwitch) {
         dEdRvdW -= energy*switchDeriv*inverseR;
         energy *= switchValue;
@@ -771,10 +810,7 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     }
     sliceEnergies[slice][vdW] += energy;
     sliceEnergies[slice][decap] += decapEnergy;
-    if (cutoff)
-        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*(inverseR+krf*r2-crf);
-    else
-        sliceEnergies[slice][Coul] += ONE_4PI_EPS0*atomParameters[ii][QIndex]*atomParameters[jj][QIndex]*inverseR;
+    sliceEnergies[slice][Coul] += coulEnergy;
 
 
     // accumulate forces

@@ -24,19 +24,29 @@ namespace NonbondedSlicing {
 const double MaxDecapSig6 = 1e18;
 
 /**
- * The capped Lennard-Jones potential of Correa et al. (J. Chem. Theory Comput. 18, 5876, 2022). For x = r/sigma < 1,
- * the bare potential 4 epsilon (x^-12 - x^-6) is replaced by 4 epsilon c(x), where c(x) is the polynomial of degree
- * m0 + m1 whose first m0 derivatives vanish at x = 0 and whose value and first m1 derivatives match those of
- * x^-12 - x^-6 at x = 1. The first condition leaves the constant a_0 and the terms a_k x^k for k = m0+1, ..., m0+m1,
- * and the second determines these m1+1 coefficients. With m0 = m1 = 3, the capped potential is 119.2 epsilon at x = 0.
- * The decapping term is the bare potential minus the capped one, which is zero for x >= 1. The GPU kernels evaluate the
- * same polynomial, with these coefficients written into their source.
+ * The same bound on sigma/r in the bare Coulomb part of the decapping term (x >= 1e-3).
  */
-class CappedLJ {
+const double MaxDecapInvX = 1e3;
+
+/**
+ * A capped power-law potential. For x = r/sigma < 1, a bare potential of the form sum_i k_i x^(p_i) is replaced by the
+ * polynomial c(x) of degree m0 + m1 whose first m0 derivatives vanish at x = 0 and whose value and first m1 derivatives
+ * match those of the bare potential at x = 1. The first condition leaves the constant a_0 and the terms a_k x^k for
+ * k = m0+1, ..., m0+m1, and the second determines these m1+1 coefficients. The decapping term is the bare potential
+ * minus the capped one, which is zero for x >= 1. The GPU kernels evaluate the same polynomial, with these coefficients
+ * written into their source.
+ */
+class CappedPotential {
 public:
     /** The largest order accepted for m0 and m1: beyond it, the coefficients grow and cancel near x = 1. */
     static const int MaxOrder = 6;
-    CappedLJ(int orderAtZero = 3, int orderAtSigma = 3) : m0(orderAtZero), m1(orderAtSigma) {
+    /**
+     * @param orderAtZero   m0
+     * @param orderAtSigma  m1
+     * @param bareTerms     the bare potential, as pairs (p_i, k_i) of a power of x and its coefficient
+     */
+    CappedPotential(int orderAtZero, int orderAtSigma, const std::vector<std::pair<int, double>>& bareTerms) :
+            m0(orderAtZero), m1(orderAtSigma) {
         // Conditions n = 0, ..., m1 at x = 1 on the unknowns (a_0, a_{m0+1}, ..., a_{m0+m1}), with the n-th
         // derivative of x^p at x = 1 being the falling factorial p(p-1)...(p-n+1)
         int size = m1+1;
@@ -45,7 +55,8 @@ public:
             matrix[n][0] = (n == 0 ? 1.0 : 0.0);
             for (int j = 1; j < size; j++)
                 matrix[n][j] = fallingFactorial(m0+j, n);
-            matrix[n][size] = fallingFactorial(-12, n) - fallingFactorial(-6, n);
+            for (auto& term : bareTerms)
+                matrix[n][size] += term.second*fallingFactorial(term.first, n);
         }
         // Gaussian elimination with partial pivoting
         for (int i = 0; i < size; i++) {
@@ -71,16 +82,16 @@ public:
     int getOrderAtSigma() const {
         return m1;
     }
-    /** The constant term a_0, in units of 4 epsilon. */
+    /** The constant term a_0, in units of the bare potential's prefactor. */
     double getConstant() const {
         return a0;
     }
-    /** The coefficients a_{m0+1}, ..., a_{m0+m1}, in units of 4 epsilon. */
+    /** The coefficients a_{m0+1}, ..., a_{m0+m1}, in units of the bare potential's prefactor. */
     const std::vector<double>& getCoefficients() const {
         return a;
     }
     /**
-     * The capped potential and -r dU/dr at x = r/sigma < 1, in units of 4 epsilon.
+     * The capped potential and -r dU/dr at x = r/sigma < 1, in units of the bare potential's prefactor.
      */
     void evaluate(double x, double& energy, double& rForce) const {
         double poly = 0.0, rPoly = 0.0;
@@ -93,17 +104,18 @@ public:
         rForce = -xp*rPoly;
     }
     /**
-     * Split the Lennard-Jones terms of a pair at x = r/sigma < 1 into its capped and decapping parts. On input, energy
-     * and rForce are the bare energy and -r dU/dr; on output, they are the capped ones, computed directly so as to
-     * remain accurate as x goes to zero, and decapEnergy and decapRForce are the bare minus the capped ones.
+     * Split the bare terms of a pair at x = r/sigma < 1 into its capped and decapping parts. On input, energy and
+     * rForce are the bare energy and -r dU/dr; on output, they are the capped ones, computed directly so as to remain
+     * accurate as x goes to zero, and decapEnergy and decapRForce are the bare minus the capped ones.
      *
-     * @param eps   4 epsilon
+     * @param prefactor  the prefactor of the bare potential (4 epsilon for Lennard-Jones, q_i q_j/(4 pi eps0 sigma)
+     *                   for Coulomb)
      */
-    void split(double x, double eps, double& energy, double& rForce, double& decapEnergy, double& decapRForce) const {
+    void split(double x, double prefactor, double& energy, double& rForce, double& decapEnergy, double& decapRForce) const {
         double capEnergy, capRForce;
         evaluate(x, capEnergy, capRForce);
-        capEnergy *= eps;
-        capRForce *= eps;
+        capEnergy *= prefactor;
+        capRForce *= prefactor;
         decapEnergy = energy - capEnergy;
         decapRForce = rForce - capRForce;
         energy = capEnergy;
@@ -119,6 +131,28 @@ private:
     int m0, m1;
     double a0;
     std::vector<double> a;
+};
+
+/**
+ * The capped Lennard-Jones potential of Correa et al. (J. Chem. Theory Comput. 18, 5876, 2022): the bare potential is
+ * 4 epsilon (x^-12 - x^-6), so the prefactor is 4 epsilon. With m0 = m1 = 3, the capped potential is 119.2 epsilon
+ * at x = 0.
+ */
+class CappedLJ : public CappedPotential {
+public:
+    CappedLJ(int orderAtZero = 3, int orderAtSigma = 3) : CappedPotential(orderAtZero, orderAtSigma, {{-12, 1.0}, {-6, -1.0}}) {
+    }
+};
+
+/**
+ * The capped Coulomb potential (see SlicedNonbondedForce::setCoulombDecapping): the bare potential is
+ * q_i q_j/(4 pi eps0 sigma) x^-1, so the prefactor is q_i q_j/(4 pi eps0 sigma). With m0 = m1 = 3, the capped
+ * potential is 1.75 times the bare one at x = 1.
+ */
+class CappedCoulomb : public CappedPotential {
+public:
+    CappedCoulomb(int orderAtZero = 3, int orderAtSigma = 3) : CappedPotential(orderAtZero, orderAtSigma, {{-1, 1.0}}) {
+    }
 };
 
 } // namespace NonbondedSlicing

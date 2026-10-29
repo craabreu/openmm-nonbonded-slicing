@@ -14,11 +14,13 @@
 #else
     const real qq = 0.0f;
 #endif
-#if HAS_LENNARD_JONES
+#if HAS_LENNARD_JONES || COULOMB_DECAPPING
     real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
     real sig2 = invR*sig;
     sig2 *= sig2;
     real sig6 = sig2*sig2*sig2;
+#endif
+#if HAS_LENNARD_JONES
     real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
     real epssig6 = sig6*eps;
 #endif
@@ -64,8 +66,8 @@
             capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
             const real capForce = -eps*xp*(CAP_RPOLY);
             const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
-            decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
-            decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+            decapForce += eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+            decapEnergy += eps*sig6d*(sig6d - 1.0f) - capEnergy;
             innerForceLJ = capForce;
         }
 #endif
@@ -160,6 +162,30 @@
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
     real clEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
+    real clForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+#if COULOMB_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped Coulomb potential in place of the 1/r part of erfc(alpha*r)/r,
+    // leaving -erf(alpha*r)/r, which is finite at r = 0 and computed from its series there (see CappedLJ.h)
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real qqOverSig = qq*RECIP(sig);
+        const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+        const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+        const real bare = qq*min(invR, (real) CAP_MAX_INVX*RECIP(sig));   // bounded to stay finite
+        decapForce += bare - capForce;
+        decapEnergy += bare - capEnergy;
+        real erfOverR;
+        if (alphaR < 0.1f) {
+            const real a2 = alphaR*alphaR;
+            erfOverR = EWALD_ALPHA*TWO_OVER_SQRT_PI*(1.0f - a2*(1.0f/3.0f - a2*(0.1f - a2*(1.0f/42.0f))));
+        }
+        else
+            erfOverR = (1.0f-erfcAlphaR)*invR;
+        clEnergy = capEnergy - qq*erfOverR;
+        clForce = capForce - qq*(erfOverR - EWALD_ALPHA*TWO_OVER_SQRT_PI*expAlphaRSqr);
+    }
+#endif
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
@@ -173,8 +199,8 @@
         const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
         const real capForce = -eps*xp*(CAP_RPOLY);
         const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
-        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
-        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+        decapForce += eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy += eps*sig6d*(sig6d - 1.0f) - capEnergy;
         tempForce = capForce;
         ljEnergy = capEnergy;
     }
@@ -234,7 +260,7 @@
     tempForce += decapLambda*decapForce;
     tempEnergy += decapLambda*decapEnergy;
 #endif
-    tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempForce += clLambda*clForce;
 #if SUBTRACT_INNER
     tempForce -= innerForce;
     ljEnergy -= innerEnergyLJ;
@@ -242,7 +268,11 @@
 #endif
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
 #else
-    tempForce = clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempForce = clLambda*clForce;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
+#endif
 #if SUBTRACT_INNER
     tempForce -= innerForce;
     clEnergy -= innerEnergyCl;
@@ -268,8 +298,8 @@
         const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
         const real capForce = -eps*xp*(CAP_RPOLY);
         const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
-        decapForce = eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
-        decapEnergy = eps*sig6d*(sig6d - 1.0f) - capEnergy;
+        decapForce += eps*sig6d*(12.0f*sig6d - 6.0f) - capForce;
+        decapEnergy += eps*sig6d*(sig6d - 1.0f) - capEnergy;
         tempForce = capForce;
         ljEnergy = capEnergy;
     }
@@ -295,10 +325,6 @@
     }
     #endif
     tempForce *= ljLambda;
-#if HAS_DECAPPING && !SUBTRACT_INNER
-    tempForce += decapLambda*decapForce;
-    tempEnergy += decapLambda*decapEnergy;
-#endif
 #if SUBTRACT_INNER
     ljEnergy -= innerEnergyLJ;
 #endif
@@ -308,24 +334,50 @@
   #ifdef USE_CUTOFF
     const real prefactor = qq;
     real clEnergy = includeInteraction ? prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C) : 0;
+    real clForce = prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
 #if SUBTRACT_INNER
     if (innerIsBare)
         clEnergy = prefactor*(INNER_K1_MINUS_RF_C + REACTION_FIELD_K*r2);
 #endif
-    tempForce += clLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
   #else
     const real prefactor = qq*invR;
     real clEnergy = includeInteraction ? prefactor : 0;
+    real clForce = prefactor;
 #if SUBTRACT_INNER
     if (innerIsBare)
         clEnergy = qq*INNER_K1;
 #endif
-    tempForce += clLambda*prefactor;
   #endif
+#if COULOMB_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a decapped slice takes the capped Coulomb potential in place of the 1/r term (see CappedLJ.h)
+    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real qqOverSig = qq*RECIP(sig);
+        const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+        const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+        const real bare = qq*min(invR, (real) CAP_MAX_INVX*RECIP(sig));   // bounded to stay finite
+        decapForce += bare - capForce;
+        decapEnergy += bare - capEnergy;
+  #ifdef USE_CUTOFF
+        clEnergy = capEnergy + qq*(REACTION_FIELD_K*r2 - REACTION_FIELD_C);
+        clForce = capForce - 2.0f*qq*REACTION_FIELD_K*r2;
+  #else
+        clEnergy = capEnergy;
+        clForce = capForce;
+  #endif
+    }
+#endif
+    tempForce += clLambda*clForce;
 #if SUBTRACT_INNER
     clEnergy -= innerEnergyCl;
 #endif
     tempEnergy += clLambda*clEnergy;
+#endif
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // The decapping term, with its Lennard-Jones and (if Coulomb decapping is on) Coulomb parts
+    tempForce += decapLambda*decapForce;
+    tempEnergy += decapLambda*decapEnergy;
 #endif
 #if SUBTRACT_INNER
     tempForce -= innerForce;

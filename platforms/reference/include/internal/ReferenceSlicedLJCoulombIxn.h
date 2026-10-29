@@ -35,6 +35,8 @@ class ReferenceSlicedLJCoulombIxn {
       double cutoffDistance, switchingDistance;
       InnerSplit innerSplit;
       CappedLJ cappedLJ;
+      CappedCoulomb cappedCoulomb;
+      bool coulombDecapping;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
@@ -69,6 +71,9 @@ class ReferenceSlicedLJCoulombIxn {
       void calculateOneIxn(int atom1, int atom2, vector<OpenMM::Vec3>& atomCoordinates, const vector<int>& atomSubsets,
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
                            vector<vector<double>>& sliceEnergies) const;
+
+      void splitCoulomb(double inverseR, double sig, double qq, double& coulEnergy, double& coulRdUdr,
+                        double& decapEnergy, double& decapRdUdr) const;
 
       void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool decapped,
                               double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy,
@@ -199,6 +204,18 @@ class ReferenceSlicedLJCoulombIxn {
          --------------------------------------------------------------------------------------- */
 
       void setCappedLJ(const CappedLJ& capped);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set whether the decapping term of the decapped slices includes the Coulomb interaction, and
+         the capped Coulomb potential.
+
+         @param decapping  whether Coulomb interactions are decapped
+         @param capped     the capped Coulomb potential
+
+         --------------------------------------------------------------------------------------- */
+
+      void setCoulombDecapping(bool decapping, const CappedCoulomb& capped);
 
       /**---------------------------------------------------------------------------------------
 

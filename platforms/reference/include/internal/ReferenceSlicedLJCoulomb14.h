@@ -78,6 +78,18 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
+       Set whether the decapping term of the decapped slices includes the Coulomb interaction, and
+       the capped Coulomb potential.
+
+       @param decapping  whether Coulomb interactions are decapped
+       @param capped     the capped Coulomb potential
+
+       --------------------------------------------------------------------------------------- */
+
+    void setCoulombDecapping(bool decapping, const CappedCoulomb& capped);
+
+    /**---------------------------------------------------------------------------------------
+
        Calculate nonbonded 1-4 interactinos
 
        @param atomIndices      atom indices of the atoms in each pair
@@ -104,6 +116,8 @@ private:
    OpenMM::Vec3 periodicBoxVectors[3];
    InnerSplit innerSplit;
    CappedLJ cappedLJ;
+   CappedCoulomb cappedCoulomb;
+   bool coulombDecapping;
 };
 
 } // namespace NonbondedSlicing

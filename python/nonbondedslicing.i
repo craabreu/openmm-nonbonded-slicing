@@ -458,6 +458,33 @@ public:
      */
     void setCappingOrders(int orderAtZero, int orderAtSigma);
     /**
+     * Get whether the decapping term of decapped slices includes the Coulomb interaction. The default is
+     * ``False``.
+     */
+    bool getCoulombDecapping() const;
+    /**
+     * Set whether the decapping term of decapped slices includes the Coulomb interaction. If so, the Coulomb
+     * term of every pair in a decapped slice, whatever its epsilon, is capped below :math:`r = \\sigma` like
+     * the Lennard-Jones one: the :math:`1/r` part of its direct-space potential is replaced by
+     * :math:`c(r/\\sigma)/\\sigma`, where :math:`c(x)` is the polynomial of degree :math:`m_0 + m_1` whose
+     * first :math:`m_0` derivatives vanish at :math:`x = 0` and whose value and first :math:`m_1` derivatives
+     * match those of :math:`1/x` at :math:`x = 1`, with the orders of :func:`setCappingOrders`. The rest of
+     * the direct-space potential (the :math:`\\mathrm{erf}(\\alpha r)/r` part with Ewald, PME and LJPME,
+     * or the reaction-field terms) and the reciprocal space are unchanged. The decapping term of the slice
+     * then also includes :math:`q_i q_j (1/r - c(r/\\sigma)/\\sigma)/(4 \\pi \\epsilon_0)` below
+     * :math:`\\sigma`, which is the same for every nonbonded method and for exceptions. Since every pair of a
+     * decapped slice is then capped, the sigma of every particle of its subsets and of every exception with a
+     * nonzero charge product, including those with zero epsilon, cannot exceed the switching distance when a
+     * switching function is used. This setting is fixed when a Context is created, and it cannot be combined
+     * with an inner force group.
+     *
+     * Parameters
+     * ----------
+     *     decapping : bool
+     *         whether to include the Coulomb interaction in the decapping term
+     */
+    void setCoulombDecapping(bool decapping);
+    /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the value of an energy slice or a sum thereof. For a decapped
      * slice (see the ``includeDecapping`` argument of :func:`addScalingParameter`), the derivative with

@@ -68,6 +68,28 @@ public:
      * the usual potential at r = sigma.  Both orders must be between 1 and 6.  They are fixed when a Context is created.
      */
     void setCappingOrders(int orderAtZero, int orderAtSigma);
+    /**
+     * Get whether the decapping term of decapped slices includes the Coulomb interaction (the default is false).
+     */
+    bool getCoulombDecapping() const {
+        return coulombDecapping;
+    }
+    /**
+     * Set whether the decapping term of decapped slices includes the Coulomb interaction.  If so, the Coulomb term of
+     * every pair in a decapped slice (whatever its epsilon) is capped below r = sigma, like the Lennard-Jones one: the
+     * 1/r part of its direct-space potential is replaced by c(r/sigma)/sigma, where c(x) is the polynomial of degree
+     * m0 + m1 whose first m0 derivatives vanish at x = 0 and whose value and first m1 derivatives match those of 1/x at
+     * x = 1, with the orders of setCappingOrders().  The rest of the direct-space potential (the erf(alpha r)/r part
+     * with Ewald, PME and LJPME, or the reaction-field terms) and the reciprocal space are unchanged.  The decapping
+     * term of the slice then also includes q_i q_j (1/r - c(r/sigma)/sigma)/(4 pi eps0) below sigma, which is the
+     * same for every nonbonded method and for exceptions.  Since every pair of a decapped slice is then capped, the
+     * sigma of every particle of its subsets and of every exception with a nonzero charge product, including those
+     * with zero epsilon, cannot exceed the switching distance when a switching function is used.  This setting is
+     * fixed when a Context is created, and it cannot be combined with an inner force group.
+     */
+    void setCoulombDecapping(bool decapping) {
+        coulombDecapping = decapping;
+    }
     int addEnergyParameterDerivative(const std::string& parameter);
     const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
@@ -121,6 +143,7 @@ private:
     int innerForceGroup;
     double innerCutoff, innerSwitchingDistance;
     int cappingOrderAtZero, cappingOrderAtSigma;
+    bool coulombDecapping;
 };
 
 /**

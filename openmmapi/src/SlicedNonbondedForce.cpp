@@ -32,7 +32,7 @@ using namespace NonbondedSlicing;
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true),
         reciprocalExclusions(false), innerForceGroup(-1), innerCutoff(0.0), innerSwitchingDistance(0.0),
-        cappingOrderAtZero(3), cappingOrderAtSigma(3) {
+        cappingOrderAtZero(3), cappingOrderAtSigma(3), coulombDecapping(false) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : NonbondedForce() {
@@ -43,6 +43,7 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     innerCutoff = 0.0;
     innerSwitchingDistance = 0.0;
     cappingOrderAtZero = cappingOrderAtSigma = 3;
+    coulombDecapping = false;
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
@@ -121,8 +122,8 @@ int SlicedNonbondedForce::getParticleSubset(int index) const {
 }
 
 void SlicedNonbondedForce::setCappingOrders(int orderAtZero, int orderAtSigma) {
-    if (orderAtZero < 1 || orderAtZero > CappedLJ::MaxOrder || orderAtSigma < 1 || orderAtSigma > CappedLJ::MaxOrder)
-        throw OpenMMException("SlicedNonbondedForce: the capping orders must be between 1 and "+to_string(CappedLJ::MaxOrder));
+    if (orderAtZero < 1 || orderAtZero > CappedPotential::MaxOrder || orderAtSigma < 1 || orderAtSigma > CappedPotential::MaxOrder)
+        throw OpenMMException("SlicedNonbondedForce: the capping orders must be between 1 and "+to_string(CappedPotential::MaxOrder));
     cappingOrderAtZero = orderAtZero;
     cappingOrderAtSigma = orderAtSigma;
 }

@@ -186,6 +186,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     reciprocalExclusions = force.getReciprocalExclusions();
     rfDielectric = force.getReactionFieldDielectric();
     cappedLJ = CappedLJ(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
+    cappedCoulomb = CappedCoulomb(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
+    coulombDecapping = force.getCoulombDecapping();
     if (force.getInnerForceGroup() >= 0)
         innerSplit = InnerSplit(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
     if (force.getUseDispersionCorrection())
@@ -230,6 +232,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     clj.setInnerSplit(innerSplit);
     clj.setDecappedSlices(decappedSlices);
     clj.setCappedLJ(cappedLJ);
+    clj.setCoulombDecapping(coulombDecapping, cappedCoulomb);
     clj.calculatePairIxn(
         numParticles,
         posData,
@@ -250,6 +253,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         ReferenceSlicedLJCoulomb14 nonbonded14;
         nonbonded14.setInnerSplit(innerSplit);
         nonbonded14.setCappedLJ(cappedLJ);
+        nonbonded14.setCoulombDecapping(coulombDecapping, cappedCoulomb);
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);

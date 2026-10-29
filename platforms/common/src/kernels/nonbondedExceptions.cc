@@ -118,8 +118,8 @@ if (IS_DECAPPED && sig6 > 1.0f) {
     const real capEnergy = exceptionParams.z*(CAP_C0 + xp*(CAP_POLY));
     const real capForce = -exceptionParams.z*xp*(CAP_RPOLY);
     const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
-    decapForce = exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
-    decapEnergy = exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;
+    decapForce += exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
+    decapEnergy += exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;
     ljForce = capForce;
     ljEnergy = capEnergy;
 #if INNER_GROUP
@@ -127,6 +127,21 @@ if (IS_DECAPPED && sig6 > 1.0f) {
     sigma6 = sigma6*sigma6*sigma6;
     ljEnergy -= exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
 #endif
+}
+#endif
+#if COULOMB_DECAPPING && !SUBTRACT_INNER
+// With Coulomb decapping (never combined with an inner force group), the 1/r term is capped below sigma too
+if (IS_DECAPPED && sig6 > 1.0f) {
+    const real x = RECIP(invR*exceptionParams.y);
+    const real xp = CAP_XPOW;
+    const real qqOverSig = exceptionParams.x*RECIP(exceptionParams.y);
+    const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+    const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+    const real bare = exceptionParams.x*min(invR, (real) CAP_MAX_INVX*RECIP(exceptionParams.y));   // bounded to stay finite
+    decapForce += bare - capForce;
+    decapEnergy += bare - capEnergy;
+    clForce = capForce;
+    clEnergy = capEnergy;
 }
 #endif
 #if HAS_DECAPPING
