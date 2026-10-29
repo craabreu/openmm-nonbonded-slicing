@@ -463,6 +463,33 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with: {packages-dir: out/3-base, repository-url: "${{ env.REPOSITORY_URL }}", skip-existing: true}
 
+  # The GitHub release follows the PyPI one, with the tag's changelog entry as its notes
+  github-release:
+    needs: [setup, publish]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Create the release"
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then echo "Release $TAG already exists"; exit 0; fi
+          # The section runs from the version's heading to the next heading (a line underlined by dashes)
+          awk -v v="${TAG#v}" '
+            /^-+$/ && prev == v {f = 1; prev = $0; next}
+            /^-+$/ && f {n--; exit}
+            f {line[++n] = $0}
+            {prev = $0}
+            END {for (i = 1; i <= n; i++) print line[i]}' docs/changelog.rst \
+            | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' > notes.md
+          if [ ! -s notes.md ]; then echo "No entry for ${TAG#v} in docs/changelog.rst"; exit 1; fi
+          cat notes.md
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
+
   resolution:
     needs: [setup, publish]
     if: needs.setup.outputs.target == 'testpypi'
