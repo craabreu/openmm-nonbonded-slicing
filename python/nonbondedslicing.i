@@ -11,6 +11,16 @@
 #include "OpenMMDrude.h"
 #include "openmm/RPMDIntegrator.h"
 #include "openmm/RPMDMonteCarloBarostat.h"
+// OpenMM 8.7 adds these, and its OpenMMSwigHeaders.i refers to them
+#if __has_include("openmm/RPMDMonteCarloAnisotropicBarostat.h")
+#include "openmm/RPMDMonteCarloAnisotropicBarostat.h"
+#endif
+#if __has_include("openmm/RPMDMonteCarloFlexibleBarostat.h")
+#include "openmm/RPMDMonteCarloFlexibleBarostat.h"
+#endif
+#if __has_include("openmm/RPMDMonteCarloMembraneBarostat.h")
+#include "openmm/RPMDMonteCarloMembraneBarostat.h"
+#endif
 #include "openmm/serialization/XmlSerializer.h"
 #include <sstream>
 
