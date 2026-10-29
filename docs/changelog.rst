@@ -24,6 +24,12 @@ Changelog
   (``setCappingOrders``). Available on all platforms, with every nonbonded method and with the inner
   force group. With a switching function or an inner force group, the sigma of the Lennard-Jones pairs
   of decapped slices cannot exceed the switching distance or the inner switching distance.
+* ``setCoulombDecapping(True)`` also caps the Coulomb interaction of the pairs of decapped slices: the 1/r
+  term of their direct-space potential is replaced below sigma by the polynomial with the same orders that
+  matches it at sigma, and the difference joins the decapping term. The potential is then bounded below for
+  any values of the Coulomb, Lennard-Jones and decapping parameters. The sigma of every particle of a
+  decapped slice, those with zero epsilon included, then counts for the switching-distance restriction.
+  Not available with an inner force group.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,

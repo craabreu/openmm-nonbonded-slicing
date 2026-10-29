@@ -93,6 +93,8 @@ private:
     bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
     InnerSplit innerSplit;
     CappedLJ cappedLJ;
+    CappedCoulomb cappedCoulomb;
+    bool coulombDecapping;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;

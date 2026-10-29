@@ -132,6 +132,98 @@ def testCappingOrdersAPI():
     assert (clone.getCappingOrderAtZero(), clone.getCappingOrderAtSigma()) == (4, 2)
 
 
+def testCoulombDecappingAPI():
+    force = plugin.SlicedNonbondedForce(2)
+    assert not force.getCoulombDecapping()
+    force.setCoulombDecapping(True)
+    assert force.getCoulombDecapping()
+    clone = copy.deepcopy(force)
+    assert clone.getCoulombDecapping()
+    force.setCoulombDecapping(False)
+    assert not force.getCoulombDecapping()
+    assert clone.getCoulombDecapping()
+
+
+def testCoulombDecappingErrors():
+    """Coulomb decapping caps every pair of a decapped slice, zero-epsilon particles included, and rejects an inner
+    force group."""
+    def build(configure):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        system.setDefaultPeriodicBoxVectors(mm.Vec3(3, 0, 0), mm.Vec3(0, 3, 0), mm.Vec3(0, 0, 3))
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.CutoffPeriodic)
+        force.setCutoffDistance(1.0)
+        force.setUseSwitchingFunction(True)
+        force.setSwitchingDistance(0.5)
+        force.setCoulombDecapping(True)
+        force.addParticle(0.4, 1.0, 0.0)   # a placeholder sigma, as on a TIP3P hydrogen
+        force.addParticle(-0.4, 0.3, 0.5)
+        force.setParticleSubset(1, 1)
+        force.addGlobalParameter("lambdaD", 1.0)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        configure(force)
+        system.addForce(force)
+        mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+
+    with pytest.raises(Exception, match="zero epsilon included"):
+        build(lambda force: None)
+    build(lambda force: force.setParticleParameters(0, 0.4, 0.3, 0.0))
+    build(lambda force: force.setCoulombDecapping(False))
+    with pytest.raises(Exception, match="inner force group"):
+        build(lambda force: (force.setParticleParameters(0, 0.4, 0.3, 0.0), force.setInnerForceGroup(1),
+                             force.setInnerSwitchingDistance(0.4), force.setInnerCutoffDistance(0.5)))
+
+
+@pytest.mark.parametrize("platformName, precision", cases)
+def testCoulombDecapping(platformName, precision):
+    """The capped Coulomb energy of a charged pair without Lennard-Jones parameters, lambda*qq*c(x)/sigma with
+    c(x) = 1.75 - 5.25*x^4 + 7*x^5 - 2.5*x^6, with the decapping term off, and the full one with it at 1."""
+    sigma, q1, q2, lam = 0.3, 0.5, -0.3, 0.4
+    qq = 138.935456*q1*q2
+    def energy(x, lambdaD):
+        system = mm.System()
+        for _ in range(2):
+            system.addParticle(1.0)
+        force = plugin.SlicedNonbondedForce(2)
+        force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
+        force.setCoulombDecapping(True)
+        force.addParticle(q1, sigma, 0.0)
+        force.addParticle(q2, sigma, 0.0)
+        force.setParticleSubset(1, 1)
+        force.addGlobalParameter("lambda", lam)
+        force.addGlobalParameter("lambdaD", lambdaD)
+        force.addScalingParameter("lambda", 0, 1, True, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        force.addEnergyParameterDerivative("lambda")
+        force.addEnergyParameterDerivative("lambdaD")
+        system.addForce(force)
+        platform = mm.Platform.getPlatformByName(platformName)
+        properties = {} if platformName == "Reference" else {"Precision": precision}
+        context = mm.Context(system, mm.VerletIntegrator(0.001), platform, properties)
+        context.setPositions([mm.Vec3(0, 0, 0), mm.Vec3(x*sigma, 0, 0)])
+        state = context.getState(getEnergy=True, getParameterDerivatives=True)
+        derivatives = state.getEnergyParameterDerivatives()
+        return value(state.getPotentialEnergy()), derivatives["lambda"], derivatives["lambdaD"]
+
+    tol = 1e-6 if platformName == "Reference" or precision == "double" else 1e-4
+    for x in (0.0001, 0.5, 0.9):
+        capped = qq*(1.75 - 5.25*x**4 + 7*x**5 - 2.5*x**6)/sigma
+        total, dLambda, dLambdaD = energy(x, 0.0)
+        ASSERT_EQUAL_TOL(lam*capped, total, tol)
+        ASSERT_EQUAL_TOL(capped, dLambda, tol)
+        if x >= 1e-3:   # the GPU kernels bound the bare 1/r of the decapping term at x = 1e-3
+            bare = qq/(x*sigma)
+            ASSERT_EQUAL_TOL(bare - capped, dLambdaD, tol)
+            total, _, _ = energy(x, 1.0)
+            ASSERT_EQUAL_TOL(lam*capped + bare - capped, total, tol)
+    for x in (1.0, 1.5):
+        total, dLambda, dLambdaD = energy(x, 0.0)
+        ASSERT_EQUAL_TOL(lam*qq/(x*sigma), total, tol)
+        ASSERT_EQUAL_TOL(0.0, dLambdaD, tol)
+
+
 @pytest.mark.parametrize("platformName, precision", cases)
 def testCappingOrders(platformName, precision):
     """The capped energy with orders (4, 2), 4*epsilon*(5.8 - 28.8*x^5 + 23*x^6), and with the default ones."""

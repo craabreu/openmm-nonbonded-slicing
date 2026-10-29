@@ -26,7 +26,7 @@ using namespace OpenMM;
 
    --------------------------------------------------------------------------------------- */
 
-ReferenceSlicedLJCoulomb14::ReferenceSlicedLJCoulomb14() : periodic(false) {
+ReferenceSlicedLJCoulomb14::ReferenceSlicedLJCoulomb14() : periodic(false), coulombDecapping(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -62,6 +62,11 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
 
 void ReferenceSlicedLJCoulomb14::setCappedLJ(const CappedLJ& capped) {
     cappedLJ = capped;
+}
+
+void ReferenceSlicedLJCoulomb14::setCoulombDecapping(bool decapping, const CappedCoulomb& capped) {
+    coulombDecapping = decapping;
+    cappedCoulomb = capped;
 }
 
 void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
@@ -120,8 +125,16 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         }
     }
     double vdwForce = rdUdr*inverseR*inverseR;
-    double coulForce = ONE_4PI_EPS0*parameters[2]*inverseR*inverseR*inverseR;
-    double coulEnergy = ONE_4PI_EPS0*parameters[2]*inverseR;
+    double qq = ONE_4PI_EPS0*parameters[2];
+    double coulEnergy = qq*inverseR, coulRdUdr = qq*inverseR;
+    // With Coulomb decapping (never combined with an inner force group), the 1/r term is capped below sigma too
+    if (coulombDecapping && mode == Full && decapped && sig6 > 1.0) {
+        double decapQEnergy, decapQRdUdr;
+        cappedCoulomb.split(1.0/(inverseR*parameters[0]), qq/parameters[0], coulEnergy, coulRdUdr, decapQEnergy, decapQRdUdr);
+        decapEnergy += decapQEnergy;
+        decapRdUdr += decapQRdUdr;
+    }
+    double coulForce = coulRdUdr*inverseR*inverseR;
     if (mode == Inner) {
         vdwForce = innerVdwForce;
         coulForce = innerCoulForce;

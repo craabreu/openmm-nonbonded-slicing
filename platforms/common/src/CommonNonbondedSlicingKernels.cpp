@@ -404,22 +404,30 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     if (recipForceGroup < 0)
         recipForceGroup = force.getForceGroup();
     usePosqCharges = hasCoulomb ? cc.requestPosqCharges() : false;
-    hasDecapping = hasDecapping && hasLJ;
+    bool coulombDecapping = force.getCoulombDecapping() && hasDecapping && hasCoulomb;
+    hasDecapping = hasDecapping && (hasLJ || coulombDecapping);
     map<string, string> decapDefines;
     decapDefines["HAS_DECAPPING"] = (hasDecapping ? "1" : "0");
+    decapDefines["COULOMB_DECAPPING"] = (coulombDecapping ? "1" : "0");
     decapDefines["IS_DECAPPED"] = getDecappedSliceCondition();
-    // The capped potential c(x) = a_0 + x^(m0+1)*P(x) and -x*c'(x) = -x^(m0+1)*R(x), with P and R written in Horner
-    // form from the coefficients of CappedLJ, so that the kernels need no loop or pow for any pair of orders
+    // The capped potentials c(x) = a_0 + x^(m0+1)*P(x) and -x*c'(x) = -x^(m0+1)*R(x), with P and R written in Horner
+    // form from the coefficients of CappedLJ and CappedCoulomb, so that the kernels need no loop or pow for any pair
+    // of orders. Both share x^(m0+1).
     CappedLJ cappedLJ(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
-    const vector<double>& capCoefficients = cappedLJ.getCoefficients();
+    CappedCoulomb cappedCoulomb(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
     int capPower = cappedLJ.getOrderAtZero()+1;
-    string capPoly, capRPoly;
-    for (int j = capCoefficients.size()-1; j >= 0; j--) {
-        string a = cc.doubleToString(capCoefficients[j]);
-        string ka = cc.doubleToString((capPower+j)*capCoefficients[j]);
-        capPoly = capPoly.empty() ? a : a+"+x*("+capPoly+")";
-        capRPoly = capRPoly.empty() ? ka : ka+"+x*("+capRPoly+")";
-    }
+    auto hornerPolys = [&](const CappedPotential& capped, string& poly, string& rPoly) {
+        const vector<double>& coefficients = capped.getCoefficients();
+        for (int j = coefficients.size()-1; j >= 0; j--) {
+            string a = cc.doubleToString(coefficients[j]);
+            string ka = cc.doubleToString((capPower+j)*coefficients[j]);
+            poly = poly.empty() ? a : a+"+x*("+poly+")";
+            rPoly = rPoly.empty() ? ka : ka+"+x*("+rPoly+")";
+        }
+    };
+    string capPoly, capRPoly, capQPoly, capQRPoly;
+    hornerPolys(cappedLJ, capPoly, capRPoly);
+    hornerPolys(cappedCoulomb, capQPoly, capQRPoly);
     string capXPow = "x";
     for (int i = 1; i < capPower; i++)
         capXPow += "*x";
@@ -428,6 +436,10 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     decapDefines["CAP_POLY"] = capPoly;
     decapDefines["CAP_RPOLY"] = capRPoly;
     decapDefines["CAP_MAX_SIG6"] = cc.doubleToString(MaxDecapSig6);
+    decapDefines["CAPQ_C0"] = cc.doubleToString(cappedCoulomb.getConstant());
+    decapDefines["CAPQ_POLY"] = capQPoly;
+    decapDefines["CAPQ_RPOLY"] = capQRPoly;
+    decapDefines["CAP_MAX_INVX"] = cc.doubleToString(MaxDecapInvX);
     map<string, string> defines;
     defines.insert(decapDefines.begin(), decapDefines.end());
     defines["HAS_COULOMB"] = (hasCoulomb ? "1" : "0");
@@ -795,7 +807,7 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     if (hasCoulomb && !usePosqCharges)
         cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(charges, prefix+"charge", "real", 1));
     sigmaEpsilon.initialize<mm_float2>(cc, cc.getPaddedNumAtoms(), "sigmaEpsilon");
-    if (hasLJ) {
+    if (hasLJ || coulombDecapping) {   // the Coulomb cap radius is sigma, even without Lennard-Jones terms
         replacements["SIGMA_EPSILON1"] = prefix+"sigmaEpsilon1";
         replacements["SIGMA_EPSILON2"] = prefix+"sigmaEpsilon2";
         cc.getNonbondedUtilities().addParameter(ComputeParameterInfo(sigmaEpsilon, prefix+"sigmaEpsilon", "float", 2));
