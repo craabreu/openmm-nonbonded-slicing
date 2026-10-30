@@ -116,7 +116,7 @@ it is, or the reverse.
 
 Since every pair of a Coulomb-decapped slice is capped, $\sigma$ matters for particles with $\epsilon = 0$ too, and the
 sigma restriction below covers them. A TIP3P hydrogen, for instance, carries a placeholder $\sigma = 1$ nm that
-exceeds any switching distance; set it to the Coulomb cap radius you want (its $\epsilon = 0$ keeps it out of every
+makes $\sigma_{ij}$ exceed a typical cutoff; set it to the Coulomb cap radius you want (its $\epsilon = 0$ keeps it out of every
 Lennard-Jones term), such as zero, which makes $\sigma_{ij}$ half the oxygen's for its pairs. For opposite charges
 the capped Coulomb potential is a finite well, deepest at $r = 0$, so decapping should still not lag too far behind
 the Coulomb term; raising $m_0$ lowers the core (1.33 at $m_0 = 5$, $m_1 = 2$).
@@ -130,9 +130,9 @@ $\lambda$ at each state; for $\lambda$-dynamics, apply the chain rule to the thr
 
 The capped term is the usual potential beyond $\sigma$, so the cutoff, the switching function, LJPME and the
 dispersion correction apply to it exactly and are multiplied by $\lambda_{LJ}$. The decapping term is not
-switched, so with a switching function the $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs
-with $\epsilon = 0$ excluded) cannot exceed the switching distance; this is checked when a Context is
-created and by `updateParametersInContext`, but not for parameter offsets. Decapping is available on all
+switched, so the $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs with $\epsilon = 0$
+excluded) cannot exceed the cutoff distance, nor the switching distance with a switching function; this is
+checked when a Context is created and by `updateParametersInContext`, but not for parameter offsets. Decapping is available on all
 platforms and with every nonbonded method, for direct-space pairs and 1-4 exceptions. Like the other
 properties of a scaling parameter, the decapping roles and the capping orders are fixed when a
 {OpenMM}`Context` is created, while $\lambda_{LJ}$ and $\lambda_D$ are its global parameters.
@@ -142,9 +142,10 @@ properties of a scaling parameter, the decapping roles and the capping orders ar
 * Only one scaling parameter per slice can multiply each of its decapping terms.
 * The capped core is finite, so charges of opposite sign can collapse onto it. Turn the Coulomb contribution
   of a slice on only while $\lambda_D > 0$, or cap the Coulomb interaction too with `includeCoulombDecapping`.
-* With Coulomb decapping, the $\sigma$ of every particle of the subsets of a decapped slice and of every exception
-  with a nonzero charge product, those with $\epsilon = 0$ included, cannot exceed the switching distance.
-  Coulomb decapping cannot be combined with an inner force group.
+* With Coulomb decapping, the $\sigma$ of every pair of charged particles of a decapped slice and of every
+  exception with a nonzero charge product, those with $\epsilon = 0$ included, cannot exceed the cutoff
+  distance. Coulomb interactions are not switched, so the switching distance does not restrict it. Coulomb
+  decapping cannot be combined with an inner force group.
 * With the default orders, the height of the core, $119.2\,\epsilon$, is only a few $k_B T$ for atoms with
   small $\epsilon$, which then overlap often at $\lambda_D = 0$. The decapping energy of such overlaps is
   large, so raise the core with `setCappingOrders` or place enough states near $\lambda_D = 0$ to keep the

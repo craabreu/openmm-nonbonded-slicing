@@ -347,9 +347,10 @@ public:
      *         rest, :math:`q_i q_j (1/r - c(r/\sigma)/\sigma)/(4 \pi \epsilon_0)` below :math:`\sigma`,
      *         which is the same for every nonbonded method and for exceptions. Switching on the Coulomb
      *         decapping term while the Lennard-Jones core is weak can let opposite charges collapse. With a
-     *         switching function, the sigma of every particle of the subsets and of every exception with a
-     *         nonzero charge product, including those with zero epsilon, cannot exceed the switching
-     *         distance. Coulomb decapping cannot be combined with an inner force group.
+     *         cutoff, the sigma of every pair of charged particles of the slice and of every exception with a
+     *         nonzero charge product, including those with zero epsilon, cannot exceed the cutoff distance;
+     *         Coulomb interactions are not switched, so the switching distance does not restrict it. Coulomb
+     *         decapping cannot be combined with an inner force group.
      *     includeLJDecapping : bool, default=False
      *         whether this scaling parameter multiplies the Lennard-Jones decapping term of the slice. Its
      *         presence decaps the Lennard-Jones interactions of the slice: each Lennard-Jones pair interacts
@@ -361,9 +362,9 @@ public:
      *         if there is none) and :math:`\lambda_D` is this parameter. Decapping applies to direct-space
      *         pairs and 1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction
      *         apply to the capped term, which is the usual potential beyond :math:`\sigma`. The decapping
-     *         term is not switched, so with a switching function the sigma of every Lennard-Jones pair in the
-     *         slice, excluding those with zero epsilon, cannot exceed the switching distance, and with an
-     *         inner force group it cannot exceed the inner switching distance either (see
+     *         term is not switched, so the sigma of every Lennard-Jones pair in the slice, excluding those
+     *         with zero epsilon, cannot exceed the cutoff distance, nor the switching distance with a
+     *         switching function, nor the inner switching distance with an inner force group (see
      *         :func:`setInnerForceGroup`).
      *
      * The energy is linear in every scaling parameter: the derivative with respect to a decapping parameter

@@ -27,15 +27,15 @@ Changelog
   decapping energies of the slice. The polynomial core is defined by the orders of the derivatives that
   vanish at r = 0 and that match the usual potential at r = sigma, both 3 by default
   (``setCappingOrders``). Available on all platforms, with every nonbonded method and with the inner
-  force group. With a switching function or an inner force group, the sigma of the Lennard-Jones pairs
-  of decapped slices cannot exceed the switching distance or the inner switching distance.
+  force group. The sigma of the Lennard-Jones pairs of decapped slices cannot exceed the cutoff distance,
+  nor the switching distance or the inner switching distance when these are used.
 * A scaling parameter added with ``includeCoulombDecapping=True`` (sixth argument of
   ``addScalingParameter``) multiplies the Coulomb decapping term of its slice: the 1/r term of the
   direct-space potential of every pair of the slice is replaced below sigma by the polynomial with the
   same orders that matches it at sigma, and the difference is the Coulomb decapping term. One parameter
-  can multiply both decapping terms, or each can have its own. The sigma of every particle of a
-  Coulomb-decapped slice, those with zero epsilon included, counts for the switching-distance
-  restriction. Not available with an inner force group.
+  can multiply both decapping terms, or each can have its own. The sigma of every pair of charged
+  particles of a Coulomb-decapped slice, those with zero epsilon included, cannot exceed the cutoff
+  distance. Not available with an inner force group.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,
