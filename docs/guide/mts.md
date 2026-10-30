@@ -48,7 +48,8 @@ slow group has no fast intramolecular component.
   $S(r)$, which beyond the switching distance would exceed the switched force and leave the remainder with
   a correction of opposite sign.
 * With decapped slices ({doc}`decapping`), the inner group takes all of the capped and decapping terms below
-  $\sigma$, so the $\sigma$ of every Lennard-Jones pair of a decapped slice cannot exceed $r_s$.
+  $\sigma$, so the $\sigma$ of every Lennard-Jones pair of a Lennard-Jones-decapped slice and of every
+  charged pair of a Coulomb-decapped slice cannot exceed $r_s$.
 * The inner force group requires the direct space to be included (the default; see
   `setIncludeDirectSpace`).
 * The inner force group, switching distance and cutoff distance are fixed when a {OpenMM}`Context` is

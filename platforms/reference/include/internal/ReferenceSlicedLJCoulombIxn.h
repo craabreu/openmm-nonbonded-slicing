@@ -35,11 +35,12 @@ class ReferenceSlicedLJCoulombIxn {
       double cutoffDistance, switchingDistance;
       InnerSplit innerSplit;
       CappedLJ cappedLJ;
+      CappedCoulomb cappedCoulomb;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
       int meshDim[3], dispersionMeshDim[3];
-      vector<bool> decappedSlices;
+      vector<bool> ljDecappedSlices, coulombDecappedSlices;
 
       // parameter indices
 
@@ -49,7 +50,8 @@ class ReferenceSlicedLJCoulombIxn {
 
       static const int   Coul = 0;
       static const int   vdW = 1;
-      static const int   decap = 2;
+      static const int   vdWDecap = 2;
+      static const int   CoulDecap = 3;
 
       /**---------------------------------------------------------------------------------------
 
@@ -70,9 +72,12 @@ class ReferenceSlicedLJCoulombIxn {
                            const vector<vector<double>>& atomParameters, const vector<vector<double>>& sliceLambdas, vector<OpenMM::Vec3>& forces,
                            vector<vector<double>>& sliceEnergies) const;
 
-      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool decapped,
+      void splitCoulomb(double inverseR, double sig, double qq, double& coulEnergy, double& coulRdUdr,
+                        double& decapEnergy, double& decapRdUdr) const;
+
+      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool ljDecapped, bool coulombDecapped,
                               double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy,
-                              double& forceFactorDecap, double& decapEnergy) const;
+                              double& forceFactorDecap, double& decapEnergy, double& forceFactorDecapQ, double& decapQEnergy) const;
 
 
    public:
@@ -184,21 +189,32 @@ class ReferenceSlicedLJCoulombIxn {
 
          Set which slices are decapped. Must be called before calculatePairIxn.
 
-         @param decapped  whether each slice is decapped
+         @param ljDecapped       whether the Lennard-Jones term of each slice is decapped
+         @param coulombDecapped  whether the Coulomb term of each slice is decapped
 
          --------------------------------------------------------------------------------------- */
 
-      void setDecappedSlices(const vector<bool>& decapped);
+      void setDecappedSlices(const vector<bool>& ljDecapped, const vector<bool>& coulombDecapped);
 
       /**---------------------------------------------------------------------------------------
 
-         Set the capped Lennard-Jones potential of the decapped slices.
+         Set the capped Lennard-Jones potential of the Lennard-Jones-decapped slices.
 
          @param capped   the capped potential
 
          --------------------------------------------------------------------------------------- */
 
       void setCappedLJ(const CappedLJ& capped);
+
+      /**---------------------------------------------------------------------------------------
+
+         Set the capped Coulomb potential of the Coulomb-decapped slices.
+
+         @param capped     the capped Coulomb potential
+
+         --------------------------------------------------------------------------------------- */
+
+      void setCappedCoulomb(const CappedCoulomb& capped);
 
       /**---------------------------------------------------------------------------------------
 

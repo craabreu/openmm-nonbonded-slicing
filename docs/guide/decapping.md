@@ -4,7 +4,7 @@
 
 Driving the Lennard-Jones scaling parameter of a slice to zero with the usual potential leaves a singularity
 at $r = 0$ that makes free-energy calculations hard to converge. A scaling parameter added with
-`includeDecapping=True` multiplies the *decapping* term of its slice, which splits each Lennard-Jones pair
+`includeLJDecapping=True` multiplies the *decapping* term of its slice, which splits each Lennard-Jones pair
 of the slice into a capped term and a decapping term {cite}`Correa_2022`, in the spirit of the capping of
 {cite}`Buelens_2012` and the linear basis functions of {cite}`Naden_2014`:
 
@@ -49,7 +49,7 @@ force.addGlobalParameter("lambdaLJ", 1.0)
 force.addGlobalParameter("lambdaD", 1.0)
 force.addScalingParameter("lambdaQ", 0, 1, True, False)
 force.addScalingParameter("lambdaLJ", 0, 1, False, True)
-force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+force.addScalingParameter("lambdaD", 0, 1, False, False, False, True)    # includeLJDecapping
 ```
 
 The orders are set for the whole force with `setCappingOrders`, from 1 to 6 each. Lowering $m_0$ or raising
@@ -68,7 +68,60 @@ $m_1$ raises the core, $4 \epsilon\, a_0$, given here in units of $\epsilon$ (ro
 force.setCappingOrders(2, 4)    # a core of 684 epsilon
 ```
 
-A coupling path switches on the capped term first ($\lambda_{LJ}$ from 0 to 1 with $\lambda_D = 0$), then
+## Coulomb decapping
+
+The capped core is finite while the Coulomb attraction of opposite charges is not, so with the decapping term off
+they can collapse onto it wherever the Coulomb term is on. One answer is to keep the Coulomb term off until the
+decapping term is on; the other is to cap the Coulomb interaction too, with a scaling parameter added with
+`includeCoulombDecapping=True`. One parameter can multiply both decapping terms:
+
+```python
+force.addScalingParameter("lambdaD", 0, 1, False, False, True, True)    # both decapping terms
+```
+
+or each can have its own:
+
+```python
+force.addGlobalParameter("lambdaDQ", 1.0)
+force.addScalingParameter("lambdaD", 0, 1, False, False, False, True)   # Lennard-Jones decapping
+force.addScalingParameter("lambdaDQ", 0, 1, False, False, True)         # Coulomb decapping
+```
+
+Then the Coulomb term of every pair in the slice, whatever its $\epsilon$, is capped below
+$r = \sigma$ in the same way as the Lennard-Jones one. The $1/r$ part of its direct-space potential is replaced by
+$c_Q(r/\sigma)/\sigma$, where $c_Q(x)$ is the polynomial of the same orders $m_0$ and $m_1$ whose first $m_0$
+derivatives vanish at $x = 0$ and whose value and first $m_1$ derivatives match those of $1/x$ at $x = 1$. The
+default orders give
+
+$$
+c_Q(x) = 1.75 - 5.25 x^4 + 7 x^5 - 2.5 x^6,
+$$
+
+a core 1.75 times the bare potential at $r = \sigma$. The cap is a statement about $1/r$ alone, as the Lennard-Jones
+one is about $x^{-12} - x^{-6}$: the rest of the direct-space potential, which is $-\mathrm{erf}(\alpha r)/r$ with
+Ewald, PME and LJPME or the reaction-field terms with a cutoff, and the reciprocal space are unchanged, and the
+Coulomb decapping term of the slice is
+
+$$
+\frac{q_i q_j}{4 \pi \epsilon_0} \left[ \frac{1}{r} - \frac{c_Q(r/\sigma)}{\sigma} \right]
+$$
+
+for $r < \sigma$, which is the same for every nonbonded method and for exceptions. With both interactions decapped,
+the potential is bounded below everywhere in the space of the four parameters, as long as the Coulomb decapping term
+is not switched on while the Lennard-Jones core is weak, which would let opposite charges collapse. The energy stays
+linear in every parameter: the derivative with respect to $\lambda_Q$ is the capped Coulomb energy of the slice (its
+capped direct-space part plus the reciprocal one), and the one with respect to the Coulomb decapping parameter is its
+Coulomb decapping energy. A slice can also have its Coulomb interaction decapped and its Lennard-Jones one left as
+it is, or the reverse.
+
+Since every pair of a Coulomb-decapped slice is capped, $\sigma$ matters for particles with $\epsilon = 0$ too, and the
+sigma restriction below covers them. A TIP3P hydrogen, for instance, carries a placeholder $\sigma = 1$ nm that
+makes $\sigma_{ij}$ exceed a typical cutoff; set it to the Coulomb cap radius you want (its $\epsilon = 0$ keeps it out of every
+Lennard-Jones term), such as zero, which makes $\sigma_{ij}$ half the oxygen's for its pairs. For opposite charges
+the capped Coulomb potential is a finite well, deepest at $r = 0$, so decapping should still not lag too far behind
+the Coulomb term; raising $m_0$ lowers the core (1.33 at $m_0 = 5$, $m_1 = 2$).
+
+A coupling path for Lennard-Jones decapping alone switches on the capped term first ($\lambda_{LJ}$ from 0 to 1 with $\lambda_D = 0$), then
 the decapping term, and finally the Coulomb term. The stages can overlap: {cite}`Correa_2022` couples all
 three in one sweep of a master parameter $\lambda$ with smoothstep functions $h_k(\lambda)$ that start and
 finish at $(0, 0.7)$, $(0.4, 0.8)$ and $(0.6, 1.0)$ for the capped, decapping and Coulomb terms. OpenMM
@@ -77,24 +130,28 @@ $\lambda$ at each state; for $\lambda$-dynamics, apply the chain rule to the thr
 
 The capped term is the usual potential beyond $\sigma$, so the cutoff, the switching function, LJPME and the
 dispersion correction apply to it exactly and are multiplied by $\lambda_{LJ}$. The decapping term is not
-switched, so with a switching function the $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs
-with $\epsilon = 0$ excluded) cannot exceed the switching distance; this is checked when a Context is
-created and by `updateParametersInContext`, but not for parameter offsets. Decapping is available on all
+switched, so the $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs with $\epsilon = 0$
+excluded) cannot exceed the cutoff distance, nor the switching distance with a switching function; this is
+checked when a Context is created and by `updateParametersInContext`, but not for parameter offsets. Decapping is available on all
 platforms and with every nonbonded method, for direct-space pairs and 1-4 exceptions. Like the other
-properties of a scaling parameter, the decapping role and the capping orders are fixed when a
+properties of a scaling parameter, the decapping roles and the capping orders are fixed when a
 {OpenMM}`Context` is created, while $\lambda_{LJ}$ and $\lambda_D$ are its global parameters.
 
 ## Restrictions
 
-* Only one scaling parameter per slice can multiply its decapping term.
+* Only one scaling parameter per slice can multiply each of its decapping terms.
 * The capped core is finite, so charges of opposite sign can collapse onto it. Turn the Coulomb contribution
-  of a slice on only while $\lambda_D > 0$.
+  of a slice on only while $\lambda_D > 0$, or cap the Coulomb interaction too with `includeCoulombDecapping`.
+* With Coulomb decapping, the $\sigma$ of every pair of charged particles of a decapped slice and of every
+  exception with a nonzero charge product, those with $\epsilon = 0$ included, cannot exceed the cutoff
+  distance. Coulomb interactions are not switched, so the switching distance does not restrict it.
 * With the default orders, the height of the core, $119.2\,\epsilon$, is only a few $k_B T$ for atoms with
   small $\epsilon$, which then overlap often at $\lambda_D = 0$. The decapping energy of such overlaps is
   large, so raise the core with `setCappingOrders` or place enough states near $\lambda_D = 0$ to keep the
   estimates converged. Higher orders give larger coefficients that partly cancel near $r = \sigma$, which
   costs some single-precision accuracy there.
 * With an inner force group ({doc}`mts`), the inner group takes all of the capped and decapping terms below
-  $\sigma$. The $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs with $\epsilon = 0$
-  excluded) cannot exceed the inner switching distance. This is checked when a Context is created and by
-  `updateParametersInContext`, but not for parameter offsets.
+  $\sigma$. The $\sigma$ of every Lennard-Jones pair of a Lennard-Jones-decapped slice (pairs with
+  $\epsilon = 0$ excluded) and of every charged pair of a Coulomb-decapped slice cannot exceed the inner
+  switching distance. This is checked when a Context is created and by `updateParametersInContext`, but
+  not for parameter offsets.

@@ -44,15 +44,16 @@ context.setParameter("lambda", 0.5)              # halve the ligand-environment 
 
 The order of the two subsets in `addScalingParameter` is irrelevant. The same parameter can be applied to
 any number of slices, and a slice can take one parameter for its Coulomb part and another for its
-Lennard-Jones part. A sixth argument, `includeDecapping`, makes a parameter multiply the decapping term of
-its slice; see {doc}`decapping`.
+Lennard-Jones part. Two more arguments, `includeCoulombDecapping` and `includeLJDecapping`, make a parameter
+multiply the Coulomb and Lennard-Jones decapping terms of its slice; see {doc}`decapping`.
 
 ## Restrictions
 
 * A scaling parameter must have been added with `addGlobalParameter`, and it cannot double as the parameter
   of a particle or exception parameter offset.
 * Every call to `addScalingParameter` must give the parameter at least one role in the slice: Coulomb
-  (`includeCoulomb`), Lennard-Jones (`includeLJ`) or decapping (`includeDecapping`), and each role of a
+  (`includeCoulomb`), Lennard-Jones (`includeLJ`), Coulomb decapping (`includeCoulombDecapping`) or
+  Lennard-Jones decapping (`includeLJDecapping`), and each role of a
   slice belongs to at most one parameter. A second parameter for a role that is already taken is an error.
 * The set of scaling parameters and their roles are read when a Context is created. Changes made afterwards
   with `addScalingParameter` or `setScalingParameter` take effect only after the Context's `reinitialize()`

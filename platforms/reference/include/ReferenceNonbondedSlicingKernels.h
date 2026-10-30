@@ -78,7 +78,9 @@ public:
 private:
     static const int Coul = 0;
     static const int vdW = 1;
-    static const int decap = 2;
+    static const int vdWDecap = 2;
+    static const int CoulDecap = 3;
+    static const int numTerms = 4;
     class ScalingParameterInfo;
     void computeParameters(ContextImpl& context);
     int numParticles, num14;
@@ -93,6 +95,7 @@ private:
     bool useSwitchingFunction, exceptionsArePeriodic, reciprocalExclusions;
     InnerSplit innerSplit;
     CappedLJ cappedLJ;
+    CappedCoulomb cappedCoulomb;
     vector<set<int>> exclusions;
     NonbondedMethod nonbondedMethod;
     NeighborList* neighborList;
@@ -101,7 +104,7 @@ private:
     vector<int> subsets;
     vector<vector<double>> sliceLambdas;
     vector<vector<ScalingParameterInfo>> sliceScalingParams;
-    vector<bool> decappedSlices;
+    vector<bool> ljDecappedSlices, coulombDecappedSlices;
 };
 
 class ReferenceCalcSlicedNonbondedForceKernel::ScalingParameterInfo {

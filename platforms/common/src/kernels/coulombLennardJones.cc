@@ -5,20 +5,22 @@
     real clLambda = LAMBDA[slice].x;
     real ljLambda = LAMBDA[slice].y;
 #if HAS_DECAPPING
-    // The decapping term of a decapped slice (see CappedLJ.h), zero unless r < sigma
-    const real decapLambda = DECAP_LAMBDA[slice];
-    real decapEnergy = 0.0f, decapForce = 0.0f;
+    // The Lennard-Jones (x) and Coulomb (y) decapping terms of a decapped slice (see CappedLJ.h), zero unless r < sigma
+    const real2 decapLambda = DECAP_LAMBDA[slice];
+    real decapEnergy = 0.0f, decapForce = 0.0f, decapQEnergy = 0.0f, decapQForce = 0.0f;
 #endif
 #if HAS_COULOMB
     const real qq = ONE_4PI_EPS0*CHARGE1*CHARGE2;
 #else
     const real qq = 0.0f;
 #endif
-#if HAS_LENNARD_JONES
+#if HAS_LENNARD_JONES || COULOMB_DECAPPING
     real sig = SIGMA_EPSILON1.x + SIGMA_EPSILON2.x;
     real sig2 = invR*sig;
     sig2 *= sig2;
     real sig6 = sig2*sig2*sig2;
+#endif
+#if HAS_LENNARD_JONES
     real eps = SIGMA_EPSILON1.y*SIGMA_EPSILON2.y;
     real epssig6 = sig6*eps;
 #endif
@@ -29,15 +31,18 @@
     real innerForce = 0.0f, innerEnergyLJ = 0.0f, innerEnergyCl = 0.0f;
     const bool insideInner = (!isExcluded && r2 < INNER_CUTOFF_SQUARED);
 #if SUBTRACT_INNER
-    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
-    // is the constant sum_n c_n K_n. It replaces the bare energies below rather than being computed as the
-    // difference of two large, nearly equal terms, and the inner energies are then zero. With Ewald, the
-    // Coulomb remainder is erfc(alpha*r)/r - e_1(r), which has no such constant.
+    // For r <= r_s the inner force is the whole bare force, so the remainder has no bare force and its share of
+    // the bare potential is the constant sum_n c_n K_n (plus -erf(alpha*r)/r with Ewald). They are set directly
+    // below rather than computed as differences of large, nearly equal terms, and the inner terms are then zero.
     const bool innerIsBare = (insideInner && r <= INNER_SWITCH);
 #endif
-#if INNER_GROUP && HAS_DECAPPING
+#if INNER_GROUP && LJ_DECAPPING
     bool decapped = false;
     real capEnergy = 0.0f;
+#endif
+#if INNER_GROUP && COULOMB_DECAPPING
+    bool decappedQ = false;
+    real capQEnergy = 0.0f;
 #endif
     if (insideInner) {
         real innerSwitch = 1.0f;
@@ -45,19 +50,13 @@
             const real z = (r-INNER_SWITCH)*INNER_SWITCH_SCALE;
             innerSwitch = 1.0f+z*z*z*(-10.0f+z*(15.0f-z*6.0f));
         }
-        real innerForceLJ = 0.0f;
+        real innerForceLJ = 0.0f, innerForceCl = qq*invR;
 #if HAS_LENNARD_JONES
         innerForceLJ = epssig6*(12.0f*sig6 - 6.0f);
-#if SUBTRACT_INNER && HAS_DECAPPING
-        // Below sigma, the remainder of a decapped slice has no Lennard-Jones force. Dropping the bare force from both
-        // sides of the difference keeps it from becoming inf-inf in single precision as r -> 0.
-        if (IS_DECAPPED && sig6 > 1.0f)
-            innerForceLJ = 0.0f;
-#endif
-#if INNER_GROUP && HAS_DECAPPING
+#if INNER_GROUP && LJ_DECAPPING
         // Below sigma, which cannot exceed INNER_SWITCH, the inner force is the whole force, so the inner group takes
         // the capped force of a decapped slice and all of its decapping term; the remainder gets neither.
-        decapped = (IS_DECAPPED && sig6 > 1.0f);
+        decapped = (IS_LJ_DECAPPED && sig6 > 1.0f);
         if (decapped) {
             const real x = RECIP(invR*sig);
             const real xp = CAP_XPOW;
@@ -70,7 +69,28 @@
         }
 #endif
 #endif
-        innerForce = innerSwitch*(ljLambda*innerForceLJ + clLambda*qq*invR);
+#if INNER_GROUP && COULOMB_DECAPPING
+        // Likewise, the inner group takes the capped Coulomb force of a Coulomb-decapped slice and all of its decapping term
+        decappedQ = (IS_COULOMB_DECAPPED && sig6 > 1.0f);
+        if (decappedQ) {
+            const real x = RECIP(invR*sig);
+            const real xp = CAP_XPOW;
+            const real qqOverSig = qq*RECIP(sig);
+            capQEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+            const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+            const real bare = qq*min(invR, (real) CAP_MAX_INVX*RECIP(sig));   // bounded to stay finite
+            decapQForce = bare - capForce;
+            decapQEnergy = bare - capQEnergy;
+            innerForceCl = capForce;
+        }
+#endif
+#if SUBTRACT_INNER
+        // The remainder's forces below r_s are set directly, so the bare forces are dropped from both sides of the
+        // difference, which keeps it from becoming inf-inf in single precision as r -> 0
+        if (innerIsBare)
+            innerForceLJ = innerForceCl = 0.0f;
+#endif
+        innerForce = innerSwitch*(ljLambda*innerForceLJ + clLambda*innerForceCl);
 #ifdef INCLUDE_ENERGY
         // Shifted inner energy terms e_12, e_6 and e_1 (see InnerSplit.h): with x = (rc-r)/r, the Lennard-Jones terms
         // are x^4 times a polynomial in x; the Coulomb term uses Y = 1-r/rc and the positive series L_m(Y) = sum(Y^j/j, j>=m).
@@ -105,12 +125,7 @@
         }
         else {
 #if SUBTRACT_INNER
-            e12 = e6 = 0.0f;
-#if USE_EWALD
-            e1 = invR-INNER_K1;
-#else
-            e1 = 0.0f;
-#endif
+            e12 = e6 = e1 = 0.0f;
 #else
             const real invR2 = invR*invR;
             const real invR6 = invR2*invR2*invR2;
@@ -120,11 +135,15 @@
 #endif
         }
         innerEnergyCl = qq*e1;
+#if INNER_GROUP && COULOMB_DECAPPING
+        if (decappedQ)
+            innerEnergyCl = capQEnergy - qq*INNER_K1;
+#endif
 #if HAS_LENNARD_JONES
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
         innerEnergyLJ = eps*(sigma6*sigma6*e12 - sigma6*e6);
-#if INNER_GROUP && HAS_DECAPPING
+#if INNER_GROUP && LJ_DECAPPING
         if (decapped)
             innerEnergyLJ = capEnergy - eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
 #endif
@@ -138,8 +157,8 @@
     real clEnergy = innerEnergyCl;
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
 #if HAS_DECAPPING
-    tempForce += decapLambda*decapForce;
-    tempEnergy += decapLambda*decapEnergy;
+    tempForce += decapLambda.x*decapForce + decapLambda.y*decapQForce;
+    tempEnergy += decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
 #endif
     dEdR += insideInner ? tempForce*invR*invR : 0;
 #else
@@ -160,14 +179,50 @@
     const real erfcAlphaR = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*expAlphaRSqr;
 #endif
     real clEnergy = includeInteraction ? prefactor*erfcAlphaR : 0;
+    real clForce = prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+#if SUBTRACT_INNER || COULOMB_DECAPPING
+    // The 1/r part of erfc(alpha*r)/r goes to the inner force group below the inner switching distance, or to the capped
+    // potential of a Coulomb-decapped slice below sigma. What is left, -erf(alpha*r)/r, is finite at r = 0 and is computed
+    // from its series there (see CappedLJ.h) rather than as the difference of two diverging terms.
+#if SUBTRACT_INNER
+    if (innerIsBare) {
+#else
+    if (includeInteraction && IS_COULOMB_DECAPPED && sig6 > 1.0f) {
+#endif
+        real erfOverR;
+        if (alphaR < 0.1f) {
+            const real a2 = alphaR*alphaR;
+            erfOverR = EWALD_ALPHA*TWO_OVER_SQRT_PI*(1.0f - a2*(1.0f/3.0f - a2*(0.1f - a2*(1.0f/42.0f))));
+        }
+        else
+            erfOverR = (1.0f-erfcAlphaR)*invR;
+        const real erfForce = qq*(erfOverR - EWALD_ALPHA*TWO_OVER_SQRT_PI*expAlphaRSqr);
+#if SUBTRACT_INNER
+        // The remainder also has the constant K_1 of the inner split
+        clEnergy = qq*(INNER_K1 - erfOverR);
+        clForce = -erfForce;
+#else
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real qqOverSig = qq*RECIP(sig);
+        const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+        const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+        const real bare = qq*min(invR, (real) CAP_MAX_INVX*RECIP(sig));   // bounded to stay finite
+        decapQForce = bare - capForce;
+        decapQEnergy = bare - capEnergy;
+        clEnergy = capEnergy - qq*erfOverR;
+        clForce = capForce - erfForce;
+#endif
+    }
+#endif
     real tempForce = 0.0f;
 #if HAS_LENNARD_JONES
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1.0f) : 0;
-#if HAS_DECAPPING && !SUBTRACT_INNER
+#if LJ_DECAPPING && !SUBTRACT_INNER
     // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
     // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
-    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+    if (includeInteraction && IS_LJ_DECAPPED && sig6 > 1.0f) {
         const real x = RECIP(invR*sig);
         const real xp = CAP_XPOW;
         const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
@@ -179,14 +234,12 @@
         ljEnergy = capEnergy;
     }
 #endif
-#if HAS_DECAPPING && SUBTRACT_INNER
-    if (IS_DECAPPED && sig6 > 1.0f)
-        tempForce = 0.0f;   // see the inner part above
-#endif
 #if SUBTRACT_INNER
+    // Below the inner switching distance, the remainder has no Lennard-Jones force, only the constant of the inner split
     if (innerIsBare) {
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
+        tempForce = 0.0f;
         ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
     }
 #endif
@@ -231,10 +284,10 @@
 #endif
     tempForce *= ljLambda;
 #if HAS_DECAPPING && !SUBTRACT_INNER
-    tempForce += decapLambda*decapForce;
-    tempEnergy += decapLambda*decapEnergy;
+    tempForce += decapLambda.x*decapForce + decapLambda.y*decapQForce;
+    tempEnergy += decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
 #endif
-    tempForce += clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempForce += clLambda*clForce;
 #if SUBTRACT_INNER
     tempForce -= innerForce;
     ljEnergy -= innerEnergyLJ;
@@ -242,7 +295,11 @@
 #endif
     tempEnergy += ljLambda*ljEnergy + clLambda*clEnergy;
 #else
-    tempForce = clLambda*prefactor*(erfcAlphaR+alphaR*expAlphaRSqr*TWO_OVER_SQRT_PI);
+    tempForce = clLambda*clForce;
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    tempForce += decapLambda.x*decapForce + decapLambda.y*decapQForce;
+    tempEnergy += decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
+#endif
 #if SUBTRACT_INNER
     tempForce -= innerForce;
     clEnergy -= innerEnergyCl;
@@ -259,10 +316,10 @@
 #if HAS_LENNARD_JONES
     tempForce = epssig6*(12.0f*sig6 - 6.0f);
     real ljEnergy = includeInteraction ? epssig6*(sig6 - 1) : 0;
-#if HAS_DECAPPING && !SUBTRACT_INNER
+#if LJ_DECAPPING && !SUBTRACT_INNER
     // Below sigma, a decapped slice takes the capped potential, computed directly rather than as the difference of
     // two terms that diverge as r -> 0, and the decapping term. With an inner force group, both belong to it.
-    if (includeInteraction && IS_DECAPPED && sig6 > 1.0f) {
+    if (includeInteraction && IS_LJ_DECAPPED && sig6 > 1.0f) {
         const real x = RECIP(invR*sig);
         const real xp = CAP_XPOW;
         const real capEnergy = eps*(CAP_C0 + xp*(CAP_POLY));
@@ -274,14 +331,12 @@
         ljEnergy = capEnergy;
     }
 #endif
-#if HAS_DECAPPING && SUBTRACT_INNER
-    if (IS_DECAPPED && sig6 > 1.0f)
-        tempForce = 0.0f;   // see the inner part above
-#endif
 #if SUBTRACT_INNER
+    // Below the inner switching distance, the remainder has no Lennard-Jones force, only the constant of the inner split
     if (innerIsBare) {
         real sigma6 = sig*sig;
         sigma6 = sigma6*sigma6*sigma6;
+        tempForce = 0.0f;
         ljEnergy = eps*sigma6*(sigma6*INNER_K12 - INNER_K6);
     }
 #endif
@@ -295,10 +350,6 @@
     }
     #endif
     tempForce *= ljLambda;
-#if HAS_DECAPPING && !SUBTRACT_INNER
-    tempForce += decapLambda*decapForce;
-    tempEnergy += decapLambda*decapEnergy;
-#endif
 #if SUBTRACT_INNER
     ljEnergy -= innerEnergyLJ;
 #endif
@@ -308,24 +359,57 @@
   #ifdef USE_CUTOFF
     const real prefactor = qq;
     real clEnergy = includeInteraction ? prefactor*(invR + REACTION_FIELD_K*r2 - REACTION_FIELD_C) : 0;
+    real clForce = prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
 #if SUBTRACT_INNER
-    if (innerIsBare)
+    // Below the inner switching distance, the remainder is the constant of the inner split plus the reaction-field terms
+    if (innerIsBare) {
         clEnergy = prefactor*(INNER_K1_MINUS_RF_C + REACTION_FIELD_K*r2);
+        clForce = -2.0f*prefactor*REACTION_FIELD_K*r2;
+    }
 #endif
-    tempForce += clLambda*prefactor*(invR - 2.0f*REACTION_FIELD_K*r2);
   #else
     const real prefactor = qq*invR;
     real clEnergy = includeInteraction ? prefactor : 0;
+    real clForce = prefactor;
 #if SUBTRACT_INNER
-    if (innerIsBare)
+    // Below the inner switching distance, the remainder is the constant of the inner split
+    if (innerIsBare) {
         clEnergy = qq*INNER_K1;
+        clForce = 0.0f;
+    }
 #endif
-    tempForce += clLambda*prefactor;
   #endif
+#if COULOMB_DECAPPING && !SUBTRACT_INNER
+    // Below sigma, a Coulomb-decapped slice takes the capped Coulomb potential in place of the 1/r term (see CappedLJ.h).
+    // With an inner force group, both belong to it (see the inner part above).
+    if (includeInteraction && IS_COULOMB_DECAPPED && sig6 > 1.0f) {
+        const real x = RECIP(invR*sig);
+        const real xp = CAP_XPOW;
+        const real qqOverSig = qq*RECIP(sig);
+        const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+        const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+        const real bare = qq*min(invR, (real) CAP_MAX_INVX*RECIP(sig));   // bounded to stay finite
+        decapQForce = bare - capForce;
+        decapQEnergy = bare - capEnergy;
+  #ifdef USE_CUTOFF
+        clEnergy = capEnergy + qq*(REACTION_FIELD_K*r2 - REACTION_FIELD_C);
+        clForce = capForce - 2.0f*qq*REACTION_FIELD_K*r2;
+  #else
+        clEnergy = capEnergy;
+        clForce = capForce;
+  #endif
+    }
+#endif
+    tempForce += clLambda*clForce;
 #if SUBTRACT_INNER
     clEnergy -= innerEnergyCl;
 #endif
     tempEnergy += clLambda*clEnergy;
+#endif
+#if HAS_DECAPPING && !SUBTRACT_INNER
+    // The Lennard-Jones and Coulomb decapping terms
+    tempForce += decapLambda.x*decapForce + decapLambda.y*decapQForce;
+    tempEnergy += decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
 #endif
 #if SUBTRACT_INNER
     tempForce -= innerForce;

@@ -179,28 +179,31 @@ class CommonCalcSlicedNonbondedForceKernel : public CalcSlicedNonbondedForceKern
         std::vector<int> subsetsVec;
         std::vector<double> dispersionCoefficients, sliceBackgroundEnergyVolume;
         std::vector<mm_double2> sliceLambdasVec, subsetSelfEnergy;
-        std::vector<double> sliceDecapLambdasVec;
+        std::vector<mm_double2> sliceDecapLambdasVec;
         std::vector<ScalingParameterInfo> sliceScalingParams;
         AddEnergyPostComputation* addEnergy;
 
-        std::string getDecappedSliceCondition();
-        std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ, bool conditionDecapping);
+        std::string getDecappedSliceCondition(bool coulomb);
+        std::string getDerivativeCode(std::string param, std::string variable, std::string scale, bool conditionCoulomb, bool conditionLJ,
+                                      bool conditionCoulombDecapping, bool conditionLJDecapping);
         std::string getCoulombDerivativeCode(ComputeContext& cc, std::vector<ScalingParameterInfo>& sliceScalingParams, bool assign);
-        void uploadReals(ComputeArray& array, const std::vector<double>& values);
+        void uploadReals(ComputeArray& array, const std::vector<mm_double2>& values);
 
         double totalCharge;
     };
 
 class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
     public:
-        std::string nameCoulomb, nameLJ, nameDecapping;
-        bool includeCoulomb, includeLJ, includeDecapping;
-        bool hasDerivativeCoulomb, hasDerivativeLJ, hasDerivativeDecapping;
+        std::string nameCoulomb, nameLJ, nameCoulombDecapping, nameLJDecapping;
+        bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
+        bool hasDerivativeCoulomb, hasDerivativeLJ, hasDerivativeCoulombDecapping, hasDerivativeLJDecapping;
         ScalingParameterInfo() :
-            nameCoulomb(""), nameLJ(""), nameDecapping(""), includeCoulomb(false), includeLJ(false), includeDecapping(false),
-            hasDerivativeCoulomb(false), hasDerivativeLJ(false), hasDerivativeDecapping(false) {
+            nameCoulomb(""), nameLJ(""), nameCoulombDecapping(""), nameLJDecapping(""), includeCoulomb(false), includeLJ(false),
+            includeCoulombDecapping(false), includeLJDecapping(false), hasDerivativeCoulomb(false), hasDerivativeLJ(false),
+            hasDerivativeCoulombDecapping(false), hasDerivativeLJDecapping(false) {
         }
-        void addInfo(std::string name, bool includeCoulomb, bool includeLJ, bool includeDecapping, bool hasDerivative) {
+        void addInfo(std::string name, bool includeCoulomb, bool includeLJ, bool includeCoulombDecapping, bool includeLJDecapping,
+                     bool hasDerivative) {
             if (includeCoulomb) {
                 this->includeCoulomb = true;
                 nameCoulomb = name;
@@ -211,10 +214,15 @@ class CommonCalcSlicedNonbondedForceKernel::ScalingParameterInfo {
                 nameLJ = name;
                 hasDerivativeLJ = hasDerivative;
             }
-            if (includeDecapping) {
-                this->includeDecapping = true;
-                nameDecapping = name;
-                hasDerivativeDecapping = hasDerivative;
+            if (includeCoulombDecapping) {
+                this->includeCoulombDecapping = true;
+                nameCoulombDecapping = name;
+                hasDerivativeCoulombDecapping = hasDerivative;
+            }
+            if (includeLJDecapping) {
+                this->includeLJDecapping = true;
+                nameLJDecapping = name;
+                hasDerivativeLJDecapping = hasDerivative;
             }
         }
     };

@@ -98,9 +98,9 @@ void SlicedNonbondedForceProxy::serialize(const void* object, SerializationNode&
     for (int i = 0; i < force.getNumScalingParameters(); i++) {
         string parameter;
         int subset1, subset2;
-        bool includeCoulomb, includeLJ;
-        force.getScalingParameter(i, parameter, subset1, subset2, includeCoulomb, includeLJ);
-        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ).setBoolProperty("includeDecapping", force.getScalingParameterIncludeDecapping(i));
+        bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
+        force.getScalingParameter(i, parameter, subset1, subset2, includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping);
+        scalingParameters.createChildNode("scalingParameter").setStringProperty("parameter", parameter).setIntProperty("subset1", subset1).setIntProperty("subset2", subset2).setBoolProperty("includeCoulomb", includeCoulomb).setBoolProperty("includeLJ", includeLJ).setBoolProperty("includeCoulombDecapping", includeCoulombDecapping).setBoolProperty("includeLJDecapping", includeLJDecapping);
     }
     SerializationNode& energyParameterDerivatives = node.createChildNode("energyParameterDerivatives");
     for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
@@ -162,7 +162,7 @@ void* SlicedNonbondedForceProxy::deserialize(const SerializationNode& node) cons
             force->setParticleSubset(subset.getIntProperty("index"), subset.getIntProperty("subset"));
         const SerializationNode& scalingParameters = node.getChildNode("scalingParameters");
         for (auto& param : scalingParameters.getChildren())
-            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"), param.getBoolProperty("includeDecapping", false));
+            force->addScalingParameter(param.getStringProperty("parameter"), param.getIntProperty("subset1"), param.getIntProperty("subset2"), param.getBoolProperty("includeCoulomb"), param.getBoolProperty("includeLJ"), param.getBoolProperty("includeCoulombDecapping", false), param.getBoolProperty("includeLJDecapping", false));
         const SerializationNode& energyParameterDerivatives = node.getChildNode("energyParameterDerivatives");
         for (auto& param : energyParameterDerivatives.getChildren())
             force->addEnergyParameterDerivative(param.getStringProperty("parameter"));

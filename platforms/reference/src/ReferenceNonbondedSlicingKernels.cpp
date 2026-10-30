@@ -61,9 +61,10 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     numParticles = force.getNumParticles();
     numSubsets = force.getNumSubsets();
     numSlices = force.getNumSlices();
-    sliceLambdas.resize(numSlices, vector<double>(3, 1.0));
-    sliceScalingParams.resize(numSlices, vector<ScalingParameterInfo>(3));
-    decappedSlices.assign(numSlices, false);
+    sliceLambdas.resize(numSlices, vector<double>(numTerms, 1.0));
+    sliceScalingParams.resize(numSlices, vector<ScalingParameterInfo>(numTerms));
+    ljDecappedSlices.assign(numSlices, false);
+    coulombDecappedSlices.assign(numSlices, false);
 
     subsets.resize(numParticles);
     for (int i = 0; i < numParticles; i++)
@@ -76,8 +77,8 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     for (int index = 0; index < force.getNumScalingParameters(); index++) {
         string name;
         int i, j;
-        bool includeCoulomb, includeLJ;
-        force.getScalingParameter(index, name, i, j, includeCoulomb, includeLJ);
+        bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
+        force.getScalingParameter(index, name, i, j, includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping);
         int slice = sliceIndex(i, j);
         bool hasDerivative = requestedDerivatives.find(name) != requestedDerivatives.end();
         ScalingParameterInfo info = ScalingParameterInfo(name, hasDerivative);
@@ -85,9 +86,13 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
             sliceScalingParams[slice][Coul] = info;
         if (includeLJ)
             sliceScalingParams[slice][vdW] = info;
-        if (force.getScalingParameterIncludeDecapping(index)) {
-            sliceScalingParams[slice][decap] = info;
-            decappedSlices[slice] = true;
+        if (includeLJDecapping) {
+            sliceScalingParams[slice][vdWDecap] = info;
+            ljDecappedSlices[slice] = true;
+        }
+        if (includeCoulombDecapping) {
+            sliceScalingParams[slice][CoulDecap] = info;
+            coulombDecappedSlices[slice] = true;
         }
     }
 
@@ -186,6 +191,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::initialize(const System& system, c
     reciprocalExclusions = force.getReciprocalExclusions();
     rfDielectric = force.getReactionFieldDielectric();
     cappedLJ = CappedLJ(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
+    cappedCoulomb = CappedCoulomb(force.getCappingOrderAtZero(), force.getCappingOrderAtSigma());
     if (force.getInnerForceGroup() >= 0)
         innerSplit = InnerSplit(force.getInnerSwitchingDistance(), force.getInnerCutoffDistance());
     if (force.getUseDispersionCorrection())
@@ -224,12 +230,13 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         clj.setUsePME(ewaldAlpha, gridSize);
         clj.setUseLJPME(ewaldDispersionAlpha, dispersionGridSize);
     }
-    vector<vector<double>> sliceEnergies(numSlices, vector<double>(3, 0.0));
+    vector<vector<double>> sliceEnergies(numSlices, vector<double>(numTerms, 0.0));
     if (useSwitchingFunction)
         clj.setUseSwitchingFunction(switchingDistance);
     clj.setInnerSplit(innerSplit);
-    clj.setDecappedSlices(decappedSlices);
+    clj.setDecappedSlices(ljDecappedSlices, coulombDecappedSlices);
     clj.setCappedLJ(cappedLJ);
+    clj.setCappedCoulomb(cappedCoulomb);
     clj.calculatePairIxn(
         numParticles,
         posData,
@@ -250,6 +257,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
         ReferenceSlicedLJCoulomb14 nonbonded14;
         nonbonded14.setInnerSplit(innerSplit);
         nonbonded14.setCappedLJ(cappedLJ);
+        nonbonded14.setCappedCoulomb(cappedCoulomb);
         if (exceptionsArePeriodic) {
             Vec3* boxVectors = extractBoxVectors(context);
             nonbonded14.setPeriodic(boxVectors);
@@ -264,7 +272,7 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
                 int slice = bonded14SliceArray[k];
                 nonbonded14.calculateBondIxn(bonded14IndexArray[k], posData, bonded14ParamArray[k],
                                              forceData, sliceLambdas[slice], sliceEnergies[slice],
-                                             decappedSlices[slice], mode);
+                                             ljDecappedSlices[slice], coulombDecappedSlices[slice], mode);
             }
         if (includeDirect && (periodic || ewald || pme)) {
             Vec3* boxVectors = extractBoxVectors(context);
@@ -277,13 +285,13 @@ double ReferenceCalcSlicedNonbondedForceKernel::execute(ContextImpl& context, bo
     double energy = 0;
     if (includeEnergy) {
         for (int slice = 0; slice < numSlices; slice++)
-            for (int term = 0; term < 3; term++)
+            for (int term = 0; term < numTerms; term++)
                 energy += sliceLambdas[slice][term]*sliceEnergies[slice][term];
     }
 
     map<string, double>& energyParamDerivs = extractEnergyParameterDerivatives(context);
     for (int slice = 0; slice < numSlices; slice++)
-        for (int term = 0; term < 3; term++) {
+        for (int term = 0; term < numTerms; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
             if (info.hasDerivative) {
                 // As on the GPU platforms, derivatives are only computed along with the energy
@@ -369,7 +377,7 @@ void ReferenceCalcSlicedNonbondedForceKernel::computeParameters(ContextImpl& con
     // Compute scaling parameter values.
 
     for (int slice = 0; slice < numSlices; slice++)
-        for (int term = 0; term < 3; term++) {
+        for (int term = 0; term < numTerms; term++) {
             ScalingParameterInfo info = sliceScalingParams[slice][term];
             sliceLambdas[slice][term] = info.name == "" ? 1.0 : context.getParameter(info.name);
         }
