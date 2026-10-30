@@ -348,9 +348,9 @@ public:
      *         which is the same for every nonbonded method and for exceptions. Switching on the Coulomb
      *         decapping term while the Lennard-Jones core is weak can let opposite charges collapse. With a
      *         cutoff, the sigma of every pair of charged particles of the slice and of every exception with a
-     *         nonzero charge product, including those with zero epsilon, cannot exceed the cutoff distance;
-     *         Coulomb interactions are not switched, so the switching distance does not restrict it. Coulomb
-     *         decapping cannot be combined with an inner force group.
+     *         nonzero charge product, including those with zero epsilon, cannot exceed the cutoff distance,
+     *         nor the inner switching distance with an inner force group (see :func:`setInnerForceGroup`);
+     *         Coulomb interactions are not switched, so the switching distance does not restrict it.
      *     includeLJDecapping : bool, default=False
      *         whether this scaling parameter multiplies the Lennard-Jones decapping term of the slice. Its
      *         presence decaps the Lennard-Jones interactions of the slice: each Lennard-Jones pair interacts

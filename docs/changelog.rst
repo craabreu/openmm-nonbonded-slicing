@@ -35,7 +35,7 @@ Changelog
   same orders that matches it at sigma, and the difference is the Coulomb decapping term. One parameter
   can multiply both decapping terms, or each can have its own. The sigma of every pair of charged
   particles of a Coulomb-decapped slice, those with zero epsilon included, cannot exceed the cutoff
-  distance. Not available with an inner force group.
+  distance, nor the inner switching distance with an inner force group.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,
