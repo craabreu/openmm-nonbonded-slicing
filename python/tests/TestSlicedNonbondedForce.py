@@ -134,8 +134,9 @@ def testCappingOrdersAPI():
 
 
 def testCoulombDecappingErrors():
-    """Coulomb decapping caps every pair of a decapped slice, zero-epsilon particles included, and rejects an inner
-    force group. Lennard-Jones decapping alone caps only the pairs with nonzero epsilon."""
+    """Coulomb decapping caps every charged pair of a decapped slice, zero-epsilon particles included, whose sigma
+    cannot exceed the cutoff, and rejects an inner force group. Lennard-Jones decapping alone caps only the pairs with
+    nonzero epsilon."""
     def build(configure):
         system = mm.System()
         for _ in range(2):
@@ -146,7 +147,7 @@ def testCoulombDecappingErrors():
         force.setCutoffDistance(1.0)
         force.setUseSwitchingFunction(True)
         force.setSwitchingDistance(0.5)
-        force.addParticle(0.4, 1.0, 0.0)   # a placeholder sigma, as on a TIP3P hydrogen
+        force.addParticle(0.4, 2.0, 0.0)   # a placeholder sigma, as on a TIP3P hydrogen: sigma_ij = 1.15
         force.addParticle(-0.4, 0.3, 0.5)
         force.setParticleSubset(1, 1)
         force.addGlobalParameter("lambdaD", 1.0)
@@ -155,8 +156,9 @@ def testCoulombDecappingErrors():
         system.addForce(force)
         mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
 
-    with pytest.raises(Exception, match="Coulomb-decapped slice"):
+    with pytest.raises(Exception, match="cannot exceed the cutoff distance"):
         build(lambda force: None)
+    build(lambda force: force.setParticleParameters(0, 0.4, 1.0, 0.0))   # sigma_ij = 0.65, beyond the switching distance
     build(lambda force: force.setParticleParameters(0, 0.4, 0.3, 0.0))
     build(lambda force: force.setScalingParameter(0, "lambdaD", 0, 1, False, False, False, True))
     with pytest.raises(Exception, match="inner force group"):

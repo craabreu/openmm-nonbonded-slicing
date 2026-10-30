@@ -405,8 +405,26 @@ void CommonCalcSlicedNonbondedForceKernel::commonInitialize(
     if (recipForceGroup < 0)
         recipForceGroup = force.getForceGroup();
     usePosqCharges = hasCoulomb ? cc.requestPosqCharges() : false;
-    ljDecapping = ljDecapping && hasLJ;
-    coulombDecapping = coulombDecapping && hasCoulomb;
+    // The exception kernel computes both interactions whatever hasLJ and hasCoulomb, which only look at particles, so
+    // exceptions with nonzero epsilon or charge product also call for the decapping code
+    bool exceptionsHaveLJ = false, exceptionsHaveCoulomb = false;
+    for (int i = 0; i < force.getNumExceptions(); i++) {
+        int particle1, particle2;
+        double chargeProd, sigma, epsilon;
+        force.getExceptionParameters(i, particle1, particle2, chargeProd, sigma, epsilon);
+        exceptionsHaveLJ = exceptionsHaveLJ || epsilon != 0.0;
+        exceptionsHaveCoulomb = exceptionsHaveCoulomb || chargeProd != 0.0;
+    }
+    for (int i = 0; i < force.getNumExceptionParameterOffsets(); i++) {
+        string param;
+        int exception;
+        double charge, sigma, epsilon;
+        force.getExceptionParameterOffset(i, param, exception, charge, sigma, epsilon);
+        exceptionsHaveLJ = exceptionsHaveLJ || epsilon != 0.0;
+        exceptionsHaveCoulomb = exceptionsHaveCoulomb || charge != 0.0;
+    }
+    ljDecapping = ljDecapping && (hasLJ || exceptionsHaveLJ);
+    coulombDecapping = coulombDecapping && (hasCoulomb || exceptionsHaveCoulomb);
     hasDecapping = ljDecapping || coulombDecapping;
     map<string, string> decapDefines;
     decapDefines["HAS_DECAPPING"] = (hasDecapping ? "1" : "0");

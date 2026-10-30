@@ -3195,10 +3195,80 @@ void testCoulombDecappingRoles(NonbondedForce::NonbondedMethod method) {
     assertEqualVec(unscaled.getForces()[1], decapOnly.getForces()[1], tol);
 }
 
+enum SeparateDecapMode {SeparatePairs, SeparateExceptions, SeparateExceptionsOnly};
+
+void testSeparateDecapping(NonbondedForce::NonbondedMethod method, SeparateDecapMode mode) {
+    // Lennard-Jones and Coulomb decapping on different slices: "lambdaD" multiplies the Lennard-Jones decapping term of
+    // slice (0, 1), which holds pair A, and "lambdaDQ" the Coulomb decapping term of slice (1, 1), which holds pair B.
+    // The difference from the plain force is (lambdaD - 1)*DeltaLJ_A + (lambdaDQ - 1)*DeltaQ_B, with no Coulomb cap on A
+    // and no Lennard-Jones cap on B. The pairs interact directly, as exceptions, or only as exceptions (the particles
+    // have no charge or epsilon of their own).
+
+    const double xA = 0.7, xB = 0.6, cutoff = 3.5, L = 12.0, lambdaD = 0.3, lambdaDQ = 0.8;
+    const vector<double> q = {0.5, -0.4, 0.3, -0.6}, eps = {0.8, 0.6, 0.5, 0.9};
+    const vector<Vec3> positions = {Vec3(1, 1, 1), Vec3(1+xA, 1, 1), Vec3(6, 6, 6), Vec3(6+xB, 6, 6)};
+    string precision = platform.getName() == "Reference" ? "double" : platform.getPropertyDefaultValue("Precision");
+    double tol = precision == "double" ? 1e-6 : 5e-4;
+    auto build = [&](bool decap, System& system) {
+        SlicedNonbondedForce* force = new SlicedNonbondedForce(2);
+        force->setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) method);
+        force->setCutoffDistance(cutoff);
+        for (int i = 0; i < 4; i++) {
+            system.addParticle(1.0);
+            if (mode == SeparateExceptionsOnly)
+                force->addParticle(0.0, 1.0, 0.0);
+            else
+                force->addParticle(q[i], 1.0, eps[i]);
+            force->setParticleSubset(i, i == 0 ? 0 : 1);
+        }
+        system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0), Vec3(0, L, 0), Vec3(0, 0, L));
+        if (mode != SeparatePairs)
+            for (int i : {0, 2})
+                force->addException(i, i+1, q[i]*q[i+1], 1.0, sqrt(eps[i]*eps[i+1]));
+        if (decap) {
+            force->addGlobalParameter("lambdaD", lambdaD);
+            force->addGlobalParameter("lambdaDQ", lambdaDQ);
+            force->addScalingParameter("lambdaD", 0, 1, false, false, false, true);
+            force->addScalingParameter("lambdaDQ", 1, 1, false, false, true, false);
+            force->addEnergyParameterDerivative("lambdaD");
+            force->addEnergyParameterDerivative("lambdaDQ");
+        }
+        system.addForce(force);
+    };
+    System systemDecap, systemPlain;
+    build(true, systemDecap);
+    build(false, systemPlain);
+    VerletIntegrator integratorDecap(0.01), integratorPlain(0.01);
+    Context contextDecap(systemDecap, integratorDecap, platform);
+    Context contextPlain(systemPlain, integratorPlain, platform);
+    contextDecap.setPositions(positions);
+    contextPlain.setPositions(positions);
+    int options = State::Energy | State::Forces | State::ParameterDerivatives;
+    State decap = contextDecap.getState(options);
+    State plain = contextPlain.getState(options);
+
+    double epsA = sqrt(eps[0]*eps[1]), qqB = ONE_4PI_EPS0*q[2]*q[3];
+    double deltaLJ = 4*epsA*(pow(xA, -12) - pow(xA, -6) - cappedLJ(xA));
+    double deltaLJRForce = 4*epsA*(12*pow(xA, -12) - 6*pow(xA, -6) - cappedLJRForce(xA));
+    double deltaQ = qqB*(1/xB - cappedCoulomb(xB));
+    double deltaQRForce = qqB*(1/xB - cappedCoulombRForce(xB));
+    double scale = max(1.0, abs(plain.getPotentialEnergy()));
+    assertEqualTo(((lambdaD-1)*deltaLJ + (lambdaDQ-1)*deltaQ)/scale, (decap.getPotentialEnergy()-plain.getPotentialEnergy())/scale, tol);
+    double forceA = (lambdaD-1)*deltaLJRForce/xA, forceB = (lambdaDQ-1)*deltaQRForce/xB;
+    assertEqualVec(Vec3(-forceA, 0, 0), decap.getForces()[0]-plain.getForces()[0], tol);
+    assertEqualVec(Vec3(forceA, 0, 0), decap.getForces()[1]-plain.getForces()[1], tol);
+    assertEqualVec(Vec3(-forceB, 0, 0), decap.getForces()[2]-plain.getForces()[2], tol);
+    assertEqualVec(Vec3(forceB, 0, 0), decap.getForces()[3]-plain.getForces()[3], tol);
+    map<string, double> derivatives = decap.getEnergyParameterDerivatives();
+    assertEqualTo(deltaLJ, derivatives.at("lambdaD"), tol);
+    assertEqualTo(deltaQ, derivatives.at("lambdaDQ"), tol);
+}
+
 void testCoulombDecappingErrors() {
-    // With Coulomb decapping, every pair of a decapped slice is capped, so with a switching function the sigma check
-    // covers particles with zero epsilon and exceptions with a nonzero charge product. An inner force group is
-    // rejected. Lennard-Jones decapping alone is checked as before.
+    // A capped pair splits at sigma, which cannot exceed the cutoff. Coulomb decapping caps every charged pair of a
+    // decapped slice, so this covers particles with zero epsilon and exceptions with a nonzero charge product. Coulomb
+    // interactions are not switched, so unlike Lennard-Jones pairs they may have sigma beyond the switching distance.
+    // An inner force group is rejected.
 
     auto build = [](function<void(SlicedNonbondedForce&)> configure, bool expectFailure) {
         System system;
@@ -3227,18 +3297,28 @@ void testCoulombDecappingErrors() {
         }
         ASSERT_EQUAL(expectFailure, threw);
     };
-    build([](SlicedNonbondedForce& f) {}, false);
-    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 1.0, 0.0); }, true);   // zero epsilon, as a TIP3P hydrogen
     auto ljOnly = [](SlicedNonbondedForce& f) { f.setScalingParameter(0, "lambdaD", 0, 1, false, false, false, true); };
-    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 1.0, 0.0); ljOnly(f); }, false);
-    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 1.0, 0.0); f.setScalingParameter(0, "lambdaD", 0, 1, false, false, true); }, true);
-    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.1, 0.6, 0.0); }, true);
-    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.0, 0.6, 0.0); }, false);
-    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 1.0, 0.0); f.setUseSwitchingFunction(false); }, false);
+    auto coulombOnly = [](SlicedNonbondedForce& f) { f.setScalingParameter(0, "lambdaD", 0, 1, false, false, true); };
+    build([](SlicedNonbondedForce& f) {}, false);
+    // Zero epsilon, as a TIP3P hydrogen: sigma_ij = 0.65 is beyond the switching distance but within the cutoff, and
+    // sigma_ij = 1.15 is beyond the cutoff
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 1.0, 0.0); }, false);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 2.0, 0.0); }, true);
+    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 2.0, 0.0); ljOnly(f); }, false);
+    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 2.0, 0.0); coulombOnly(f); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.0, 2.0, 0.0); }, false);   // uncharged
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 2.0, 0.0); f.setUseSwitchingFunction(false); }, true);
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 2.0, 0.0); f.setNonbondedMethod(SlicedNonbondedForce::NoCutoff); }, false);
+    // A Lennard-Jones pair with sigma_ij = 0.55, beyond the switching distance
+    build([](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 0.8, 0.5); }, true);
+    build([&](SlicedNonbondedForce& f) { f.setParticleParameters(0, 0.1, 0.8, 0.5); coulombOnly(f); }, false);
+    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.1, 1.2, 0.0); }, true);
+    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.1, 0.6, 0.0); }, false);
+    build([](SlicedNonbondedForce& f) { f.addException(0, 1, 0.0, 1.2, 0.0); }, false);
     auto inner = [](SlicedNonbondedForce& f) { f.setInnerForceGroup(1); f.setInnerSwitchingDistance(0.4); f.setInnerCutoffDistance(0.5); };
     build(inner, true);
     build([&](SlicedNonbondedForce& f) { inner(f); ljOnly(f); }, false);
-    build([&](SlicedNonbondedForce& f) { inner(f); f.setScalingParameter(0, "lambdaD", 0, 1, false, false, true); }, true);
+    build([&](SlicedNonbondedForce& f) { inner(f); coulombOnly(f); }, true);
     build([&](SlicedNonbondedForce& f) { inner(f); f.setScalingParameter(0, "lambdaD", 0, 1, false, true); }, false);   // not decapped
 }
 
@@ -3364,6 +3444,9 @@ int main(int argc, char* argv[]) {
         testCoulombDecapping(sfmt, NonbondedForce::PME, true, true);
         for (auto method : {NonbondedForce::NoCutoff, NonbondedForce::CutoffPeriodic, NonbondedForce::PME})
             testCoulombDecappingRoles(method);
+        for (auto method : nonbondedMethods)
+            for (auto mode : {SeparatePairs, SeparateExceptions, SeparateExceptionsOnly})
+                testSeparateDecapping(method, mode);
         runPlatformTests();
     }
     catch(const exception& e) {
