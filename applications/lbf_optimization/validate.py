@@ -12,7 +12,10 @@ Per label, it prints dG and the MBAR standard error of each run, and the standar
 which is the honest measure of precision when runs are independent.
 """
 
+import os
 import sys
+
+os.environ.setdefault("JAX_PLATFORMS", "cpu")  # keep pymbar's JAX off the GPU that simulate.py uses
 
 import numpy as np
 from pymbar import MBAR, timeseries

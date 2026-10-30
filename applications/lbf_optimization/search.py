@@ -24,6 +24,10 @@ thermodynamic length, written as JSON for simulate.py --plan.
 import argparse
 import itertools
 import json
+import os
+
+# pymbar solves with JAX, which would otherwise claim most of the GPU memory while simulate.py runs there
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import numpy as np
 from scipy.special import logsumexp
