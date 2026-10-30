@@ -82,21 +82,17 @@ if (r2 < INNER_CUTOFF_SQUARED) {
     innerEnergyLJ = exceptionParams.z*(sigma6*sigma6*e12 - sigma6*e6);
     innerEnergyCl = exceptionParams.x*e1;
 #if SUBTRACT_INNER
-    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
-    // is the constant sum_n c_n K_n. It replaces the bare energies rather than being computed as the
-    // difference of two large, nearly equal terms (the inner energies are zero above).
+    // For r <= r_s the inner force is the whole bare force, so the remainder has no force and its share of the bare
+    // potential is the constant sum_n c_n K_n. They are set directly rather than computed as differences of large,
+    // nearly equal terms (the inner energies are zero above), which also keeps the forces from becoming inf-inf in
+    // single precision as r -> 0.
     if (r <= INNER_SWITCH) {
+        ljForce = clForce = innerForceLJ = innerForceCl = 0.0f;
         ljEnergy = exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
         clEnergy = exceptionParams.x*INNER_K1;
     }
 #endif
 }
-#endif
-#if SUBTRACT_INNER && LJ_DECAPPING
-// Below sigma, the remainder of a decapped slice has no Lennard-Jones force; dropping the bare force from both sides of
-// the difference keeps it from becoming inf-inf in single precision as r -> 0
-if (IS_LJ_DECAPPED && sig6 > 1.0f)
-    ljForce = innerForceLJ = 0.0f;
 #endif
 #if INNER_GROUP
 ljForce = innerForceLJ;
@@ -131,7 +127,7 @@ if (IS_LJ_DECAPPED && sig6 > 1.0f) {
 }
 #endif
 #if COULOMB_DECAPPING && !SUBTRACT_INNER
-// Below sigma, a Coulomb-decapped slice (never combined with an inner force group) caps the 1/r term
+// Likewise, a Coulomb-decapped slice caps the 1/r term below sigma
 if (IS_COULOMB_DECAPPED && sig6 > 1.0f) {
     const real x = RECIP(invR*exceptionParams.y);
     const real xp = CAP_XPOW;
@@ -143,6 +139,9 @@ if (IS_COULOMB_DECAPPED && sig6 > 1.0f) {
     decapQEnergy = bare - capEnergy;
     clForce = capForce;
     clEnergy = capEnergy;
+#if INNER_GROUP
+    clEnergy -= exceptionParams.x*INNER_K1;
+#endif
 }
 #endif
 #if HAS_DECAPPING

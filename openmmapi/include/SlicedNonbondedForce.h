@@ -94,10 +94,10 @@ public:
      * the inner switching distance and the inner cutoff distance, which is computed in the inner
      * force group, and a remainder, which stays in the force group of this force.  The inner cutoff
      * distance cannot exceed the switching distance when a switching function is used.  With
-     * Lennard-Jones decapping scaling parameters, the sigma of every Lennard-Jones pair in a decapped
-     * slice cannot exceed the inner switching distance, so that the inner force group can take all of
-     * the capped and decapping terms below sigma.  Coulomb decapping scaling parameters cannot be
-     * combined with an inner force group.  The inner force group, cutoff
+     * decapping scaling parameters, the sigma of every Lennard-Jones pair in a Lennard-Jones-decapped
+     * slice and of every charged pair in a Coulomb-decapped slice cannot exceed the inner switching
+     * distance, so that the inner force group can take all of the capped and decapping terms below
+     * sigma.  The inner force group, cutoff
      * distance and switching distance are fixed when a Context is created (call reinitialize() to
      * change them).
      */

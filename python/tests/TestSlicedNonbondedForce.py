@@ -135,8 +135,8 @@ def testCappingOrdersAPI():
 
 def testCoulombDecappingErrors():
     """Coulomb decapping caps every charged pair of a decapped slice, zero-epsilon particles included, whose sigma
-    cannot exceed the cutoff, and rejects an inner force group. Lennard-Jones decapping alone caps only the pairs with
-    nonzero epsilon."""
+    cannot exceed the cutoff, nor the inner switching distance of an inner force group. Lennard-Jones decapping alone
+    caps only the pairs with nonzero epsilon."""
     def build(configure):
         system = mm.System()
         for _ in range(2):
@@ -161,9 +161,13 @@ def testCoulombDecappingErrors():
     build(lambda force: force.setParticleParameters(0, 0.4, 1.0, 0.0))   # sigma_ij = 0.65, beyond the switching distance
     build(lambda force: force.setParticleParameters(0, 0.4, 0.3, 0.0))
     build(lambda force: force.setScalingParameter(0, "lambdaD", 0, 1, False, False, False, True))
-    with pytest.raises(Exception, match="inner force group"):
-        build(lambda force: (force.setParticleParameters(0, 0.4, 0.3, 0.0), force.setInnerForceGroup(1),
-                             force.setInnerSwitchingDistance(0.4), force.setInnerCutoffDistance(0.5)))
+    def inner(force):
+        force.setInnerForceGroup(1)
+        force.setInnerSwitchingDistance(0.4)
+        force.setInnerCutoffDistance(0.5)
+    build(lambda force: (force.setParticleParameters(0, 0.4, 0.3, 0.0), inner(force)))
+    with pytest.raises(Exception, match="cannot exceed the inner switching distance"):
+        build(lambda force: (force.setParticleParameters(0, 0.4, 1.0, 0.0), inner(force)))
 
 
 @pytest.mark.parametrize("platformName, precision", cases)

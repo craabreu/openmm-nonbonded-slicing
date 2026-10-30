@@ -162,9 +162,6 @@ void SlicedNonbondedForceImpl::initialize(ContextImpl& context) {
         if (includeCoulombDecapping)
             coulombDecappedSlices[sliceIndex(subset1, subset2)] = true;
     }
-    bool anyCoulombDecapped = find(coulombDecappedSlices.begin(), coulombDecappedSlices.end(), true) != coulombDecappedSlices.end();
-    if (anyCoulombDecapped && owner.getInnerForceGroup() >= 0)
-        throw OpenMMException("SlicedNonbondedForce: Coulomb decapping cannot be combined with an inner force group");
     bool useCutoff = (owner.getNonbondedMethod() != SlicedNonbondedForce::NoCutoff);
     cutoffDistance = useCutoff ? owner.getCutoffDistance() : numeric_limits<double>::infinity();
     switchingDistance = useCutoff && owner.getUseSwitchingFunction() ? owner.getSwitchingDistance() : numeric_limits<double>::infinity();
@@ -443,21 +440,23 @@ void SlicedNonbondedForceImpl::getMaxDecappedSigmas(const SlicedNonbondedForce& 
 }
 
 void SlicedNonbondedForceImpl::checkDecappedSigma(const SlicedNonbondedForce& force) const {
-    // A capped pair splits at sigma, so sigma cannot exceed the cutoff. The Lennard-Jones decapping term is not
-    // switched, and the inner force group takes all of it, so for Lennard-Jones pairs sigma cannot exceed the switching
-    // distance or the inner switching distance either. Coulomb interactions are not switched, and Coulomb decapping
-    // excludes an inner force group.
+    // A capped pair splits at sigma, so sigma cannot exceed the cutoff. The decapping terms are not switched, and the
+    // inner force group takes all of them, so sigma cannot exceed the inner switching distance either, nor the switching
+    // distance for Lennard-Jones pairs (Coulomb interactions are not switched).
     double maxLJSigma, maxCoulombSigma;
     getMaxDecappedSigmas(force, ljDecappedSlices, coulombDecappedSlices, maxLJSigma, maxCoulombSigma);
     string ljPairs = "a Lennard-Jones pair in a Lennard-Jones-decapped slice";
+    string coulombPairs = "a charged pair in a Coulomb-decapped slice";
     if (maxLJSigma > cutoffDistance)
         throw OpenMMException("SlicedNonbondedForce: the sigma of "+ljPairs+" cannot exceed the cutoff distance");
     if (maxCoulombSigma > cutoffDistance)
-        throw OpenMMException("SlicedNonbondedForce: the sigma of a charged pair in a Coulomb-decapped slice cannot exceed the cutoff distance");
+        throw OpenMMException("SlicedNonbondedForce: the sigma of "+coulombPairs+" cannot exceed the cutoff distance");
     if (maxLJSigma > switchingDistance)
         throw OpenMMException("SlicedNonbondedForce: with a switching function, the sigma of "+ljPairs+" cannot exceed the switching distance");
     if (maxLJSigma > innerSwitchingDistance)
         throw OpenMMException("SlicedNonbondedForce: with an inner force group, the sigma of "+ljPairs+" cannot exceed the inner switching distance");
+    if (maxCoulombSigma > innerSwitchingDistance)
+        throw OpenMMException("SlicedNonbondedForce: with an inner force group, the sigma of "+coulombPairs+" cannot exceed the inner switching distance");
 }
 
 void SlicedNonbondedForceImpl::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {

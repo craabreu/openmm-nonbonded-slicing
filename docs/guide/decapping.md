@@ -144,14 +144,14 @@ properties of a scaling parameter, the decapping roles and the capping orders ar
   of a slice on only while $\lambda_D > 0$, or cap the Coulomb interaction too with `includeCoulombDecapping`.
 * With Coulomb decapping, the $\sigma$ of every pair of charged particles of a decapped slice and of every
   exception with a nonzero charge product, those with $\epsilon = 0$ included, cannot exceed the cutoff
-  distance. Coulomb interactions are not switched, so the switching distance does not restrict it. Coulomb
-  decapping cannot be combined with an inner force group.
+  distance. Coulomb interactions are not switched, so the switching distance does not restrict it.
 * With the default orders, the height of the core, $119.2\,\epsilon$, is only a few $k_B T$ for atoms with
   small $\epsilon$, which then overlap often at $\lambda_D = 0$. The decapping energy of such overlaps is
   large, so raise the core with `setCappingOrders` or place enough states near $\lambda_D = 0$ to keep the
   estimates converged. Higher orders give larger coefficients that partly cancel near $r = \sigma$, which
   costs some single-precision accuracy there.
 * With an inner force group ({doc}`mts`), the inner group takes all of the capped and decapping terms below
-  $\sigma$. The $\sigma$ of every Lennard-Jones pair of a decapped slice (pairs with $\epsilon = 0$
-  excluded) cannot exceed the inner switching distance. This is checked when a Context is created and by
-  `updateParametersInContext`, but not for parameter offsets.
+  $\sigma$. The $\sigma$ of every Lennard-Jones pair of a Lennard-Jones-decapped slice (pairs with
+  $\epsilon = 0$ excluded) and of every charged pair of a Coulomb-decapped slice cannot exceed the inner
+  switching distance. This is checked when a Context is created and by `updateParametersInContext`, but
+  not for parameter offsets.

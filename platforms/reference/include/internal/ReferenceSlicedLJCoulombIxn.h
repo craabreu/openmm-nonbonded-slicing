@@ -75,9 +75,9 @@ class ReferenceSlicedLJCoulombIxn {
       void splitCoulomb(double inverseR, double sig, double qq, double& coulEnergy, double& coulRdUdr,
                         double& decapEnergy, double& decapRdUdr) const;
 
-      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool decapped,
+      void calculateInnerPair(int ii, int jj, const vector<vector<double>>& atomParameters, double r, bool ljDecapped, bool coulombDecapped,
                               double& forceFactorVdw, double& forceFactorCoul, double& vdwEnergy, double& coulEnergy,
-                              double& forceFactorDecap, double& decapEnergy) const;
+                              double& forceFactorDecap, double& decapEnergy, double& forceFactorDecapQ, double& decapQEnergy) const;
 
 
    public:
