@@ -5,6 +5,11 @@ Changelog
 0.5.0 (unreleased)
 ------------------
 
+**Breaking changes**
+
+* ``getScalingParameter`` also returns the ``includeCoulombDecapping`` and ``includeLJDecapping``
+  flags: two more output arguments in C++, and a list of seven items instead of five in Python.
+
 **New features**
 
 * ``setReciprocalExclusions(True)`` computes the terms that subtract the reciprocal-space
@@ -14,8 +19,8 @@ Changelog
   (Procacci et al., J. Chem. Phys. 108, 8799, 1998; Morrone et al., J. Chem. Theory Comput. 6,
   1798, 2010). With this option, these terms are also kept when ``setIncludeDirectSpace(False)``
   is used. The default, ``False``, keeps the behavior of OpenMM's ``NonbondedForce``.
-* A scaling parameter added with ``includeDecapping=True`` (sixth argument of ``addScalingParameter``)
-  multiplies the decapping term of its slice: each Lennard-Jones pair of the slice is split into a
+* A scaling parameter added with ``includeLJDecapping=True`` (seventh argument of ``addScalingParameter``)
+  multiplies the Lennard-Jones decapping term of its slice: each Lennard-Jones pair of the slice is split into a
   capped potential, finite at r = 0 and multiplied by the slice's Lennard-Jones scaling parameter, and
   the rest of the usual potential, which is zero beyond sigma (Correa et al., J. Chem. Theory Comput.
   18, 5876, 2022). The energy stays linear in every parameter, so the derivatives are the capped and
@@ -24,12 +29,13 @@ Changelog
   (``setCappingOrders``). Available on all platforms, with every nonbonded method and with the inner
   force group. With a switching function or an inner force group, the sigma of the Lennard-Jones pairs
   of decapped slices cannot exceed the switching distance or the inner switching distance.
-* ``setCoulombDecapping(True)`` also caps the Coulomb interaction of the pairs of decapped slices: the 1/r
-  term of their direct-space potential is replaced below sigma by the polynomial with the same orders that
-  matches it at sigma, and the difference joins the decapping term. The potential is then bounded below for
-  any values of the Coulomb, Lennard-Jones and decapping parameters. The sigma of every particle of a
-  decapped slice, those with zero epsilon included, then counts for the switching-distance restriction.
-  Not available with an inner force group.
+* A scaling parameter added with ``includeCoulombDecapping=True`` (sixth argument of
+  ``addScalingParameter``) multiplies the Coulomb decapping term of its slice: the 1/r term of the
+  direct-space potential of every pair of the slice is replaced below sigma by the polynomial with the
+  same orders that matches it at sigma, and the difference is the Coulomb decapping term. One parameter
+  can multiply both decapping terms, or each can have its own. The sigma of every particle of a
+  Coulomb-decapped slice, those with zero epsilon included, counts for the switching-distance
+  restriction. Not available with an inner force group.
 * Inner force group: a force-switched short-range copy of the direct-space interactions (particle
   pairs and 1-4 exceptions) can be computed in its own force group for multiple time-step
   integration, with an energy consistent with its force (``setInnerForceGroup``,

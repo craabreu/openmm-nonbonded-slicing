@@ -36,12 +36,11 @@ class ReferenceSlicedLJCoulombIxn {
       InnerSplit innerSplit;
       CappedLJ cappedLJ;
       CappedCoulomb cappedCoulomb;
-      bool coulombDecapping;
       double krf, crf;
       double alphaEwald, alphaDispersionEwald;
       int numRx, numRy, numRz;
       int meshDim[3], dispersionMeshDim[3];
-      vector<bool> decappedSlices;
+      vector<bool> ljDecappedSlices, coulombDecappedSlices;
 
       // parameter indices
 
@@ -51,7 +50,8 @@ class ReferenceSlicedLJCoulombIxn {
 
       static const int   Coul = 0;
       static const int   vdW = 1;
-      static const int   decap = 2;
+      static const int   vdWDecap = 2;
+      static const int   CoulDecap = 3;
 
       /**---------------------------------------------------------------------------------------
 
@@ -189,15 +189,16 @@ class ReferenceSlicedLJCoulombIxn {
 
          Set which slices are decapped. Must be called before calculatePairIxn.
 
-         @param decapped  whether each slice is decapped
+         @param ljDecapped       whether the Lennard-Jones term of each slice is decapped
+         @param coulombDecapped  whether the Coulomb term of each slice is decapped
 
          --------------------------------------------------------------------------------------- */
 
-      void setDecappedSlices(const vector<bool>& decapped);
+      void setDecappedSlices(const vector<bool>& ljDecapped, const vector<bool>& coulombDecapped);
 
       /**---------------------------------------------------------------------------------------
 
-         Set the capped Lennard-Jones potential of the decapped slices.
+         Set the capped Lennard-Jones potential of the Lennard-Jones-decapped slices.
 
          @param capped   the capped potential
 
@@ -207,15 +208,13 @@ class ReferenceSlicedLJCoulombIxn {
 
       /**---------------------------------------------------------------------------------------
 
-         Set whether the decapping term of the decapped slices includes the Coulomb interaction, and
-         the capped Coulomb potential.
+         Set the capped Coulomb potential of the Coulomb-decapped slices.
 
-         @param decapping  whether Coulomb interactions are decapped
          @param capped     the capped Coulomb potential
 
          --------------------------------------------------------------------------------------- */
 
-      void setCoulombDecapping(bool decapping, const CappedCoulomb& capped);
+      void setCappedCoulomb(const CappedCoulomb& capped);
 
       /**---------------------------------------------------------------------------------------
 

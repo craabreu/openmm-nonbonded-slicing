@@ -44,52 +44,35 @@ public:
     }
     void setParticleSubset(int index, int subset);
     int getParticleSubset(int index) const;
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
-    void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const;
-    bool getScalingParameterIncludeDecapping(int index) const;
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                            bool includeCoulombDecapping = false, bool includeLJDecapping = false);
+    void getScalingParameter(int index, std::string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ,
+                             bool& includeCoulombDecapping, bool& includeLJDecapping) const;
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                             bool includeCoulombDecapping = false, bool includeLJDecapping = false);
     /**
-     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that vanish at r = 0
-     * (m0 in Correa et al., J. Chem. Theory Comput. 18, 5876, 2022).  The default is 3.
+     * Get the number of derivatives of the capped potentials of decapped slices that vanish at r = 0 (m0 in Correa et
+     * al., J. Chem. Theory Comput. 18, 5876, 2022).  The default is 3.
      */
     int getCappingOrderAtZero() const {
         return cappingOrderAtZero;
     }
     /**
-     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that match those of the
-     * usual potential at r = sigma (m1 in Correa et al., 2022).  The default is 3.
+     * Get the number of derivatives of the capped potentials of decapped slices that match those of the usual
+     * potentials at r = sigma (m1 in Correa et al., 2022).  The default is 3.
      */
     int getCappingOrderAtSigma() const {
         return cappingOrderAtSigma;
     }
     /**
-     * Set the orders m0 and m1 of the capped Lennard-Jones potential of decapped slices, a polynomial in r/sigma of
-     * degree m0 + m1 whose first m0 derivatives vanish at r = 0 and whose value and first m1 derivatives match those of
-     * the usual potential at r = sigma.  Both orders must be between 1 and 6.  They are fixed when a Context is created.
+     * Set the orders m0 and m1 of the capped potentials of decapped slices.  Below r = sigma, the capped Lennard-Jones
+     * potential is a polynomial in r/sigma of degree m0 + m1 whose first m0 derivatives vanish at r = 0 and whose value
+     * and first m1 derivatives match those of the usual potential at r = sigma.  The capped Coulomb potential replaces
+     * the 1/r part of the direct-space Coulomb potential by c(r/sigma)/sigma, where c(x) is the polynomial of degree
+     * m0 + m1 with the same conditions relative to 1/x.  Both orders must be between 1 and 6.  They are fixed when a
+     * Context is created.
      */
     void setCappingOrders(int orderAtZero, int orderAtSigma);
-    /**
-     * Get whether the decapping term of decapped slices includes the Coulomb interaction (the default is false).
-     */
-    bool getCoulombDecapping() const {
-        return coulombDecapping;
-    }
-    /**
-     * Set whether the decapping term of decapped slices includes the Coulomb interaction.  If so, the Coulomb term of
-     * every pair in a decapped slice (whatever its epsilon) is capped below r = sigma, like the Lennard-Jones one: the
-     * 1/r part of its direct-space potential is replaced by c(r/sigma)/sigma, where c(x) is the polynomial of degree
-     * m0 + m1 whose first m0 derivatives vanish at x = 0 and whose value and first m1 derivatives match those of 1/x at
-     * x = 1, with the orders of setCappingOrders().  The rest of the direct-space potential (the erf(alpha r)/r part
-     * with Ewald, PME and LJPME, or the reaction-field terms) and the reciprocal space are unchanged.  The decapping
-     * term of the slice then also includes q_i q_j (1/r - c(r/sigma)/sigma)/(4 pi eps0) below sigma, which is the
-     * same for every nonbonded method and for exceptions.  Since every pair of a decapped slice is then capped, the
-     * sigma of every particle of its subsets and of every exception with a nonzero charge product, including those
-     * with zero epsilon, cannot exceed the switching distance when a switching function is used.  This setting is
-     * fixed when a Context is created, and it cannot be combined with an inner force group.
-     */
-    void setCoulombDecapping(bool decapping) {
-        coulombDecapping = decapping;
-    }
     int addEnergyParameterDerivative(const std::string& parameter);
     const std::string& getEnergyParameterDerivativeName(int index) const;
     bool getUseCuFFT() const {
@@ -111,9 +94,10 @@ public:
      * the inner switching distance and the inner cutoff distance, which is computed in the inner
      * force group, and a remainder, which stays in the force group of this force.  The inner cutoff
      * distance cannot exceed the switching distance when a switching function is used.  With
-     * decapping scaling parameters, the sigma of every Lennard-Jones pair in a decapped slice cannot
-     * exceed the inner switching distance, so that the inner force group can take all of the capped
-     * and decapping terms below sigma.  The inner force group, cutoff
+     * Lennard-Jones decapping scaling parameters, the sigma of every Lennard-Jones pair in a decapped
+     * slice cannot exceed the inner switching distance, so that the inner force group can take all of
+     * the capped and decapping terms below sigma.  Coulomb decapping scaling parameters cannot be
+     * combined with an inner force group.  The inner force group, cutoff
      * distance and switching distance are fixed when a Context is created (call reinitialize() to
      * change them).
      */
@@ -143,7 +127,6 @@ private:
     int innerForceGroup;
     double innerCutoff, innerSwitchingDistance;
     int cappingOrderAtZero, cappingOrderAtSigma;
-    bool coulombDecapping;
 };
 
 /**
@@ -153,23 +136,24 @@ private:
 class SlicedNonbondedForce::ScalingParameterInfo {
 public:
     int globalParamIndex, subset1, subset2, slice;
-    bool includeCoulomb, includeLJ, includeDecapping;
+    bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
     ScalingParameterInfo() {
         globalParamIndex = subset1 = subset2 = -1;
-        includeCoulomb = includeLJ = includeDecapping = false;
+        includeCoulomb = includeLJ = includeCoulombDecapping = includeLJDecapping = false;
     }
-    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping) :
-            globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2),
-            includeCoulomb(includeCoulomb), includeLJ(includeLJ), includeDecapping(includeDecapping) {
-        if (!(includeCoulomb || includeLJ || includeDecapping))
-            OpenMM::throwException(__FILE__, __LINE__, "A scaling parameter must apply to Coulomb interactions, to Lennard-Jones interactions, or to the decapping term");
+    ScalingParameterInfo(int globalParamIndex, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                         bool includeCoulombDecapping, bool includeLJDecapping) :
+            globalParamIndex(globalParamIndex), subset1(subset1), subset2(subset2), includeCoulomb(includeCoulomb),
+            includeLJ(includeLJ), includeCoulombDecapping(includeCoulombDecapping), includeLJDecapping(includeLJDecapping) {
+        if (!(includeCoulomb || includeLJ || includeCoulombDecapping || includeLJDecapping))
+            OpenMM::throwException(__FILE__, __LINE__, "A scaling parameter must apply to Coulomb interactions, to Lennard-Jones interactions, or to a decapping term");
     }
     int getSlice() const {
         return sliceIndex(subset1, subset2);
     }
     bool clashesWith(const ScalingParameterInfo& info) {
         return getSlice() == info.getSlice() && ((includeCoulomb && info.includeCoulomb) || (includeLJ && info.includeLJ)
-                || (includeDecapping && info.includeDecapping));
+                || (includeCoulombDecapping && info.includeCoulombDecapping) || (includeLJDecapping && info.includeLJDecapping));
     }
 };
 

@@ -225,5 +225,5 @@ the bare one. Since :math:`\sigma` cannot exceed :math:`r_s`, where :math:`S = 1
 the whole interaction there: the capped force with energy :math:`u_{cap}(r) - K_{LJ}`, where
 :math:`K_{LJ} = 4\epsilon(\sigma^{12} K_{12} - \sigma^6 K_6)` is the constant the remainder reports for
 :math:`r \le r_s`, and all of the decapping term. The remainder is the same as for the bare potential.
-Coulomb decapping, which caps the :math:`1/r` term of the pairs of a decapped slice in the same way, is
-not available with an inner force group.
+Coulomb decapping, which caps the :math:`1/r` term of the pairs of a slice in the same way, is not
+available with an inner force group.

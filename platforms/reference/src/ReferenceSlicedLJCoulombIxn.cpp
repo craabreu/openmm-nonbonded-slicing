@@ -35,8 +35,7 @@ using namespace OpenMM;
    --------------------------------------------------------------------------------------- */
 
 ReferenceSlicedLJCoulombIxn::ReferenceSlicedLJCoulombIxn() : cutoff(false), useSwitch(false),
-            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false),
-            coulombDecapping(false) {
+            periodic(false), periodicExceptions(false), reciprocalExclusions(false), ewald(false), pme(false), ljpme(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -163,16 +162,16 @@ void ReferenceSlicedLJCoulombIxn::setReciprocalExclusions(bool reciprocal) {
     reciprocalExclusions = reciprocal;
 }
 
-void ReferenceSlicedLJCoulombIxn::setDecappedSlices(const vector<bool>& decapped) {
-    decappedSlices = decapped;
+void ReferenceSlicedLJCoulombIxn::setDecappedSlices(const vector<bool>& ljDecapped, const vector<bool>& coulombDecapped) {
+    ljDecappedSlices = ljDecapped;
+    coulombDecappedSlices = coulombDecapped;
 }
 
 void ReferenceSlicedLJCoulombIxn::setCappedLJ(const CappedLJ& capped) {
     cappedLJ = capped;
 }
 
-void ReferenceSlicedLJCoulombIxn::setCoulombDecapping(bool decapping, const CappedCoulomb& capped) {
-    coulombDecapping = decapping;
+void ReferenceSlicedLJCoulombIxn::setCappedCoulomb(const CappedCoulomb& capped) {
     cappedCoulomb = capped;
 }
 
@@ -184,7 +183,8 @@ void ReferenceSlicedLJCoulombIxn::setInnerSplit(const InnerSplit& split) {
 
    Compute the inner part of a pair interaction: the switched bare force factors (to be multiplied by
    the slice scaling factors and by deltaR) and the shifted inner energies, all zero beyond the inner cutoff.
-   For a pair of a decapped slice, the Lennard-Jones terms are capped and the decapping terms are set.
+   For a pair of a Lennard-Jones-decapped slice, the Lennard-Jones terms are capped and the decapping terms are set
+   (Coulomb decapping is never combined with an inner force group).
 
    --------------------------------------------------------------------------------------- */
 
@@ -236,9 +236,9 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(
         else
             ReferenceForce::getDeltaR(atomCoordinates[jj], atomCoordinates[ii], deltaR[0]);
         double forceFactorVdw, forceFactorCoul, vdwEnergy, coulEnergy, forceFactorDecap, decapEnergy;
-        calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], decappedSlices[slice], forceFactorVdw, forceFactorCoul,
+        calculateInnerPair(ii, jj, atomParameters, deltaR[0][ReferenceForce::RIndex], ljDecappedSlices[slice], forceFactorVdw, forceFactorCoul,
                            vdwEnergy, coulEnergy, forceFactorDecap, decapEnergy);
-        double factor = sliceLambdas[slice][vdW]*forceFactorVdw + sliceLambdas[slice][Coul]*forceFactorCoul + sliceLambdas[slice][decap]*forceFactorDecap;
+        double factor = sliceLambdas[slice][vdW]*forceFactorVdw + sliceLambdas[slice][Coul]*forceFactorCoul + sliceLambdas[slice][vdWDecap]*forceFactorDecap;
         for (int kk = 0; kk < 3; kk++) {
             double force = factor*deltaR[0][kk];
             forces[ii][kk] += force;
@@ -246,7 +246,7 @@ void ReferenceSlicedLJCoulombIxn::calculateInnerIxn(
         }
         sliceEnergies[slice][vdW] += vdwEnergy;
         sliceEnergies[slice][Coul] += coulEnergy;
-        sliceEnergies[slice][decap] += decapEnergy;
+        sliceEnergies[slice][vdWDecap] += decapEnergy;
     };
     if (cutoff) {
         for (auto& pair : *neighborList)
@@ -564,18 +564,17 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
         double vdwEnergy = eps*(sig6-1.0)*sig6;
         double rdUdr = eps*(12.0*sig6-6.0)*sig6;
 
-        // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). With an
-        // inner force group, both belong to the inner part.
-        double decapEnergy = 0.0, decapRdUdr = 0.0;
-        if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0) {
+        // Below sigma, a decapped slice takes the capped potentials and the decapping terms (see CappedLJ.h). With an
+        // inner force group, which Coulomb decapping excludes, both Lennard-Jones terms belong to the inner part.
+        double decapEnergy = 0.0, decapRdUdr = 0.0, decapQEnergy = 0.0, decapQRdUdr = 0.0;
+        if (!innerSplit.enabled && ljDecappedSlices[slice] && sig6 > 1.0)
             cappedLJ.split(1.0/(inverseR*sig), eps, vdwEnergy, rdUdr, decapEnergy, decapRdUdr);
-            if (coulombDecapping)
-                splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapEnergy, decapRdUdr);
-        }
+        if (coulombDecappedSlices[slice] && sig6 > 1.0)
+            splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapQEnergy, decapQRdUdr);
         double dEdRCoul = coulRdUdr*inverseR*inverseR;
         // With an inner force group, the remainder of a decapped pair below sigma has no bare Lennard-Jones term, only
         // the constant of the inner split, which is set directly rather than as the difference of two terms of order x^-12
-        bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
+        bool decappedRemainder = (innerSplit.enabled && ljDecappedSlices[slice] && sig6 > 1.0);
         if (decappedRemainder)
             vdwEnergy = rdUdr = 0.0;
         double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
@@ -631,7 +630,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 
         // accumulate forces
 
-        double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul+sliceLambdas[slice][decap]*decapRdUdr*inverseR*inverseR;
+        double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul
+                        +(sliceLambdas[slice][vdWDecap]*decapRdUdr+sliceLambdas[slice][CoulDecap]*decapQRdUdr)*inverseR*inverseR;
         for (int kk = 0; kk < 3; kk++) {
             double force = factor*deltaR[0][kk];
             forces[ii][kk] += force;
@@ -640,7 +640,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 
         // accumulate energies
         sliceEnergies[slice][vdW] += vdwEnergy;
-        sliceEnergies[slice][decap] += decapEnergy;
+        sliceEnergies[slice][vdWDecap] += decapEnergy;
+        sliceEnergies[slice][CoulDecap] += decapQEnergy;
         sliceEnergies[slice][Coul] += coulEnergy;
     }
 
@@ -648,8 +649,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
 
 /**---------------------------------------------------------------------------------------
 
-   Cap the Coulomb interaction of a pair of a decapped slice below sigma: its 1/r part is replaced by the capped
-   potential, and the difference joins the decapping term. On input, coulEnergy and coulRdUdr hold the full direct-space
+   Cap the Coulomb interaction of a pair of a Coulomb-decapped slice below sigma: its 1/r part is replaced by the capped
+   potential, and the difference is the Coulomb decapping term. On input, coulEnergy and coulRdUdr hold the full direct-space
    Coulomb energy and -r dU/dr of the pair (whatever the method), which must include the bare 1/r term.
 
    @param inverseR     1/r
@@ -657,8 +658,8 @@ void ReferenceSlicedLJCoulombIxn::calculateEwaldIxn(
    @param qq           q_i q_j/(4 pi eps0)
    @param coulEnergy   the Coulomb energy (in/out)
    @param coulRdUdr    -r dU/dr of the Coulomb term (in/out)
-   @param decapEnergy  the decapping energy (added to)
-   @param decapRdUdr   -r dU/dr of the decapping term (added to)
+   @param decapEnergy  the Coulomb decapping energy (added to)
+   @param decapRdUdr   -r dU/dr of the Coulomb decapping term (added to)
 
    --------------------------------------------------------------------------------------- */
 
@@ -775,16 +776,14 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
     double coulEnergy = cutoff ? qq*(inverseR+krf*r2-crf) : qq*inverseR;
     double coulRdUdr = cutoff ? qq*(inverseR-2.0*krf*r2) : qq*inverseR;
 
-    // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). With an
-    // inner force group, both belong to the inner part.
-    double decapEnergy = 0.0, decapRdUdr = 0.0;
-    if (!innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0) {
-        cappedLJ.split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
-        if (coulombDecapping)
-            splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapEnergy, decapRdUdr);
-    }
     // See calculatePairIxn
-    bool decappedRemainder = (innerSplit.enabled && decappedSlices[slice] && sig6 > 1.0);
+    double decapEnergy = 0.0, decapRdUdr = 0.0, decapQEnergy = 0.0, decapQRdUdr = 0.0;
+    if (!innerSplit.enabled && ljDecappedSlices[slice] && sig6 > 1.0)
+        cappedLJ.split(1.0/(inverseR*sig), eps, energy, rdUdr, decapEnergy, decapRdUdr);
+    if (coulombDecappedSlices[slice] && sig6 > 1.0)
+        splitCoulomb(inverseR, sig, qq, coulEnergy, coulRdUdr, decapQEnergy, decapQRdUdr);
+    // See calculatePairIxn
+    bool decappedRemainder = (innerSplit.enabled && ljDecappedSlices[slice] && sig6 > 1.0);
     if (decappedRemainder)
         energy = rdUdr = 0.0;
     double dEdRvdW = switchValue*rdUdr*inverseR*inverseR;
@@ -809,12 +808,14 @@ void ReferenceSlicedLJCoulombIxn::calculateOneIxn(
         sliceEnergies[slice][Coul] -= innerCoulEnergy;
     }
     sliceEnergies[slice][vdW] += energy;
-    sliceEnergies[slice][decap] += decapEnergy;
+    sliceEnergies[slice][vdWDecap] += decapEnergy;
+    sliceEnergies[slice][CoulDecap] += decapQEnergy;
     sliceEnergies[slice][Coul] += coulEnergy;
 
 
     // accumulate forces
-    double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul+sliceLambdas[slice][decap]*decapRdUdr*inverseR*inverseR;
+    double factor = sliceLambdas[slice][vdW]*dEdRvdW+sliceLambdas[slice][Coul]*dEdRCoul
+                    +(sliceLambdas[slice][vdWDecap]*decapRdUdr+sliceLambdas[slice][CoulDecap]*decapQRdUdr)*inverseR*inverseR;
     for (int kk = 0; kk < 3; kk++) {
         double force  = factor*deltaR[0][kk];
         forces[ii][kk] += force;

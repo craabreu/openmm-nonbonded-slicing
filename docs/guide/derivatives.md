@@ -39,8 +39,8 @@ Lennard-Jones scaling parameter of a decapped slice is its capped van der Waals 
 with respect to its decapping parameter is its decapping energy; their sum is the usual van der Waals energy
 of the slice. A parameter that plays both roles in a slice yields the usual van der Waals energy, as it
 would without decapping. With Coulomb decapping, the derivative with respect to the Coulomb scaling parameter
-is the capped Coulomb energy of the slice and the decapping energy includes the Coulomb part, so that the
-three derivatives still sum to the usual energy of the slice.
+is the capped Coulomb energy of the slice and the one with respect to its Coulomb decapping parameter is its
+Coulomb decapping energy, so that the derivatives still sum to the usual energy of the slice.
 
 ## Restrictions
 
