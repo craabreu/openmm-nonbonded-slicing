@@ -145,7 +145,7 @@ public:
 };
 
 /**
- * The capped Coulomb potential (see SlicedNonbondedForce::setCoulombDecapping): the bare potential is
+ * The capped Coulomb potential of Coulomb-decapped slices (see SlicedNonbondedForce::addScalingParameter): the bare potential is
  * q_i q_j/(4 pi eps0 sigma) x^-1, so the prefactor is q_i q_j/(4 pi eps0 sigma). With m0 = m1 = 3, the capped
  * potential is 1.75 times the bare one at x = 1.
  */

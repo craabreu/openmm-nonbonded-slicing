@@ -26,7 +26,7 @@ using namespace OpenMM;
 
    --------------------------------------------------------------------------------------- */
 
-ReferenceSlicedLJCoulomb14::ReferenceSlicedLJCoulomb14() : periodic(false), coulombDecapping(false) {
+ReferenceSlicedLJCoulomb14::ReferenceSlicedLJCoulomb14() : periodic(false) {
 }
 
 /**---------------------------------------------------------------------------------------
@@ -55,7 +55,8 @@ void ReferenceSlicedLJCoulomb14::setPeriodic(OpenMM::Vec3* vectors) {
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
-       @param decapped         whether the slice is decapped
+       @param ljDecapped       whether the Lennard-Jones term of the slice is decapped
+       @param coulombDecapped  whether the Coulomb term of the slice is decapped
        @param mode             which part of the interactions to compute
 
    --------------------------------------------------------------------------------------- */
@@ -64,8 +65,7 @@ void ReferenceSlicedLJCoulomb14::setCappedLJ(const CappedLJ& capped) {
     cappedLJ = capped;
 }
 
-void ReferenceSlicedLJCoulomb14::setCoulombDecapping(bool decapping, const CappedCoulomb& capped) {
-    coulombDecapping = decapping;
+void ReferenceSlicedLJCoulomb14::setCappedCoulomb(const CappedCoulomb& capped) {
     cappedCoulomb = capped;
 }
 
@@ -76,7 +76,7 @@ void ReferenceSlicedLJCoulomb14::setInnerSplit(const InnerSplit& split) {
 void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vector<Vec3>& atomCoordinates,
                                      vector<double>& parameters, vector<Vec3>& forces,
                                      vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                                     bool decapped, Mode mode) {
+                                     bool ljDecapped, bool coulombDecapped, Mode mode) {
     double deltaR[2][ReferenceForce::LastDeltaRIndex];
 
     // get deltaR, R2, and R between 2 atoms
@@ -108,10 +108,10 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         innerVdwEnergy = parameters[1]*(sigma6*sigma6*e[0] - sigma6*e[1]);
         innerCoulEnergy = ONE_4PI_EPS0*parameters[2]*e[2];
     }
-    // Below sigma, a decapped slice takes the capped potential and the decapping term. With an inner force group,
+    // Below sigma, a Lennard-Jones-decapped slice takes the capped potential and the decapping term. With an inner force group,
     // sigma cannot exceed the inner switching distance, so both belong to the inner part and the remainder is unchanged.
     double decapEnergy = 0.0, decapRdUdr = 0.0;
-    if (mode != Remainder && decapped && sig6 > 1.0) {
+    if (mode != Remainder && ljDecapped && sig6 > 1.0) {
         double capEnergy = vdwEnergy, capRdUdr = rdUdr;
         cappedLJ.split(1.0/(inverseR*parameters[0]), parameters[1], capEnergy, capRdUdr, decapEnergy, decapRdUdr);
         if (mode == Full) {
@@ -127,13 +127,10 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
     double vdwForce = rdUdr*inverseR*inverseR;
     double qq = ONE_4PI_EPS0*parameters[2];
     double coulEnergy = qq*inverseR, coulRdUdr = qq*inverseR;
-    // With Coulomb decapping (never combined with an inner force group), the 1/r term is capped below sigma too
-    if (coulombDecapping && mode == Full && decapped && sig6 > 1.0) {
-        double decapQEnergy, decapQRdUdr;
+    // A Coulomb-decapped slice (never combined with an inner force group) caps the 1/r term below sigma
+    double decapQEnergy = 0.0, decapQRdUdr = 0.0;
+    if (coulombDecapped && mode == Full && sig6 > 1.0)
         cappedCoulomb.split(1.0/(inverseR*parameters[0]), qq/parameters[0], coulEnergy, coulRdUdr, decapQEnergy, decapQRdUdr);
-        decapEnergy += decapQEnergy;
-        decapRdUdr += decapQRdUdr;
-    }
     double coulForce = coulRdUdr*inverseR*inverseR;
     if (mode == Inner) {
         vdwForce = innerVdwForce;
@@ -148,13 +145,14 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
         coulEnergy -= innerCoulEnergy;
         // The remainder of a decapped pair below sigma is the constant of the inner split, set directly rather than as
         // the difference of two terms of order x^-12
-        if (decapped && sig6 > 1.0) {
+        if (ljDecapped && sig6 > 1.0) {
             double sigma6 = pow(parameters[0], 6);
             vdwForce = 0.0;
             vdwEnergy = parameters[1]*sigma6*(sigma6*innerSplit.K[0] - innerSplit.K[1]);
         }
     }
-    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce + sliceLambdas[decap]*decapRdUdr*inverseR*inverseR;
+    double dEdR = sliceLambdas[vdW]*vdwForce + sliceLambdas[Coul]*coulForce
+                + (sliceLambdas[vdWDecap]*decapRdUdr + sliceLambdas[CoulDecap]*decapQRdUdr)*inverseR*inverseR;
 
     // accumulate forces
 
@@ -166,6 +164,7 @@ void ReferenceSlicedLJCoulomb14::calculateBondIxn(vector<int>& atomIndices, vect
 
     // accumulate energies
     sliceEnergies[vdW] += vdwEnergy;
-    sliceEnergies[decap] += decapEnergy;
+    sliceEnergies[vdWDecap] += decapEnergy;
+    sliceEnergies[CoulDecap] += decapQEnergy;
     sliceEnergies[Coul] += coulEnergy;
 }

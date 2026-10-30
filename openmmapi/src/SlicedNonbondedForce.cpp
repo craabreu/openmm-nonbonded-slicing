@@ -32,7 +32,7 @@ using namespace NonbondedSlicing;
 
 SlicedNonbondedForce::SlicedNonbondedForce(int numSubsets) : NonbondedForce(), numSubsets(numSubsets), useCuFFT(true),
         reciprocalExclusions(false), innerForceGroup(-1), innerCutoff(0.0), innerSwitchingDistance(0.0),
-        cappingOrderAtZero(3), cappingOrderAtSigma(3), coulombDecapping(false) {
+        cappingOrderAtZero(3), cappingOrderAtSigma(3) {
 }
 
 SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numSubsets) : NonbondedForce() {
@@ -43,7 +43,6 @@ SlicedNonbondedForce::SlicedNonbondedForce(const NonbondedForce& force, int numS
     innerCutoff = 0.0;
     innerSwitchingDistance = 0.0;
     cappingOrderAtZero = cappingOrderAtSigma = 3;
-    coulombDecapping = false;
     setForceGroup(force.getForceGroup());
     setName(force.getName());
     setNonbondedMethod((SlicedNonbondedForce::NonbondedMethod) force.getNonbondedMethod());
@@ -149,10 +148,12 @@ int SlicedNonbondedForce::getGlobalParameterIndex(const string& parameter) const
     throw OpenMMException("There is no global parameter called '"+parameter+"'");
 }
 
-int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping) {
+int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                                              bool includeCoulombDecapping, bool includeLJDecapping) {
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, includeDecapping);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ,
+                                                     includeCoulombDecapping, includeLJDecapping);
     for (auto param : scalingParameters)
         if (param.clashesWith(info))
             throwException(__FILE__, __LINE__, "Clash detected between scaling parameters");
@@ -160,7 +161,8 @@ int SlicedNonbondedForce::addScalingParameter(const string& parameter, int subse
     return scalingParameters.size()-1;
 }
 
-void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ) const {
+void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int& subset1, int& subset2, bool& includeCoulomb, bool& includeLJ,
+                                               bool& includeCoulombDecapping, bool& includeLJDecapping) const {
     ASSERT_VALID("Index", index, scalingParameters.size());
     ScalingParameterInfo* info = (ScalingParameterInfo*) &scalingParameters[index];
     parameter = getGlobalParameterName(info->globalParamIndex);
@@ -168,22 +170,21 @@ void SlicedNonbondedForce::getScalingParameter(int index, string& parameter, int
     subset2 = info->subset2;
     includeLJ = info->includeLJ;
     includeCoulomb = info->includeCoulomb;
+    includeCoulombDecapping = info->includeCoulombDecapping;
+    includeLJDecapping = info->includeLJDecapping;
 }
 
-void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping) {
+void SlicedNonbondedForce::setScalingParameter(int index, const string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                                               bool includeCoulombDecapping, bool includeLJDecapping) {
     ASSERT_VALID("Index", index, scalingParameters.size());
     ASSERT_VALID("Subset", subset1, numSubsets);
     ASSERT_VALID("Subset", subset2, numSubsets);
-    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ, includeDecapping);
+    ScalingParameterInfo info = ScalingParameterInfo(getGlobalParameterIndex(parameter), subset1, subset2, includeCoulomb, includeLJ,
+                                                     includeCoulombDecapping, includeLJDecapping);
     for (int i = 0; i < scalingParameters.size(); i++)
         if (i != index && scalingParameters[i].clashesWith(info))
             throwException(__FILE__, __LINE__, "A scaling parameter has already been defined for this slice & contribution(s)");
     scalingParameters[index] = info;
-}
-
-bool SlicedNonbondedForce::getScalingParameterIncludeDecapping(int index) const {
-    ASSERT_VALID("Index", index, scalingParameters.size());
-    return scalingParameters[index].includeDecapping;
 }
 
 int SlicedNonbondedForce::getScalingParameterIndex(const string& parameter) const {

@@ -78,15 +78,13 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
-       Set whether the decapping term of the decapped slices includes the Coulomb interaction, and
-       the capped Coulomb potential.
+       Set the capped Coulomb potential of the Coulomb-decapped slices.
 
-       @param decapping  whether Coulomb interactions are decapped
        @param capped     the capped Coulomb potential
 
        --------------------------------------------------------------------------------------- */
 
-    void setCoulombDecapping(bool decapping, const CappedCoulomb& capped);
+    void setCappedCoulomb(const CappedCoulomb& capped);
 
     /**---------------------------------------------------------------------------------------
 
@@ -98,7 +96,8 @@ public:
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
-       @param decapped         whether the slice is decapped
+       @param ljDecapped       whether the Lennard-Jones term of the slice is decapped
+       @param coulombDecapped  whether the Coulomb term of the slice is decapped
        @param mode             which part of the interactions to compute
 
        --------------------------------------------------------------------------------------- */
@@ -106,18 +105,18 @@ public:
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
                           vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                          bool decapped, Mode mode=Full);
+                          bool ljDecapped, bool coulombDecapped, Mode mode=Full);
 
 private:
    static const int   Coul = 0;
    static const int   vdW = 1;
-   static const int   decap = 2;
+   static const int   vdWDecap = 2;
+   static const int   CoulDecap = 3;
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
    InnerSplit innerSplit;
    CappedLJ cappedLJ;
    CappedCoulomb cappedCoulomb;
-   bool coulombDecapping;
 };
 
 } // namespace NonbondedSlicing

@@ -5,8 +5,9 @@ int slice = u.i;
 real clLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
 #if HAS_DECAPPING
-const real decapLambda = DECAP_LAMBDAS[slice];
-real decapEnergy = 0.0f, decapForce = 0.0f;
+// The Lennard-Jones (x) and Coulomb (y) decapping scaling parameters of the slice
+const real2 decapLambda = DECAP_LAMBDAS[slice];
+real decapEnergy = 0.0f, decapForce = 0.0f, decapQEnergy = 0.0f, decapQForce = 0.0f;
 #endif
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if APPLY_PERIODIC
@@ -91,10 +92,10 @@ if (r2 < INNER_CUTOFF_SQUARED) {
 #endif
 }
 #endif
-#if SUBTRACT_INNER && HAS_DECAPPING
+#if SUBTRACT_INNER && LJ_DECAPPING
 // Below sigma, the remainder of a decapped slice has no Lennard-Jones force; dropping the bare force from both sides of
 // the difference keeps it from becoming inf-inf in single precision as r -> 0
-if (IS_DECAPPED && sig6 > 1.0f)
+if (IS_LJ_DECAPPED && sig6 > 1.0f)
     ljForce = innerForceLJ = 0.0f;
 #endif
 #if INNER_GROUP
@@ -108,18 +109,18 @@ clForce -= innerForceCl;
 ljEnergy -= innerEnergyLJ;
 clEnergy -= innerEnergyCl;
 #endif
-#if HAS_DECAPPING && !SUBTRACT_INNER
+#if LJ_DECAPPING && !SUBTRACT_INNER
 // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). Here ljForce and
 // ljEnergy are bare, and with an inner group sigma cannot exceed INNER_SWITCH, where the inner part is the whole force
 // and its energy is the bare one minus the constant subtracted below.
-if (IS_DECAPPED && sig6 > 1.0f) {
+if (IS_LJ_DECAPPED && sig6 > 1.0f) {
     const real x = RECIP(invR*exceptionParams.y);
     const real xp = CAP_XPOW;
     const real capEnergy = exceptionParams.z*(CAP_C0 + xp*(CAP_POLY));
     const real capForce = -exceptionParams.z*xp*(CAP_RPOLY);
     const real sig6d = min(sig6, (real) CAP_MAX_SIG6);   // bounded to stay finite (see CappedLJ.h)
-    decapForce += exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
-    decapEnergy += exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;
+    decapForce = exceptionParams.z*(12.0f*sig6d-6.0f)*sig6d - capForce;
+    decapEnergy = exceptionParams.z*(sig6d-1.0f)*sig6d - capEnergy;
     ljForce = capForce;
     ljEnergy = capEnergy;
 #if INNER_GROUP
@@ -130,23 +131,23 @@ if (IS_DECAPPED && sig6 > 1.0f) {
 }
 #endif
 #if COULOMB_DECAPPING && !SUBTRACT_INNER
-// With Coulomb decapping (never combined with an inner force group), the 1/r term is capped below sigma too
-if (IS_DECAPPED && sig6 > 1.0f) {
+// Below sigma, a Coulomb-decapped slice (never combined with an inner force group) caps the 1/r term
+if (IS_COULOMB_DECAPPED && sig6 > 1.0f) {
     const real x = RECIP(invR*exceptionParams.y);
     const real xp = CAP_XPOW;
     const real qqOverSig = exceptionParams.x*RECIP(exceptionParams.y);
     const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
     const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
     const real bare = exceptionParams.x*min(invR, (real) CAP_MAX_INVX*RECIP(exceptionParams.y));   // bounded to stay finite
-    decapForce += bare - capForce;
-    decapEnergy += bare - capEnergy;
+    decapQForce = bare - capForce;
+    decapQEnergy = bare - capEnergy;
     clForce = capForce;
     clEnergy = capEnergy;
 }
 #endif
 #if HAS_DECAPPING
-real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda*decapForce)*invR*invR;
-energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda*decapEnergy;
+real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda.x*decapForce + decapLambda.y*decapQForce)*invR*invR;
+energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
 #else
 real dEdR = (ljLambda*ljForce + clLambda*clForce)*invR*invR;
 energy += clLambda*clEnergy + ljLambda*ljEnergy;

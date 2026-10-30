@@ -102,22 +102,23 @@ def testDecappingAPI():
     force = plugin.SlicedNonbondedForce(3)
     force.addParticle(0.0, 1.0, 1.0)
     force.addGlobalParameter("lambda", 1.0)
+    force.addGlobalParameter("lambdaQ", 1.0)
     index = force.addScalingParameter("lambda", 0, 1, False, True)
-    assert not force.getScalingParameterIncludeDecapping(index)
-    assert force.getScalingParameter(index) == ["lambda", 0, 1, False, True]
-    force.setScalingParameter(index, "lambda", 1, 0, False, True, True)
-    assert force.getScalingParameterIncludeDecapping(index)
-    assert force.getScalingParameter(index) == ["lambda", 1, 0, False, True]
+    assert force.getScalingParameter(index) == ["lambda", 0, 1, False, True, False, False]
+    force.setScalingParameter(index, "lambda", 1, 0, False, True, False, True)
+    assert force.getScalingParameter(index) == ["lambda", 1, 0, False, True, False, True]
     with pytest.raises(Exception):
         force.addScalingParameter("lambda", 0, 2, False, False)
     with pytest.raises(Exception):
-        force.addScalingParameter("lambda", 0, 1, True, False, True)
-    decap = force.addScalingParameter("lambda", 0, 2, False, False, True)
+        force.addScalingParameter("lambda", 0, 1, True, False, False, True)
+    decapQ = force.addScalingParameter("lambdaQ", 0, 1, False, False, True)
+    assert force.getScalingParameter(decapQ) == ["lambdaQ", 0, 1, False, False, True, False]
     with pytest.raises(Exception):
-        force.getScalingParameterIncludeDecapping(force.getNumScalingParameters())
+        force.addScalingParameter("lambda", 1, 0, False, False, True)
+    decap = force.addScalingParameter("lambda", 0, 2, False, False, True, True)
     clone = copy.deepcopy(force)
-    assert clone.getScalingParameterIncludeDecapping(index)
-    assert clone.getScalingParameterIncludeDecapping(decap)
+    for i in (index, decapQ, decap):
+        assert clone.getScalingParameter(i) == force.getScalingParameter(i)
 
 
 def testCappingOrdersAPI():
@@ -132,21 +133,9 @@ def testCappingOrdersAPI():
     assert (clone.getCappingOrderAtZero(), clone.getCappingOrderAtSigma()) == (4, 2)
 
 
-def testCoulombDecappingAPI():
-    force = plugin.SlicedNonbondedForce(2)
-    assert not force.getCoulombDecapping()
-    force.setCoulombDecapping(True)
-    assert force.getCoulombDecapping()
-    clone = copy.deepcopy(force)
-    assert clone.getCoulombDecapping()
-    force.setCoulombDecapping(False)
-    assert not force.getCoulombDecapping()
-    assert clone.getCoulombDecapping()
-
-
 def testCoulombDecappingErrors():
     """Coulomb decapping caps every pair of a decapped slice, zero-epsilon particles included, and rejects an inner
-    force group."""
+    force group. Lennard-Jones decapping alone caps only the pairs with nonzero epsilon."""
     def build(configure):
         system = mm.System()
         for _ in range(2):
@@ -157,20 +146,19 @@ def testCoulombDecappingErrors():
         force.setCutoffDistance(1.0)
         force.setUseSwitchingFunction(True)
         force.setSwitchingDistance(0.5)
-        force.setCoulombDecapping(True)
         force.addParticle(0.4, 1.0, 0.0)   # a placeholder sigma, as on a TIP3P hydrogen
         force.addParticle(-0.4, 0.3, 0.5)
         force.setParticleSubset(1, 1)
         force.addGlobalParameter("lambdaD", 1.0)
-        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, True, True)
         configure(force)
         system.addForce(force)
         mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
 
-    with pytest.raises(Exception, match="zero epsilon included"):
+    with pytest.raises(Exception, match="Coulomb-decapped slice"):
         build(lambda force: None)
     build(lambda force: force.setParticleParameters(0, 0.4, 0.3, 0.0))
-    build(lambda force: force.setCoulombDecapping(False))
+    build(lambda force: force.setScalingParameter(0, "lambdaD", 0, 1, False, False, False, True))
     with pytest.raises(Exception, match="inner force group"):
         build(lambda force: (force.setParticleParameters(0, 0.4, 0.3, 0.0), force.setInnerForceGroup(1),
                              force.setInnerSwitchingDistance(0.4), force.setInnerCutoffDistance(0.5)))
@@ -179,7 +167,7 @@ def testCoulombDecappingErrors():
 @pytest.mark.parametrize("platformName, precision", cases)
 def testCoulombDecapping(platformName, precision):
     """The capped Coulomb energy of a charged pair without Lennard-Jones parameters, lambda*qq*c(x)/sigma with
-    c(x) = 1.75 - 5.25*x^4 + 7*x^5 - 2.5*x^6, with the decapping term off, and the full one with it at 1."""
+    c(x) = 1.75 - 5.25*x^4 + 7*x^5 - 2.5*x^6, with the Coulomb decapping term off, and the full one with it at 1."""
     sigma, q1, q2, lam = 0.3, 0.5, -0.3, 0.4
     qq = 138.935456*q1*q2
     def energy(x, lambdaD):
@@ -188,7 +176,6 @@ def testCoulombDecapping(platformName, precision):
             system.addParticle(1.0)
         force = plugin.SlicedNonbondedForce(2)
         force.setNonbondedMethod(plugin.SlicedNonbondedForce.NoCutoff)
-        force.setCoulombDecapping(True)
         force.addParticle(q1, sigma, 0.0)
         force.addParticle(q2, sigma, 0.0)
         force.setParticleSubset(1, 1)
@@ -237,7 +224,7 @@ def testCappingOrders(platformName, precision):
         force.addParticle(0.0, 1.0, 0.5)
         force.setParticleSubset(1, 1)
         force.addGlobalParameter("lambdaD", 0.0)
-        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, False, True)
         if orders is not None:
             force.setCappingOrders(*orders)
         system.addForce(force)
@@ -301,7 +288,7 @@ def testDecapping(platformName, precision):
         sliced.addScalingParameter("lambdaLJ", 0, 1, True, True)
         sliced.addEnergyParameterDerivative("lambdaLJ")
         if decap:
-            sliced.addScalingParameter("lambdaD", 0, 1, False, False, True)
+            sliced.addScalingParameter("lambdaD", 0, 1, False, False, False, True)
             sliced.addEnergyParameterDerivative("lambdaD")
         return sliced
 
@@ -485,9 +472,9 @@ def testScalingParameterAccessors():
     force.addGlobalParameter("b", 1.0)
     index = force.addScalingParameter("a", 2, 1, True, False)
     assert force.getNumScalingParameters() == 1
-    assert list(force.getScalingParameter(index)) == ["a", 2, 1, True, False]
+    assert list(force.getScalingParameter(index)) == ["a", 2, 1, True, False, False, False]
     force.setScalingParameter(index, "b", 0, 2, False, True)
-    assert list(force.getScalingParameter(index)) == ["b", 0, 2, False, True]
+    assert list(force.getScalingParameter(index)) == ["b", 0, 2, False, True, False, False]
 
 
 def _sampleForce():
@@ -515,7 +502,7 @@ def testCopyAndPickle(duplicate):
     assert isinstance(other, plugin.SlicedNonbondedForce)
     assert other.getNumSubsets() == 3
     assert other.getParticleSubset(1) == 2
-    assert list(other.getScalingParameter(0)) == ["a", 2, 1, True, False]
+    assert list(other.getScalingParameter(0)) == ["a", 2, 1, True, False, False, False]
     assert other.getEnergyParameterDerivativeName(0) == "a"
     assert other.getUseCuFFT() is False
     assert other.getReciprocalExclusions() is True
@@ -857,7 +844,7 @@ def testInnerGroupWithDecapping(platformName, precision):
         force.addGlobalParameter("lambdaLJ", 0.6)
         force.addGlobalParameter("lambdaD", 0.3)
         force.addScalingParameter("lambdaLJ", 0, 1, False, True)
-        force.addScalingParameter("lambdaD", 0, 1, False, False, True)
+        force.addScalingParameter("lambdaD", 0, 1, False, False, False, True)
         system.addForce(force)
         platform = mm.Platform.getPlatformByName(platformName)
         properties = {} if platformName == "Reference" else {"Precision": precision}
