@@ -210,12 +210,13 @@ class Run:
     H: np.ndarray
     temperature: float
     series: list
+    capping_orders: tuple = (3, 3)
 
 
 def load_run(path, default_temperature=298.15):
     """Load OUTDIR/samples.npz written by simulate.py, or a directory of state_*.npz files with h (3,), lam
     and U (n, 3), one per state, as written by the pilot scripts (already equilibrated, at
-    default_temperature)."""
+    default_temperature, with the default capping orders)."""
     import glob
     import os
 
@@ -229,7 +230,8 @@ def load_run(path, default_temperature=298.15):
         rows = np.arange(len(U))[:, None]
         by_state = U[rows, replica_in_state]  # (n, K, 3)
         series = [by_state[:, k] for k in range(by_state.shape[1])]
-        return Run(d["lambdas"], d["H"], float(d["temperature"]), series)
+        orders = tuple(int(m) for m in d["capping_orders"]) if "capping_orders" in d else (3, 3)
+        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders)
     files = sorted(glob.glob(os.path.join(path, "state_*.npz")))
     if not files:
         raise FileNotFoundError(f"no samples.npz or state_*.npz in {path}")
@@ -257,6 +259,7 @@ def build_system(
     pressure=1.0,
     cutoff_nm=1.0,
     switch_nm=0.9,
+    capping_orders=(3, 3),
 ):
     """A solute in water with a SlicedNonbondedForce, whose subset 1 is the solute and subset 0 the solvent.
 
@@ -264,6 +267,8 @@ def build_system(
     water is an OpenMM force field file for the solvent. Both decapping terms of the solute-solvent slice
     are multiplied by lambdaD. Particles with zero epsilon (e.g. TIP3P hydrogens) get sigma = 0, so that
     their Coulomb cap radius is half that of their partner instead of an arbitrary placeholder sigma.
+    capping_orders are (m0, m1) of the capped potentials, which set the height of the cap: the default
+    (3, 3) caps the Lennard-Jones potential at 119 epsilon.
 
     Returns the system, topology, positions and solute atom indices.
     """
@@ -296,6 +301,7 @@ def build_system(
     nonbonded.setSwitchingDistance(switch_nm * unit.nanometers)
     nonbonded.setUseDispersionCorrection(True)
     force = nbs.SlicedNonbondedForce(nonbonded, 2)
+    force.setCappingOrders(*capping_orders)
     for i in range(force.getNumParticles()):
         charge, _, epsilon = force.getParticleParameters(i)
         if epsilon.value_in_unit(unit.kilojoule_per_mole) == 0.0:

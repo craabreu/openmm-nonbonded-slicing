@@ -72,7 +72,10 @@ python validate.py final=final_1,final_2,final_3 paper=paper_1,paper_2,paper_3
 ```
 
 The solute and force fields are options of `simulate.py` (`--smiles`, `--forcefield` with a SMIRNOFF or GAFF
-name, `--water`), as are the sampling settings; `python simulate.py --help` lists them.
+name, `--water`), as are the sampling settings; `python simulate.py --help` lists them. `--capping_orders M0 M1`
+sets the orders of the capped potentials, and with them the height of the cap: (3, 3), the default, caps the
+Lennard-Jones potential at 119 ε, (2, 4) at 684 ε. Runs with different capping orders sample different
+systems, so `search.py` does not pool them.
 
 ### Replica exchange
 

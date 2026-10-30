@@ -96,6 +96,10 @@ class Reweighter:
         temperatures = {run.temperature for run in runs}
         if len(temperatures) > 1:
             raise SystemExit(f"runs at different temperatures: {sorted(temperatures)}")
+        # the capped potentials differ between capping orders, so their samples are of different systems
+        orders = {run.capping_orders for run in runs}
+        if len(orders) > 1:
+            raise SystemExit(f"runs with different capping orders cannot be pooled: {sorted(orders)}")
         self.beta = beta(temperatures.pop())
         self.h_states = np.concatenate([run.H for run in runs])
         series = [s for run in runs for s in run.series]

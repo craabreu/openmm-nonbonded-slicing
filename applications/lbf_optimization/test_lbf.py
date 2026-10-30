@@ -127,5 +127,6 @@ def test_load_run(tmp_path):
     )
     run = load_run(str(tmp_path))
     assert run.temperature == 300.0
+    assert run.capping_orders == (3, 3)  # the default when a run predates the option
     assert np.array_equal(run.series[0], np.array([U[1, 0], U[2, 1], U[3, 1]]))
     assert np.array_equal(run.series[1], np.array([U[1, 1], U[2, 0], U[3, 0]]))

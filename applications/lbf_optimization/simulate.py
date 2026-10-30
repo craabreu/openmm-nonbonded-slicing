@@ -55,6 +55,10 @@ def parse_args():
     system.add_argument("--hydrogen_mass", type=float, default=3.0, help="amu; 0 for no mass repartitioning")
     system.add_argument("--temperature", type=float, default=298.15)
     system.add_argument("--pressure", type=float, default=1.0, help="bar")
+    system.add_argument(
+        "--capping_orders", type=int, nargs=2, default=(3, 3), metavar=("M0", "M1"),
+        help="orders of the capped potentials, which set the cap height (default: 3 3, i.e. 119 epsilon)",
+    )
     return parser.parse_args()
 
 
@@ -92,7 +96,8 @@ def main():
     checkpoint_path = os.path.join(args.outdir, "checkpoint.npz")
 
     system, topology, positions, solute = build_system(
-        args.smiles, args.forcefield, args.water, args.box_nm, args.hydrogen_mass, args.temperature, args.pressure
+        args.smiles, args.forcefield, args.water, args.box_nm, args.hydrogen_mass, args.temperature, args.pressure,
+        capping_orders=tuple(args.capping_orders),
     )
     platform = mm.Platform.getPlatformByName(args.platform)
     properties = {"Precision": args.precision} if args.platform in ("CUDA", "OpenCL") else {}
@@ -151,7 +156,8 @@ def main():
     def checkpoint(iteration):
         common = dict(
             protocol=str(protocol), lambdas=lambdas, H=H, temperature=args.temperature,
-            iteration_ps=args.iteration_ps, equilibration=args.equilibration, exchange=not args.no_exchange,
+            capping_orders=np.array(args.capping_orders), iteration_ps=args.iteration_ps,
+            equilibration=args.equilibration, exchange=not args.no_exchange,
             state_of_replica_history=np.array(history, dtype=int).reshape(-1, num_states),
             U=np.array(U).reshape(-1, num_states, 3), accepted=accepted, attempted=attempted,
         )
