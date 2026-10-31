@@ -35,7 +35,10 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import numpy as np
 from scipy.special import logsumexp
 
-from lbf import LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis, load_run
+from lbf import (
+    LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis, load_run,
+    states_in_basis,
+)
 
 
 def int_range(text):
@@ -117,9 +120,12 @@ class Reweighter:
         if len(orders) > 1:
             raise SystemExit(f"runs with different capping orders cannot be pooled: {sorted(orders)}")
         self.beta = beta(temperatures.pop())
-        # a legacy run pulls the pool down to its basis, where only protocols with h_Q = h_D can be weighted
+        # a legacy run pulls the pool down to its basis, where only states and protocols with h_Q = h_D exist
         self.terms = LEGACY_TERMS if any(run.terms == LEGACY_TERMS for run in runs) else TERMS
-        self.h_states = np.concatenate([energies_in_basis(self.terms, run.H, run.terms) for run in runs])
+        try:
+            self.h_states = np.concatenate([states_in_basis(self.terms, run.H, run.terms) for run in runs])
+        except ValueError as error:
+            raise SystemExit(str(error)) from None
         series = [energies_in_basis(self.terms, s, run.terms) for run in runs for s in run.series]
         N_k = np.array([len(s) for s in series])
         self.BU = self.beta * np.concatenate(series)  # (N, len(terms))

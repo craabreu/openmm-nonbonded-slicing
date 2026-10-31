@@ -16,6 +16,7 @@ from lbf import (
     load_run,
     mix_replicas,
     smooth_step,
+    states_in_basis,
     switch,
 )
 
@@ -123,6 +124,11 @@ def test_bases():
     assert np.array_equal(energies_in_basis(LEGACY_TERMS, U, TERMS), np.stack([U[:, 0], U[:, 1] + U[:, 2], U[:, 3]], 1))
     with pytest.raises(ValueError):
         energies_in_basis(TERMS, U[:, :3], LEGACY_TERMS)
+    # the states of a four-term run join a legacy pool only if their h_Q equals their h_D
+    H = capped.h(lam)[0].T
+    assert np.array_equal(states_in_basis(LEGACY_TERMS, H, TERMS), H[:, [0, 1, 3]])
+    with pytest.raises(ValueError):
+        states_in_basis(LEGACY_TERMS, bare.h(lam)[0].T, TERMS)
 
 
 def test_equal_length_lambdas():

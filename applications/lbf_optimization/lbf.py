@@ -180,6 +180,20 @@ def energies_in_basis(terms, U, run_terms):
     raise ValueError(f"cannot express slice energies {run_terms} as {terms}")
 
 
+def states_in_basis(terms, H, run_terms):
+    """Scaling parameters H (K, len(run_terms)) of a run's states, as the basis terms. In the legacy basis the
+    two decapping terms share one energy, so a four-term run's states must have h_Q = h_D to be pooled."""
+    terms, run_terms = tuple(terms), tuple(run_terms)
+    if terms == run_terms:
+        return H
+    if terms == LEGACY_TERMS and run_terms == TERMS:
+        if not np.allclose(H[:, 1], H[:, 2]):
+            raise ValueError("a run whose states have h_Q != h_D cannot be pooled with runs that stored the "
+                             "decapping terms together")
+        return H[:, [0, 1, 3]]
+    raise ValueError(f"cannot express states with terms {run_terms} as {terms}")
+
+
 def _term_h(spec, lam):
     m0, m1, a = spec
     lam = np.atleast_1d(np.asarray(lam, dtype=float))
