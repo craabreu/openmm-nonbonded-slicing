@@ -12,9 +12,12 @@ from lbf import (
     coefficients,
     energies_in_basis,
     equal_length_lambdas,
+    feedback_lambdas,
     in_basis,
     load_run,
     mix_replicas,
+    nonincreasing_fit,
+    replica_flow,
     smooth_step,
     states_in_basis,
     switch,
@@ -139,6 +142,33 @@ def test_equal_length_lambdas():
     # no length at all over the first half: every state but the first lies in the second half
     places = equal_length_lambdas(lam, (lam > 0.5).astype(float), 5)
     assert places[0] == 0 and np.all(places[1:] > 0.5) and places[-1] == 1
+
+
+def test_replica_flow():
+    # replica 0 walks 0 -> 1 -> 2 -> 1 -> 0 -> 1 -> 2 (one round trip), replica 1 sits at state 1 unlabeled,
+    # and replica 2 sits at state 2 as a down-walker from the start
+    history = np.array([[0, 1, 2], [1, 1, 2], [2, 1, 2], [1, 1, 2], [0, 1, 2], [1, 1, 2], [2, 1, 2]])
+    f, visits, trips = replica_flow(history)
+    assert trips == 1
+    assert visits.tolist() == [2, 3, 9]  # the unlabeled replica is not counted
+    assert np.allclose(f, [1.0, 2 / 3, 0.0])  # state 1: up at iterations 1 and 5, down at 3
+
+
+def test_nonincreasing_fit():
+    assert nonincreasing_fit([3, 2, 1]).tolist() == [3, 2, 1]
+    assert nonincreasing_fit([1, 3, 2]).tolist() == [2, 2, 2]
+    assert nonincreasing_fit([5, 1, 2, 0]).tolist() == [5, 1.5, 1.5, 0]
+    assert nonincreasing_fit([0, 1], weights=[3, 1]).tolist() == [0.25, 0.25]
+
+
+def test_feedback_lambdas():
+    lam = np.linspace(0, 1, 11)
+    # a linear f gives uniform states; f steeper on the left gives denser states there
+    assert np.allclose(feedback_lambdas(lam, 1 - lam, 6), np.linspace(0, 1, 6), atol=1e-9)
+    states = feedback_lambdas(lam, 1 - np.sqrt(lam), 6)
+    assert states[0] == 0 and states[-1] == 1 and np.all(np.diff(states) > 0) and states[1] < 0.2
+    with pytest.raises(ValueError):
+        feedback_lambdas(lam, np.ones(11), 6)
 
 
 def test_mix_replicas_samples_the_permutation_distribution():

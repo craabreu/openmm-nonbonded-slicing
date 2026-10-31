@@ -228,6 +228,62 @@ class PaperProtocol(Protocol):
         return np.array([h[t] for t in TERMS]), np.array([dh[t] for t in TERMS])
 
 
+def replica_flow(history):
+    """The flow of replicas through the states of a replica-exchange run (Katzgraber, Trebst, Huse and
+    Troyer, J. Stat. Mech. P03018, 2006), from history (n, K), the state of each replica at each iteration.
+
+    A replica is an up-walker from its last visit to state 0 until it reaches state K-1, and a down-walker
+    from then until it is back at 0. Returns f (K,), the fraction of up-walkers among the labeled visits of
+    each state, which falls from 1 to 0; the visits (K,) counted; and the number of round trips, completed
+    when a down-walker returns to state 0."""
+    history = np.asarray(history)
+    n, K = history.shape
+    label = np.zeros(K, int)
+    up, down = np.zeros(K), np.zeros(K)
+    trips = 0
+    for state in history:
+        at0, at1 = state == 0, state == K - 1
+        trips += int(np.sum(at0 & (label == -1)))
+        label = np.where(at0, 1, np.where(at1, -1, label))
+        np.add.at(up, state[label == 1], 1)
+        np.add.at(down, state[label == -1], 1)
+    visits = up + down
+    return up / np.maximum(visits, 1), visits, trips
+
+
+def nonincreasing_fit(y, weights=None):
+    """The weighted least-squares fit of y by a nonincreasing sequence (pool adjacent violators)."""
+    y = np.asarray(y, dtype=float)
+    weights = np.ones_like(y) if weights is None else np.asarray(weights, dtype=float)
+    blocks = [[y[i], weights[i], 1] for i in range(len(y))]
+    i = 0
+    while i < len(blocks) - 1:
+        if blocks[i][0] < blocks[i + 1][0]:
+            (a, wa, na), (b, wb, nb) = blocks[i], blocks[i + 1]
+            blocks[i] = [(a * wa + b * wb) / (wa + wb), wa + wb, na + nb]
+            del blocks[i + 1]
+            i = max(i - 1, 0)
+        else:
+            i += 1
+    return np.concatenate([[value] * count for value, _, count in blocks])
+
+
+def feedback_lambdas(lam, f, num_states, weights=None):
+    """num_states lambdas, from 0 to 1, by the feedback optimization of Katzgraber et al.: the density of
+    states proportional to sqrt(-df/dlambda), with f the fraction of up-walkers at the current states lam,
+    fitted monotonically (weighted by weights, e.g. the visits) before differencing. Every state then sees
+    the same change of f, which maximizes the rate of round trips."""
+    lam = np.asarray(lam, dtype=float)
+    f = nonincreasing_fit(f, weights)
+    density = np.sqrt(np.maximum(-np.diff(f) / np.diff(lam), 0.0))  # constant on each interval
+    if not np.any(density > 0):
+        raise ValueError("f does not decrease: no flow to optimize")
+    cumulative = np.concatenate([[0.0], np.cumsum(density * np.diff(lam))])
+    lambdas = np.interp(np.linspace(0.0, cumulative[-1], num_states), cumulative, lam)
+    lambdas[0], lambdas[-1] = 0.0, 1.0
+    return lambdas
+
+
 def equal_length_lambdas(lam, sd, num_states):
     """num_states lambdas, from 0 to 1, at equal increments of the thermodynamic length int sd(du/dlambda),
     given sd on an increasing grid lam that spans [0, 1]."""

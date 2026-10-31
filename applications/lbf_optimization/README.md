@@ -63,6 +63,7 @@ the decapping avoids the contest at a few percent of thermodynamic length.
 | `simulate.py` | replica exchange of λ among the states of a protocol → `samples.npz` |
 | `search.py` | pools runs, solves MBAR, scores protocol families (both Coulomb schemes, `--Q`) → ranked table, `results.npz` and the next round's states |
 | `validate.py` | ΔG of independent runs of one or more protocols, and its spread over runs |
+| `flow.py` | the replica flow of a run, and the feedback-optimized states next to the equal-length ones |
 | `test_lbf.py` | unit tests (`python -m pytest test_lbf.py`) |
 
 Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`, `openmmforcefields`,
@@ -122,3 +123,14 @@ Every protocol must integrate to the same ΔG, which checks the quadrature. A pr
 when the Kish effective sample size is at least `--ess` at every node; protocols far from the sampled
 states are not trusted. `--min_h_at_a C=0.1` keeps only protocols whose capped Lennard-Jones is already
 that strong where decapping starts.
+
+### Placing the states
+
+Equal increments of thermodynamic length place the states by the overlap of neighbors, from the
+reweighted variance alone. The feedback optimization of Katzgraber, Trebst, Huse and Troyer (*J. Stat.
+Mech.* P03018, 2006) places them by the dynamics instead: with each replica labeled by the end state it
+visited last, the fraction f(λ) of up-walkers falls from 1 to 0, and the rate of round trips is largest
+when the density of states is proportional to √(−df/dλ). `flow.py RUN` measures f from a run's replica
+history and prints both allocations. For phenol they agree to within the noise of f (about 100 round trips
+in 2 ns), apart from the first interior state, which the flow keeps closer to λ = 0; no state relaxes
+slowly, so the simpler equal-length placement is the one used, and the flow is the check.
