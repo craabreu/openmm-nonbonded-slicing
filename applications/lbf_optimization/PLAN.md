@@ -114,7 +114,7 @@ Steps 1 to 5 are done. Runs and tables are in `~/github_repos/lbf_runs/`.
    explored for all four, the one closest to every optimum is **`C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`**:
    within 8% of each solute's best, with hazard 0.13. The phenol protocol is within 3% for the three polar
    solutes and 18% off for methane. The per-solute search is therefore optional: the default loses at most
-   8%, which is less than the spread of ΔG between independent runs suggests is resolvable. A second-round
+   8% in I_var, that is, in simulation time for a given error. A second-round
    run of the default on paracetamol, the hardest case (`run_paracetamol2`), checks it directly.
 
 ## Code changes
