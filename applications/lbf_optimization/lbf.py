@@ -25,8 +25,12 @@ of the same basis, so samples of either reweight to the other. Runs that predate
 decapping terms as one slice energy (LEGACY_TERMS) and can only represent protocols with h_Q = h_D.
 
 Each term follows S_{m0,m1}(x), the polynomial step whose first m0 derivatives vanish at x = 0 and whose
-first m1 derivatives vanish at x = 1. A term can have a window: it is zero for lambda <= a and switches on
-over [a, 1].
+first m1 derivatives vanish at x = 1, or the exponential (e^(bx) - 1)/(e^b - 1), whose slope is finite at
+both ends. A term can have a window: it is zero for lambda <= a and switches on over [a, 1].
+
+The exponential is the shape the capped Lennard-Jones term wants: with it, sd(du/dlambda) is nearly flat
+along lambda, where every polynomial step leaves the cavity-growth peak (for phenol, I_var drops from 240
+to 204 kT^2 relative to S_{2,1}). The polynomial steps' zero end slopes are what excluded it.
 """
 
 import re
@@ -41,6 +45,7 @@ TERMS = ("C", "D", "Q", "E")
 LEGACY_TERMS = ("C", "D", "E")  # D was both decapping terms
 PARAMS = {"C": "lambdaLJ", "D": "lambdaD", "Q": "lambdaQD", "E": "lambdaQ"}
 SMOOTH = -1  # m0 of the C-infinity step psi(x) = f(x)/(f(x) + f(1-x)), f(x) = exp(-1/x)
+EXP = -2  # m0 of the exponential (e^(bx) - 1)/(e^b - 1); the m1 slot holds the rate b
 
 
 def beta(temperature):
@@ -76,6 +81,16 @@ def switch(m0, m1, x):
     return s, ds
 
 
+def exponential(b, x):
+    """(e^(bx) - 1)/(e^b - 1) and its derivative, for x in [0, 1]: a convex rise with finite slope at both
+    ends, b/(e^b - 1) at 0 and b e^b/(e^b - 1) at 1."""
+    x = np.asarray(x, dtype=float)
+    if b <= 0:
+        raise ValueError("the rate of the exponential switching function must be positive")
+    scale = np.expm1(b)
+    return np.expm1(b * x) / scale, b * np.exp(b * x) / scale
+
+
 def smooth_step(x):
     """C-infinity step on [0, 1], whose derivatives all vanish at both ends, and its derivative."""
     x = np.clip(np.asarray(x, dtype=float), 0.0, 1.0)
@@ -93,18 +108,26 @@ def smooth_step(x):
 # Protocols
 # ----------------------------------------------------------------------------------------------------------
 
-_SPEC = re.compile(r"([CDQE])\((inf|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
+_SPEC = re.compile(r"([CDQE])\((inf|exp[0-9.]+|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
 _TIE = re.compile(r"Q=([DE])")
+
+
+def _shape(m0, m1):
+    if m0 == SMOOTH:
+        return "inf"
+    if m0 == EXP:
+        return f"exp {m1:g}"
+    return f"{m0},{m1}"
 
 
 @dataclass(frozen=True)
 class Protocol:
     """Switching functions of the four terms, as (m0, m1, a) each; m0 = SMOOTH selects the C-infinity step,
-    and a is the start of the term's window (0 for none).
+    m0 = EXP the exponential with rate b in the m1 slot, and a is the start of the term's window (0 for none).
 
-    The text form is, e.g., "C(1,0) D(11,1)[0.25] E(2,0)", with "D(inf)[0.25]" for the C-infinity step. The
-    Coulomb decapping Q follows D unless the text ties it to E ("Q=E", the bare-Coulomb scheme) or gives it
-    its own switching function ("Q(7,2)[0.4]").
+    The text form is, e.g., "C(1,0) D(11,1)[0.25] E(2,0)", with "D(inf)[0.25]" for the C-infinity step and
+    "C(exp 2.5)" for the exponential. The Coulomb decapping Q follows D unless the text ties it to E ("Q=E",
+    the bare-Coulomb scheme) or gives it its own switching function ("Q(7,2)[0.4]").
     """
 
     specs: tuple
@@ -116,12 +139,16 @@ class Protocol:
         compact = text.replace(" ", "")
         found = {}
         for term, m0, m1, a in _SPEC.findall(compact):
-            m0 = SMOOTH if m0 == "inf" else int(m0)
-            found[term] = (m0, int(m1 or 0), float(a or 0.0))
+            if m0.startswith("exp"):
+                if m1:
+                    raise ValueError(f"cannot parse protocol {text!r}: the exponential takes one number, its rate")
+                found[term] = (EXP, float(m0[3:]), float(a or 0.0))
+            else:
+                found[term] = (SMOOTH if m0 == "inf" else int(m0), int(m1 or 0), float(a or 0.0))
         ties = _TIE.findall(compact)
         rest = _TIE.sub("", _SPEC.sub("", compact))
         if sorted(found) not in (sorted(LEGACY_TERMS), sorted(TERMS)) or rest or len(ties) + ("Q" in found) > 1:
-            raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(1,0) D(11,1)[0.25] E(2,0) Q=E'")
+            raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E'")
         if "Q" not in found:
             found["Q"] = found[ties[0] if ties else "D"]
         return cls(tuple(found[term] for term in TERMS))
@@ -131,15 +158,13 @@ class Protocol:
         for term, (m0, m1, a) in zip(TERMS, self.specs):
             if term == "Q":
                 continue
-            shape = "inf" if m0 == SMOOTH else f"{m0},{m1}"
-            parts.append(f"{term}({shape})" + (f"[{a:g}]" if a > 0 else ""))
+            parts.append(f"{term}({_shape(m0, m1)})" + (f"[{a:g}]" if a > 0 else ""))
         C, D, Q, E = self.specs
         if Q == E and Q != D:
             parts.append("Q=E")
         elif Q != D:
             m0, m1, a = Q
-            shape = "inf" if m0 == SMOOTH else f"{m0},{m1}"
-            parts.append(f"Q({shape})" + (f"[{a:g}]" if a > 0 else ""))
+            parts.append(f"Q({_shape(m0, m1)})" + (f"[{a:g}]" if a > 0 else ""))
         return " ".join(parts)
 
     def h(self, lam):
@@ -160,9 +185,10 @@ class Protocol:
     def end_orders(self):
         """(p0, p1): the leading powers of dh/dlambda at the ends, lambda^p0 at 0 and (1 - lambda)^p1 at 1,
         from the terms that switch on at lambda = 0 and the smallest end order; the C-infinity step never
-        dominates. The thermodynamic length then goes as lambda^(p0+1) and (1 - lambda)^(p1+1)."""
-        at_zero = [m0 for m0, m1, a in self.specs if a == 0 and m0 != SMOOTH]
-        at_one = [m1 for m0, m1, a in self.specs if m0 != SMOOTH]
+        dominates, and the exponential has order 0 at both ends. The thermodynamic length then goes as
+        lambda^(p0+1) and (1 - lambda)^(p1+1)."""
+        at_zero = [0 if m0 == EXP else m0 for m0, m1, a in self.specs if a == 0 and m0 != SMOOTH]
+        at_one = [0 if m0 == EXP else m1 for m0, m1, a in self.specs if m0 != SMOOTH]
         return min(at_zero), min(at_one)
 
     def representable_in(self, terms):
@@ -216,8 +242,13 @@ def _term_h(spec, lam):
     m0, m1, a = spec
     lam = np.atleast_1d(np.asarray(lam, dtype=float))
     x = np.clip((lam - a) / (1 - a), 0.0, 1.0)
-    s, ds = smooth_step(x) if m0 == SMOOTH else switch(m0, m1, x)
-    on = lam > a
+    if m0 == SMOOTH:
+        s, ds = smooth_step(x)
+    elif m0 == EXP:
+        s, ds = exponential(m1, x)
+    else:
+        s, ds = switch(m0, m1, x)
+    on = lam >= a if a == 0 else lam > a  # a term without a window keeps its slope at lambda = 0
     return np.where(on, s, 0.0), np.where(on, ds / (1 - a), 0.0)
 
 
@@ -447,6 +478,26 @@ def load_run(path, default_temperature=298.15):
 # ----------------------------------------------------------------------------------------------------------
 # System
 # ----------------------------------------------------------------------------------------------------------
+
+
+def polar_atoms(topology, solute):
+    """The solute atoms that can donate or accept a hydrogen bond (N and O), or every solute heavy atom if
+    it has none, and the water oxygens: the pairs whose distance the collapse diagnostic watches."""
+    atoms = list(topology.atoms())
+    polar = [i for i in solute if atoms[i].element is not None and atoms[i].element.symbol in ("N", "O")]
+    if not polar:
+        polar = [i for i in solute if atoms[i].element is not None and atoms[i].element.symbol != "H"]
+    waters = [a.index for a in atoms if a.residue.name in ("HOH", "WAT", "SOL") and a.element is not None
+              and a.element.symbol == "O"]
+    return np.array(polar), np.array(waters)
+
+
+def closest_contact(positions, box, polar, waters):
+    """The shortest distance between any of the polar atoms and any of the water atoms, under the minimum
+    image convention of a rectangular box (positions (N, 3) and box (3,) in the same unit)."""
+    d = positions[polar][:, None, :] - positions[waters][None, :, :]
+    d -= box * np.round(d / box)
+    return float(np.sqrt(np.min(np.sum(d * d, axis=2))))
 
 
 def build_system(

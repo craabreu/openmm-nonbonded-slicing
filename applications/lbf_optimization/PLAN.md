@@ -74,17 +74,21 @@ when I_var/L² is near 1 without a change of coordinate. (I_var/L² was 1.29 for
    and orders. If they agree, publish them as defaults and the per-solute search becomes optional. If
    they do not, the deliverable is the one-round procedure, at the cost of one reference run per solute.
 
-## Code changes needed
+## Code changes
 
-Small, all in `applications/lbf_optimization`:
+Done on this branch, all in `applications/lbf_optimization`:
 
-- `lbf.py`: the exponential family for C in the protocol text (e.g. `C(exp 2.5)`), with its h and dh.
-- `search.py`: the exponential in the candidate family; `--max_hazard 0.25` on by default; I_var as the
-  default ranking; the end-slope rule not applied to C.
-- `simulate.py`: the collapse diagnostic, stored in `samples.npz`; a check that prints the smallest
-  distance per state at the end of a run.
-- `validate.py` or a new script: the Lambda-UFED validation of step 6, once the Lambda-UFED driver is
-  available.
+- `lbf.py`: the exponential family in the protocol text (`C(exp 2.5)`), with its h and dh, and end orders
+  (0, 0); `polar_atoms` and `closest_contact` for the diagnostic.
+- `search.py`: the family of step 4 as the defaults (`--bC` 1 to 4, D with m0 7 to 11 and m1 1 to 3, E
+  with m0 and m1 1 to 3 at `--aE` = a, `--Q E`); `--max_hazard 0.25` and `--rank I_var` by default;
+  polynomial steps for C only on request (`--m0C`, `--m1C`).
+- `simulate.py`: the collapse diagnostic, `contact` in `samples.npz` (per iteration and replica, nm), and
+  the per-state report at the end of a run.
+
+Still to write:
+
+- The Lambda-UFED validation of step 6, once the Lambda-UFED driver is available.
 
 ## What to leave out
 

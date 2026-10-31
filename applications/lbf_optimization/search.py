@@ -14,14 +14,16 @@ reweighting gives <du/dlambda> and var(du/dlambda), with du/dlambda = beta dh/dl
 I_var/L^2 >= 1 measures how much a protocol depends on the spacing of its states; it is 1 when sd(du/dlambda)
 is flat. A protocol counts as explored if the Kish effective sample size is at least --ess at every node.
 
-The Lennard-Jones decapping term D switches on over [a, 1]. The capped Lennard-Jones term C covers [0, 1],
-and the electrostatics E cover [0, 1] or, with --aE, a window of its own. The Coulomb decapping Q follows D
-(capped Coulomb until the core is decapped) or E (bare Coulomb), as --Q selects; runs that predate the
-split of the decapping terms can only weight the former. By default, every switching function has a zero
-first derivative at both ends of its interval (m0 >= 1 and m1 >= 1), so that the lambda-force vanishes at
-lambda = 0 and 1, as lambda-dynamics needs; widen the ranges to lift this. With --next, the best explored
-protocol (or --choose) gets --states lambdas at equal increments of thermodynamic length, written as JSON
-for simulate.py --plan.
+The family (see PLAN.md): the capped Lennard-Jones term C is the exponential (e^(b lambda) - 1)/(e^b - 1)
+with b from --bC (polynomial steps for C only with --m0C and --m1C); the Lennard-Jones decapping D is a
+polynomial step over [a, 1] with onset power m0 + 1 >= 8, so that var(du/dlambda) is finite where it
+starts; the electrostatics E are a polynomial step over [aE, 1] with aE >= a, and the Coulomb decapping Q
+follows E (bare Coulomb; --Q D scores the capped-Coulomb scheme, the only one that runs predating the split
+of the decapping terms can weight). Protocols whose charging hazard, max h_E/h_C where h_D < 0.001, exceeds
+--max_hazard are left out: above about 0.5 a water fuses onto a hydroxyl, which reweighting cannot see.
+The ranking is by I_var, the cost of uniform sampling in lambda. With --next, the best explored protocol
+(or --choose) gets --states lambdas at equal increments of thermodynamic length, written as JSON for
+simulate.py --plan.
 """
 
 import argparse
@@ -36,12 +38,14 @@ import numpy as np
 from scipy.special import logsumexp
 
 from lbf import (
-    LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis, load_run,
-    states_in_basis,
+    EXP, LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis,
+    load_run, states_in_basis,
 )
 
 
 def int_range(text):
+    if text.lower() == "none":
+        return range(0)
     lo, hi = (int(x) for x in text.split(":"))
     return range(lo, hi + 1)
 
@@ -56,28 +60,32 @@ def min_h(text):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("runs", nargs="+")
-    parser.add_argument("--a", type=float, default=0.25, help="start of the decapping window (default: 0.25)")
-    families = parser.add_argument_group("protocol families (inclusive ranges lo:hi)")
-    families.add_argument("--m0C", type=int_range, default=int_range("1:5"))
-    families.add_argument("--m1C", type=int_range, default=int_range("1:2"))
-    families.add_argument("--m0D", type=int_range, default=int_range("2:11"))
-    families.add_argument("--m1D", type=int_range, default=int_range("1:2"))
-    families.add_argument("--m0E", type=int_range, default=int_range("1:11"))
-    families.add_argument("--m1E", type=int_range, default=int_range("1:2"))
+    parser.add_argument("--a", type=float, default=0.4, help="start of the decapping window (default: 0.4)")
+    families = parser.add_argument_group("protocol families (inclusive ranges lo:hi, or none)")
     families.add_argument(
-        "--aE", type=float, nargs="+", metavar="A", help="starts of the window of E (default: 0 and a)",
+        "--bC", type=float, nargs="*", metavar="B", default=[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
+        help="rates of the exponential C (default: 1 to 4 by 0.5)",
+    )
+    families.add_argument("--m0C", type=int_range, default=int_range("none"), help="polynomial steps for C")
+    families.add_argument("--m1C", type=int_range, default=int_range("none"))
+    families.add_argument("--m0D", type=int_range, default=int_range("7:11"))
+    families.add_argument("--m1D", type=int_range, default=int_range("1:3"))
+    families.add_argument("--m0E", type=int_range, default=int_range("1:3"))
+    families.add_argument("--m1E", type=int_range, default=int_range("1:3"))
+    families.add_argument(
+        "--aE", type=float, nargs="+", metavar="A", help="starts of the window of E (default: a)",
     )
     families.add_argument(
-        "--Q", choices=("D", "E"), nargs="+", default=["D", "E"],
-        help="which term the Coulomb decapping follows (default: both, as separate protocols)",
+        "--Q", choices=("D", "E"), nargs="+", default=["E"],
+        help="which term the Coulomb decapping follows (default: E, bare Coulomb)",
     )
-    families.add_argument("--no_smooth_d", action="store_true", help="leave out the C-infinity decapping step")
+    families.add_argument("--smooth_d", action="store_true", help="include the C-infinity decapping step")
     families.add_argument(
         "--min_h_at_a", type=min_h, action="append", default=[], metavar="TERM=VALUE",
         help="keep protocols whose term (C or E) is at least VALUE at lambda = a; repeatable",
     )
     scoring = parser.add_argument_group("scoring")
-    scoring.add_argument("--rank", choices=("L", "I_var"), default="L")
+    scoring.add_argument("--rank", choices=("L", "I_var"), default="I_var")
     scoring.add_argument("--ess", type=float, default=100.0)
     scoring.add_argument("--nodes", type=int, default=64, help="quadrature nodes of the screen")
     scoring.add_argument("--fine_nodes", type=int, default=512, help="quadrature nodes of the rescoring")
@@ -86,7 +94,8 @@ def parse_args():
     scoring.add_argument("--chunk", type=int, default=1500, help="targets reweighted at once (memory)")
     scoring.add_argument("--reference", action="append", default=[], help='protocols to score as references')
     scoring.add_argument(
-        "--max_hazard", type=float, help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this",
+        "--max_hazard", type=float, default=0.25,
+        help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this (default: 0.25; inf for all)",
     )
     output = parser.add_argument_group("output")
     output.add_argument("--out", default="results.npz")
@@ -98,11 +107,12 @@ def parse_args():
 
 
 def candidates(args):
+    capped = [(EXP, b, 0.0) for b in args.bC] + [(m0, m1, 0.0) for m0, m1 in itertools.product(args.m0C, args.m1C)]
     decap = [(m0, m1, args.a) for m0, m1 in itertools.product(args.m0D, args.m1D)]
-    if not args.no_smooth_d:
+    if args.smooth_d:
         decap.append((SMOOTH, 0, args.a))
-    starts = sorted({0.0, args.a}) if args.aE is None else sorted(set(args.aE))
-    for C in itertools.product(args.m0C, args.m1C, [0.0]):
+    starts = [args.a] if args.aE is None else sorted(set(args.aE))
+    for C in capped:
         for D in decap:
             for E in itertools.product(args.m0E, args.m1E, starts):
                 for tie in args.Q:
@@ -180,8 +190,7 @@ def main():
     for term, value in args.min_h_at_a:
         index = TERMS.index(term)
         protocols = [p for p in protocols if p.h(args.a)[0][index, 0] >= value]
-    if args.max_hazard is not None:
-        protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
+    protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
     references = [Protocol.parse("paper")] + [Protocol.parse(text) for text in args.reference]
     if reweighter.terms == LEGACY_TERMS:
         protocols = [p for p in protocols if p.representable_in(LEGACY_TERMS)]

@@ -9,9 +9,13 @@ evaluation per replica gives the reduced potential of every replica in every sta
 no extra force evaluations (see lbf.py). With --no-exchange, every replica stays in its state.
 
 OUTDIR/samples.npz holds, per iteration, the state of each replica and its slice energies U_C, U_D, U_Q and
-U_E (kJ/mol), measured before the exchange. The first --equilibration iterations are stored too and are skipped
-by search.py and validate.py. OUTDIR/checkpoint.npz is written along with it; rerunning the same command
-resumes from it.
+U_E (kJ/mol), measured before the exchange, and the collapse diagnostic: the shortest distance (nm) between a
+solute N or O (every solute heavy atom if it has none) and a water oxygen. A distance below about 0.24 nm in
+a state whose charges are on while the Lennard-Jones decapping is weak (h_D < 0.001) is a water fused onto
+the solute, which the reweighting scores cannot see; the run reports the smallest distance per state at the
+end. The first
+--equilibration iterations are stored too and are skipped by search.py and validate.py. OUTDIR/checkpoint.npz
+is written along with it; rerunning the same command resumes from it.
 """
 
 import argparse
@@ -23,7 +27,9 @@ import numpy as np
 import openmm as mm
 import openmm.unit as unit
 
-from lbf import PARAMS, TERMS, Protocol, beta, build_system, mix_replicas
+from lbf import PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
+
+COLLAPSE_NM = 0.24  # a polar atom this close to a water oxygen is fused to it, not hydrogen-bonded
 
 
 def parse_args():
@@ -99,6 +105,7 @@ def main():
         args.smiles, args.forcefield, args.water, args.box_nm, args.hydrogen_mass, args.temperature, args.pressure,
         capping_orders=tuple(args.capping_orders),
     )
+    polar, waters = polar_atoms(topology, solute)
     platform = mm.Platform.getPlatformByName(args.platform)
     properties = {"Precision": args.precision} if args.platform in ("CUDA", "OpenCL") else {}
     dt = args.dt_fs * unit.femtosecond
@@ -112,6 +119,7 @@ def main():
         start = int(cp["iteration"])
         state_of_replica = cp["state_of_replica"].copy()
         U = list(cp["U"])
+        contacts = list(cp["contact"])
         history = list(cp["state_of_replica_history"])
         states = list(cp["states"])
         accepted, attempted = cp["accepted"].copy(), cp["attempted"].copy()
@@ -120,7 +128,7 @@ def main():
         print(f"resuming at iteration {start}", flush=True)
     else:
         state_of_replica = np.arange(num_states)
-        U, history, states = [], [], None
+        U, contacts, history, states = [], [], [], None
         accepted, attempted = np.zeros((num_states, num_states), int), np.zeros((num_states, num_states), int)
         rng = np.random.default_rng(args.seed)
 
@@ -160,6 +168,7 @@ def main():
             equilibration=args.equilibration, exchange=not args.no_exchange,
             state_of_replica_history=np.array(history, dtype=int).reshape(-1, num_states),
             U=np.array(U).reshape(-1, num_states, len(TERMS)), accepted=accepted, attempted=attempted,
+            contact=np.array(contacts).reshape(-1, num_states), polar_atoms=polar,
         )
         save(samples_path, **common)
         xml = [mm.XmlSerializer.serialize(c.getState(getPositions=True, getVelocities=True)) for c in contexts]
@@ -171,21 +180,26 @@ def main():
     clock = time.time()
     for n in range(start, args.iterations):
         energies = np.empty((num_states, len(TERMS)))
+        contact = np.empty(num_states)
         for i, (context, integrator) in enumerate(zip(contexts, integrators)):
             try:
                 integrator.step(steps_per_iteration)
-                derivatives = context.getState(getEnergy=True, getParameterDerivatives=True).getEnergyParameterDerivatives()
+                state = context.getState(getEnergy=True, getParameterDerivatives=True, getPositions=True)
             except mm.OpenMMException as error:
                 raise RuntimeError(
                     f"replica {i} failed at iteration {n} in state {state_of_replica[i]} "
                     f"(lambda = {lambdas[state_of_replica[i]]:.4f}, h = {np.round(H[state_of_replica[i]], 6)}); "
                     f"rerun to resume from the last checkpoint"
                 ) from error
+            derivatives = state.getEnergyParameterDerivatives()
             energies[i] = [derivatives[PARAMS[term]] for term in TERMS]
+            box = np.diag(state.getPeriodicBoxVectors(asNumpy=True).value_in_unit(unit.nanometer))
+            contact[i] = closest_contact(state.getPositions(asNumpy=True).value_in_unit(unit.nanometer), box, polar, waters)
         if not np.all(np.isfinite(energies)):
             bad = int(np.flatnonzero(~np.isfinite(energies).all(axis=1))[0])
             raise RuntimeError(f"replica {bad} has non-finite energies at iteration {n} in state {state_of_replica[bad]}")
         U.append(energies)
+        contacts.append(contact)
         history.append(state_of_replica.copy())
         if not args.no_exchange:
             before = state_of_replica.copy()
@@ -200,6 +214,27 @@ def main():
                 neighbors = [accepted[k, k + 1] / max(attempted[k, k + 1], 1) for k in range(num_states - 1)]
                 report += f"  neighbor acceptance min {min(neighbors):.3f} mean {np.mean(neighbors):.3f}"
             print(report, flush=True)
+
+    print(collapse_report(np.array(contacts), np.array(history), H))
+
+
+def collapse_report(contact, history, H, threshold=COLLAPSE_NM, weak=1e-3):
+    """The smallest contact distance sampled in each state, with a mark where it is below the threshold
+    while the Lennard-Jones decapping is weak: a collapsed configuration that the scores cannot see."""
+    num_states = H.shape[0]
+    by_state = np.full(num_states, np.inf)
+    for k in range(num_states):
+        sampled = contact[history == k]
+        if len(sampled):
+            by_state[k] = sampled.min()
+    # with the charges off, water passing through a weakly coupled solute is normal, not a collapse
+    collapsed = (by_state < threshold) & (H[:, 1] < weak) & (H[:, 3] > 0)
+    lines = [f"closest solute polar atom to a water oxygen, per state (nm; ! = below {threshold:g} nm "
+             f"with h_D < {weak:g} and h_E > 0):"]
+    lines.append("  " + " ".join(f"{d:.3f}{'!' if c else ' '}" for d, c in zip(by_state, collapsed)))
+    if collapsed.any():
+        lines.append(f"  collapse in states {np.flatnonzero(collapsed).tolist()}: the protocol charges too early there")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

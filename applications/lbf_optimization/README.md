@@ -31,29 +31,37 @@ reweight to the other. Runs made before the split stored the two decapping terms
 only weight protocols with h_Q = h_D; `search.py` says so when it pools one.
 
 Each term follows S_{m0,m1}(x) = x^(m0+1) P(x), the polynomial step whose first m0 derivatives vanish at
-x = 0 and first m1 derivatives at x = 1. Written as text, a protocol is, e.g.,
+x = 0 and first m1 derivatives at x = 1, or the exponential (e^(bx) − 1)/(e^b − 1). Written as text, a
+protocol is, e.g.,
 
-    C(1,0) D(11,1)[0.25] E(2,0)
+    C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E
 
-that is, h_C = λ², h_E = λ³, and h_D zero up to a = 0.25 and S_{11,1} over [0.25, 1]. Q follows D unless
-the text says `Q=E` or gives it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.25]` is a C∞
-step, and `paper` is the windowed S_{2,2} protocol of Correa et al., with bare Coulomb.
+that is, h_C the exponential with rate 2.5, h_D zero up to a = 0.4 and S_{7,2} over [0.4, 1], h_E S_{2,1}
+over the same window, and the Coulomb decapping tied to E. Q follows D unless the text says `Q=E` or gives
+it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.25]` is a C∞ step, and `paper` is the windowed
+S_{2,2} protocol of Correa et al., with bare Coulomb.
 
-By default, the search keeps only switching functions whose first derivative vanishes at both ends of
-their interval (m0 ≥ 1 and m1 ≥ 1). Then dh/dλ, and with it the λ-force, is zero at λ = 0 and 1, which
-λ-dynamics needs. In the pilot search (a = 0.2), this cost nothing in thermodynamic length: the best
-protocol by L, C(1,1) D(6,2) E(2,1), already satisfied it.
+The exponential is the family for C. Every polynomial step has a zero slope at one end or both, and with
+any of them sd(du/dλ) keeps a peak where the cavity grows, at small λ; the exponential, whose slope is finite
+at both ends, flattens it. For phenol, replacing S_{2,1} by the exponential with b = 2.5 takes I_var from
+240 to 204 kT², and b is set by the charging hazard, not by the score. The pilot found this the long way
+round, by mapping λ to the thermodynamic-length coordinate (`reparametrize.py`); the map only rediscovers
+the switching function, so the search now scores the family directly. The price is a finite λ-force at
+λ = 0 and 1, which is what makes the variance finite there; whether λ-dynamics minds is for the validation
+runs to show (see `PLAN.md`).
 
 The window keeps h_D, and the λ-force of decapping, exactly zero while the capped terms are weak. It
 also keeps the hazard of a configuration where solvent overlaps the solute's capped core, weighted by a
 tiny but nonzero h_D, away from small λ. The window start is a fixed choice, not a searched variable: the
 scores measure efficiency, and overlaps are too rare for reweighted variances to see.
 
-The electrostatics can have a window too (`--aE`, by default none and the start of the decapping window).
-With capped Coulomb, charging against a still-capped core is a contest between the capped attraction,
-scaled by h_E, and the capped repulsion, scaled by h_C; for phenol in water, a hydrogen bond collapses onto
-the hydroxyl once h_E exceeds about half of h_C while h_D is below 10⁻³. A window on E that starts with
-the decapping avoids the contest at a few percent of thermodynamic length.
+The electrostatics have a window too (`--aE`, by default the start of the decapping window). Charging
+against a still-capped core is a contest between the capped attraction, scaled by h_E, and the capped
+repulsion, scaled by h_C; for phenol in water, a hydrogen bond collapses onto the hydroxyl once h_E exceeds
+about half of h_C while h_D is below 10⁻³. The samples contain no collapsed configurations, so no reweighted
+score can see this: the search drops protocols whose hazard, max h_E/h_C where h_D < 10⁻³, exceeds
+`--max_hazard` (0.25 by default), and `simulate.py` records the closest approach of a solute N or O to a
+water oxygen in every frame, reporting per state at the end whether a water fused onto the solute.
 
 ## Files
 
@@ -61,7 +69,8 @@ the decapping avoids the contest at a few percent of thermodynamic length.
 |------|--------------|
 | `lbf.py` | switching functions, `Protocol`, state placement, the replica-exchange move, the system builder, the run loader |
 | `simulate.py` | replica exchange of λ among the states of a protocol → `samples.npz` |
-| `search.py` | pools runs, solves MBAR, scores protocol families (both Coulomb schemes, `--Q`) → ranked table, `results.npz` and the next round's states |
+| `search.py` | pools runs, solves MBAR, scores the protocol family under the hazard limit → ranked table, `results.npz` and the next round's states |
+| `PLAN.md` | the procedure to run from scratch, with what the phenol pilot fixed and what it ruled out |
 | `validate.py` | ΔG of independent runs of one or more protocols, and its spread over runs |
 | `flow.py` | the replica flow of a run, and the feedback-optimized states next to the equal-length ones |
 | `reparametrize.py` | λ(c) in closed form for a protocol, c the thermodynamic length, for λ-dynamics with a flat target |
@@ -73,15 +82,15 @@ Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`
 ## A round
 
 ```bash
-# 1. sample 21 uniformly spaced states of a starting protocol (one Context per state, on one GPU)
-python simulate.py run0 --protocol "C(1,1) D(6,2)[0.25] E(2,1)"
+# 1. sample 21 uniformly spaced states of a seed protocol (one Context per state, on one GPU)
+python simulate.py run0 --protocol "C(exp 2) D(7,2)[0.4] E(2,1)[0.4] Q=E"
 
-# 2. score the protocol families against everything sampled so far, and place the next round's states
-python search.py run0 --a 0.25 --next next.json
+# 2. score the protocol family against everything sampled so far, and place the next round's states
+python search.py run0 --a 0.4 --next next.json
 
 # 3. sample the chosen protocol at those states, and score again with both runs
 python simulate.py run1 --plan next.json
-python search.py run0 run1 --a 0.25 --next next.json
+python search.py run0 run1 --a 0.4 --next next.json
 
 # 4. compare independent replicas of the final protocol with a reference
 python simulate.py final_1 --plan next.json --seed 1   # and so on for more replicas
@@ -114,10 +123,10 @@ error names its state and λ.
 
 At each λ, MBAR reweighting gives the mean and variance of du/dλ, and the search integrates:
 
-- L = ∫ sd(du/dλ) dλ, the thermodynamic length. It is the cost of a protocol whose states are spaced at
-  equal increments of length, which is how `--next` places them. This is the default ranking.
 - I_var = ∫ var(du/dλ) dλ, the cost with uniformly spaced states, and the relevant measure when λ is
-  sampled uniformly, as in λ-dynamics with a flat target (`--rank I_var`).
+  sampled uniformly, as in λ-dynamics with a flat target. This is the default ranking.
+- L = ∫ sd(du/dλ) dλ, the thermodynamic length. It is the cost of a protocol whose states are spaced at
+  equal increments of length, which is how `--next` places them (`--rank L`).
 - I_var/L² ≥ 1, which is 1 when sd(du/dλ) is flat: how much a protocol depends on the spacing of its states.
 
 Every protocol must integrate to the same ΔG, which checks the quadrature. A protocol counts as explored

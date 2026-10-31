@@ -4,15 +4,18 @@ import numpy as np
 import pytest
 
 from lbf import (
+    EXP,
     LEGACY_TERMS,
     SMOOTH,
     TERMS,
     PaperProtocol,
     Protocol,
     bernstein,
+    closest_contact,
     coefficients,
     energies_in_basis,
     equal_length_lambdas,
+    exponential,
     feedback_lambdas,
     fit_lambda_of_c,
     in_basis,
@@ -62,8 +65,32 @@ def test_smooth_step():
     assert s[0] == 0 and s[1] < 1e-300 and s[2] == 1 and ds[0] == 0
 
 
+def test_exponential():
+    x = np.linspace(0, 1, 101)
+    s, ds = exponential(2.5, x)
+    assert s[0] == 0 and s[-1] == pytest.approx(1.0)
+    assert np.all(np.diff(s) > 0)
+    assert ds[0] == pytest.approx(2.5 / np.expm1(2.5)) and ds[-1] == pytest.approx(2.5 * np.exp(2.5) / np.expm1(2.5))
+    assert np.allclose(ds, finite_difference(lambda t: exponential(2.5, t)[0], x), rtol=1e-6)
+    with pytest.raises(ValueError):
+        exponential(0.0, x)
+
+
+def test_exponential_protocol():
+    protocol = Protocol.parse("C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E")
+    assert protocol.specs[0] == (EXP, 2.5, 0.0)
+    lam = np.linspace(0, 1, 11)
+    h, dh = protocol.h(lam)
+    assert np.allclose(h[0], exponential(2.5, lam)[0]) and np.allclose(dh[0], exponential(2.5, lam)[1])
+    assert protocol.end_orders() == (0, 0)
+    assert protocol.charging_hazard() == pytest.approx(0.25, abs=0.01)
+    with pytest.raises(ValueError):
+        Protocol.parse("C(exp 2.5,1) D(7,2)[0.4] E(2,1)[0.4] Q=E")
+
+
 @pytest.mark.parametrize("text", ["C(1,0) D(11,1)[0.25] E(2,0)", "C(0,2) D(inf)[0.25] E(5,1)",
-                                  "C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E", "C(2,1) D(7,2)[0.4] E(4,1) Q(9,1)[0.5]"])
+                                  "C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E", "C(2,1) D(7,2)[0.4] E(4,1) Q(9,1)[0.5]",
+                                  "C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E", "C(2,1) D(exp 3)[0.4] E(exp 1.5)[0.4]"])
 def test_protocol_text(text):
     protocol = Protocol.parse(text)
     assert str(protocol) == text
@@ -179,6 +206,14 @@ def test_feedback_lambdas():
     assert states[0] == 0 and states[-1] == 1 and np.all(np.diff(states) > 0) and states[1] < 0.2
     with pytest.raises(ValueError):
         feedback_lambdas(lam, np.ones(11), 6)
+
+
+def test_closest_contact():
+    box = np.array([3.0, 3.0, 3.0])
+    positions = np.array([[0.1, 0.1, 0.1], [1.5, 1.5, 1.5], [2.9, 0.1, 0.1], [1.0, 1.0, 1.0]])
+    # the polar atom 0 is 0.2 nm from atom 2 through the periodic boundary, and 1.56 nm from atom 3
+    assert closest_contact(positions, box, np.array([0]), np.array([2, 3])) == pytest.approx(0.2)
+    assert closest_contact(positions, box, np.array([1]), np.array([3])) == pytest.approx(np.sqrt(3 * 0.25))
 
 
 def test_end_orders():
