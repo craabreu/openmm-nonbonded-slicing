@@ -85,6 +85,9 @@ def parse_args():
     scoring.add_argument("--dg_tol", type=float, default=0.05, help="kT")
     scoring.add_argument("--chunk", type=int, default=1500, help="targets reweighted at once (memory)")
     scoring.add_argument("--reference", action="append", default=[], help='protocols to score as references')
+    scoring.add_argument(
+        "--max_hazard", type=float, help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this",
+    )
     output = parser.add_argument_group("output")
     output.add_argument("--out", default="results.npz")
     output.add_argument("--top", type=int, default=20, help="rows of the ranked table")
@@ -177,6 +180,8 @@ def main():
     for term, value in args.min_h_at_a:
         index = TERMS.index(term)
         protocols = [p for p in protocols if p.h(args.a)[0][index, 0] >= value]
+    if args.max_hazard is not None:
+        protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
     references = [Protocol.parse("paper")] + [Protocol.parse(text) for text in args.reference]
     if reweighter.terms == LEGACY_TERMS:
         protocols = [p for p in protocols if p.representable_in(LEGACY_TERMS)]
@@ -201,29 +206,32 @@ def main():
     dG_ref = reweighter.f_k[np.argmax(totals)] - reweighter.f_k[np.argmin(totals)]
     resolved = refined & (np.abs(scores["dG"] - dG_ref) < args.dg_tol)
     explored = resolved & (scores["min_ess"] >= args.ess)
+    hazard = np.array([p.charging_hazard() for p in protocols])
     np.savez(
         args.out, protocols=np.array([str(p) for p in protocols]), refined=refined, resolved=resolved,
-        explored=explored, dG_ref=dG_ref, h_states=reweighter.h_states, f_k=reweighter.f_k, a=args.a, **scores,
+        explored=explored, hazard=hazard, dG_ref=dG_ref, h_states=reweighter.h_states, f_k=reweighter.f_k,
+        a=args.a, **scores,
     )
 
-    def row(label, s):
+    def row(label, s, hazard):
         return (
-            f"{label:34s} L={s['L']:7.2f}  I_var={s['I_var']:9.2f}  I_var/L^2={s['I_var'] / s['L'] ** 2:5.2f}  "
-            f"dG={s['dG']:8.3f}  minESS={s['min_ess']:8.1f}"
+            f"{label:40s} L={s['L']:7.2f}  I_var={s['I_var']:9.2f}  I_var/L^2={s['I_var'] / s['L'] ** 2:5.2f}  "
+            f"dG={s['dG']:8.3f}  minESS={s['min_ess']:8.1f}  hazard={hazard:5.2f}"
         )
 
-    print(f"MBAR dG (coupled - decoupled) = {dG_ref:.3f} kT; rescored {refined.sum()}, explored {explored.sum()}")
+    print(f"MBAR dG (coupled - decoupled) = {dG_ref:.3f} kT; rescored {refined.sum()}, explored {explored.sum()}; "
+          "hazard = max h_E/h_C where h_D < 0.001")
     for protocol, s in zip(references, reference_scores):
-        print("reference  " + row(str(protocol), s))
+        print("reference  " + row(str(protocol), s, protocol.charging_hazard()))
     ranked = np.flatnonzero(explored)
     ranked = ranked[np.argsort(scores[args.rank][ranked])]
     print(f"\nbest explored by {args.rank}:")
     for i in ranked[: args.top]:
-        print("  " + row(str(protocols[i]), {key: scores[key][i] for key in scores}))
+        print("  " + row(str(protocols[i]), {key: scores[key][i] for key in scores}, hazard[i]))
     unexplored = np.flatnonzero(resolved & ~explored)
     if len(unexplored):
         j = unexplored[np.argmin(scores[args.rank][unexplored])]
-        print("  best unexplored: " + row(str(protocols[j]), {key: scores[key][j] for key in scores}))
+        print("  best unexplored: " + row(str(protocols[j]), {key: scores[key][j] for key in scores}, hazard[j]))
 
     if args.next:
         if args.choose:

@@ -9,11 +9,14 @@ from lbf import (
     TERMS,
     PaperProtocol,
     Protocol,
+    bernstein,
     coefficients,
     energies_in_basis,
     equal_length_lambdas,
     feedback_lambdas,
+    fit_lambda_of_c,
     in_basis,
+    lambda_of_c,
     load_run,
     mix_replicas,
     nonincreasing_fit,
@@ -97,6 +100,13 @@ def test_protocol_h(protocol):
     assert np.allclose(dh[:, smooth], fd[:, smooth], rtol=1e-5, atol=1e-7)
 
 
+def test_charging_hazard():
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1)").charging_hazard() == pytest.approx(0.44, abs=0.01)
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E").charging_hazard() == pytest.approx(0.16, abs=0.01)
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)").charging_hazard() == 1.0  # h_E = h_C
+    assert PaperProtocol().charging_hazard() == 0.0
+
+
 def test_paper_protocol_is_bare_coulomb():
     h, dh = PaperProtocol().h(np.linspace(0, 1, 101))
     assert np.array_equal(h[2], h[3]) and np.array_equal(dh[2], dh[3])
@@ -169,6 +179,37 @@ def test_feedback_lambdas():
     assert states[0] == 0 and states[-1] == 1 and np.all(np.diff(states) > 0) and states[1] < 0.2
     with pytest.raises(ValueError):
         feedback_lambdas(lam, np.ones(11), 6)
+
+
+def test_end_orders():
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E").end_orders() == (2, 1)
+    assert Protocol.parse("C(3,2) D(inf)[0.4] E(1,1)").end_orders() == (1, 1)
+    assert PaperProtocol().end_orders() == (2, 2)
+
+
+def test_lambda_of_c():
+    x = np.linspace(0, 1, 7)
+    assert np.allclose(bernstein(x, 3).sum(axis=1), 1) and np.allclose(bernstein(x, 3)[:, 0], (1 - x) ** 3)
+    c = np.linspace(0, 1, 1001)
+    w = np.array([0.0, 0.1, 0.5, 0.9, 1.0])
+    lam, dlam = lambda_of_c(c, 2, 1, w)
+    assert lam[0] == 0 and lam[-1] == 1 and np.all(np.diff(lam) > 0) and np.all(dlam[1:-1] > 0)
+    assert np.allclose(dlam[1:-1], finite_difference(lambda y: lambda_of_c(y, 2, 1, w)[0], c[1:-1]), rtol=1e-4)
+    # the end exponents: lambda ~ c^(1/3) at 0 and 1 - lambda ~ (1 - c)^(1/2) at 1
+    small = np.array([1e-6, 1e-5])
+    assert np.allclose(np.diff(np.log(lambda_of_c(small, 2, 1, w)[0])) / np.log(10), 1 / 3, atol=1e-3)
+    assert np.allclose(np.diff(np.log(1 - lambda_of_c(1 - small, 2, 1, w)[0])) / np.log(10), 1 / 2, atol=1e-3)
+
+
+def test_fit_lambda_of_c():
+    # sd proportional to dS_{2,1}/dlambda: the exact c is S_{2,1}(lambda), with end orders (2, 1)
+    lam = np.linspace(0, 1, 2001)
+    sd = 3.0 * switch(2, 1, lam)[1]
+    w, flatness = fit_lambda_of_c(lam, sd, 2, 1, 6, nodes=1001)
+    assert w[0] == 0 and np.isclose(w[-1], 1) and np.all(np.diff(w) >= 0)
+    assert flatness < 1.002
+    c = np.linspace(0, 1, 101)
+    assert np.allclose(switch(2, 1, lambda_of_c(c, 2, 1, w)[0])[0], c, atol=0.01)
 
 
 def test_mix_replicas_samples_the_permutation_distribution():

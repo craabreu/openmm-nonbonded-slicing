@@ -147,6 +147,24 @@ class Protocol:
         h, dh = zip(*(_term_h(spec, lam) for spec in self.specs))
         return np.array(h), np.array(dh)
 
+    def charging_hazard(self, weak=1e-3):
+        """The largest h_E/h_C where the Lennard-Jones decapping is still weak (h_D < weak). Charging against
+        a capped core is a contest between the capped attraction, scaled by h_E, and the capped repulsion,
+        scaled by h_C; for phenol in water a hydrogen bond collapses onto the hydroxyl above about 0.5.
+        With bare Coulomb (h_Q = h_E) the hazard is the same ratio, since nothing else holds the pair apart."""
+        h = self.h(np.linspace(0.0, 1.0, 1001))[0]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(h[3] > 0, h[3] / h[0], 0.0)
+        return float(np.max(ratio[h[1] < weak], initial=0.0))
+
+    def end_orders(self):
+        """(p0, p1): the leading powers of dh/dlambda at the ends, lambda^p0 at 0 and (1 - lambda)^p1 at 1,
+        from the terms that switch on at lambda = 0 and the smallest end order; the C-infinity step never
+        dominates. The thermodynamic length then goes as lambda^(p0+1) and (1 - lambda)^(p1+1)."""
+        at_zero = [m0 for m0, m1, a in self.specs if a == 0 and m0 != SMOOTH]
+        at_one = [m1 for m0, m1, a in self.specs if m0 != SMOOTH]
+        return min(at_zero), min(at_one)
+
     def representable_in(self, terms):
         """Whether runs with these slice energies can evaluate this protocol (see in_basis)."""
         try:
@@ -215,6 +233,9 @@ class PaperProtocol(Protocol):
     def __str__(self):
         return "paper"
 
+    def end_orders(self):
+        return 2, 2  # S_{2,2} for C at lambda = 0 and for E at lambda = 1
+
     def h(self, lam):
         lam = np.atleast_1d(np.asarray(lam, dtype=float))
         h, dh = {}, {}
@@ -282,6 +303,53 @@ def feedback_lambdas(lam, f, num_states, weights=None):
     lambdas = np.interp(np.linspace(0.0, cumulative[-1], num_states), cumulative, lam)
     lambdas[0], lambdas[-1] = 0.0, 1.0
     return lambdas
+
+
+def bernstein(x, n):
+    """The Bernstein basis of degree n at x (m,), as (m, n + 1)."""
+    x = np.asarray(x, dtype=float)
+    return np.stack([comb(n, j) * x**j * (1 - x) ** (n - j) for j in range(n + 1)], axis=1)
+
+
+def lambda_of_c(c, p0, p1, w):
+    """lambda(c) and dlambda/dc, for c in [0, 1] the thermodynamic length over L.
+
+    The exact map has lambda ~ c^(1/(p0+1)) at 0 and 1 - lambda ~ (1 - c)^(1/(p1+1)) at 1, since sd(du/dlambda)
+    vanishes with those powers of dh/dlambda (see Protocol.end_orders). So lambda = lambda0(w(c)) with
+    lambda0(w) = (1 - (1 - w)^(1/(p1+1)))^(1/(p0+1)), which has both, and w a nondecreasing Bernstein
+    polynomial with coefficients w (w[0] = 0, w[-1] = 1), whose finite slope at the ends keeps them."""
+    c = np.clip(np.asarray(c, dtype=float), 0.0, 1.0)
+    n = len(w) - 1
+    x = np.clip(bernstein(c, n) @ w, 1e-15, 1 - 1e-15)
+    dx = n * (bernstein(c, n - 1) @ np.diff(w))
+    q0, q1 = 1 / (p0 + 1), 1 / (p1 + 1)
+    inner = 1 - (1 - x) ** q1
+    lam = inner**q0
+    dlam = q0 * inner ** (q0 - 1) * q1 * (1 - x) ** (q1 - 1) * dx
+    lam[c <= 0], lam[c >= 1] = 0.0, 1.0
+    return lam, dlam
+
+
+def fit_lambda_of_c(lam, sd, p0, p1, degree, nodes=4001):
+    """The Bernstein coefficients w of lambda_of_c that flatten sd(du/dc) = sd(lambda(c)) dlambda/dc, given
+    sd(du/dlambda) on a grid lam spanning [0, 1]: they minimize I_var/L^2 in c, which is exact along the
+    path and needs no reweighting. Returns w and the I_var/L^2 reached (1 is flat)."""
+    from scipy.optimize import minimize
+
+    lam, sd = np.asarray(lam, dtype=float), np.asarray(sd, dtype=float)
+    L = np.trapezoid(sd, lam)
+    c = np.linspace(0.0, 1.0, nodes)
+
+    def coefficients(z):
+        d = np.exp(z - z.max())
+        return np.concatenate([[0.0], np.cumsum(d / d.sum())])
+
+    def objective(z):
+        lam_c, dlam = lambda_of_c(c, p0, p1, coefficients(z))
+        return np.trapezoid((np.interp(lam_c, lam, sd) * dlam) ** 2, c) / L**2
+
+    result = minimize(objective, np.zeros(degree), method="L-BFGS-B", options=dict(maxiter=5000))
+    return coefficients(result.x), float(result.fun)
 
 
 def equal_length_lambdas(lam, sd, num_states):

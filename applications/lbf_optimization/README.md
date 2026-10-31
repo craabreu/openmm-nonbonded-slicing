@@ -64,6 +64,7 @@ the decapping avoids the contest at a few percent of thermodynamic length.
 | `search.py` | pools runs, solves MBAR, scores protocol families (both Coulomb schemes, `--Q`) → ranked table, `results.npz` and the next round's states |
 | `validate.py` | ΔG of independent runs of one or more protocols, and its spread over runs |
 | `flow.py` | the replica flow of a run, and the feedback-optimized states next to the equal-length ones |
+| `reparametrize.py` | λ(c) in closed form for a protocol, c the thermodynamic length, for λ-dynamics with a flat target |
 | `test_lbf.py` | unit tests (`python -m pytest test_lbf.py`) |
 
 Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`, `openmmforcefields`,
@@ -134,3 +135,14 @@ when the density of states is proportional to √(−df/dλ). `flow.py RUN` meas
 history and prints both allocations. For phenol they agree to within the noise of f (about 100 round trips
 in 2 ns), apart from the first interior state, which the flow keeps closer to λ = 0; no state relaxes
 slowly, so the simpler equal-length placement is the one used, and the flow is the check.
+
+### The protocol in the thermodynamic-length coordinate
+
+For λ-dynamics with a flat target, the coordinate to sample is c(λ) = ∫₀^λ sd(du/dλ′) dλ′ / L, along which
+sd(du/dc) = L everywhere; the equal-length states are its uniform grid. `reparametrize.py RUN --protocol P`
+gives λ(c) in closed form: the ends of the exact map are singular, λ ∝ c^(1/(p0+1)) and 1 − λ ∝ (1 − c)^(1/(p1+1))
+with (p0, p1) the end orders of the protocol, so λ(c) = (1 − (1 − w(c))^(1/(p1+1)))^(1/(p0+1)) with a
+nondecreasing Bernstein polynomial w, whose coefficients are chosen to flatten sd(du/dc). The switching
+functions in c are the exact h(λ(c)), so they keep their bounds, windows and onset powers; a degree of 8
+leaves I_var/L² within 2% of 1 for phenol. Fitting each h(c) by a polynomial instead can make it negative,
+and fitting λ(c) by a plain polynomial cannot follow the ends.
