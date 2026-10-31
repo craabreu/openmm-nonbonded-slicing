@@ -4,11 +4,15 @@ import numpy as np
 import pytest
 
 from lbf import (
+    LEGACY_TERMS,
     SMOOTH,
+    TERMS,
     PaperProtocol,
     Protocol,
     coefficients,
+    energies_in_basis,
     equal_length_lambdas,
+    in_basis,
     load_run,
     mix_replicas,
     smooth_step,
@@ -51,7 +55,8 @@ def test_smooth_step():
     assert s[0] == 0 and s[1] < 1e-300 and s[2] == 1 and ds[0] == 0
 
 
-@pytest.mark.parametrize("text", ["C(1,0) D(11,1)[0.25] E(2,0)", "C(0,2) D(inf)[0.25] E(5,1)"])
+@pytest.mark.parametrize("text", ["C(1,0) D(11,1)[0.25] E(2,0)", "C(0,2) D(inf)[0.25] E(5,1)",
+                                  "C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E", "C(2,1) D(7,2)[0.4] E(4,1) Q(9,1)[0.5]"])
 def test_protocol_text(text):
     protocol = Protocol.parse(text)
     assert str(protocol) == text
@@ -59,22 +64,39 @@ def test_protocol_text(text):
     assert Protocol.parse(text.replace(" ", "")) == protocol
 
 
-@pytest.mark.parametrize("text", ["C(1,0) D(11,1)", "C(1,0) D(11,1) E(2,0) X", "C(1,0) D(11) E(2,x)"])
+def test_coulomb_decapping_ties():
+    C, D, E = (2, 1, 0.0), (7, 2, 0.4), (4, 1, 0.0)
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1)").specs == (C, D, D, E)
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q=D").specs == (C, D, D, E)
+    assert Protocol.parse("C(2,1) D(7,2)[0.4] Q=E E(4,1)").specs == (C, D, E, E)
+    assert str(Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q=D")) == "C(2,1) D(7,2)[0.4] E(4,1)"
+    assert str(Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q(7,2)[0.4]")) == "C(2,1) D(7,2)[0.4] E(4,1)"
+    assert str(Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q(4,1)")) == "C(2,1) D(7,2)[0.4] E(4,1) Q=E"
+
+
+@pytest.mark.parametrize("text", ["C(1,0) D(11,1)", "C(1,0) D(11,1) E(2,0) X", "C(1,0) D(11) E(2,x)",
+                                  "C(1,0) D(11,1) E(2,0) Q=E Q=D", "C(1,0) D(11,1) E(2,0) Q=E Q(2,0)", "Q=E"])
 def test_protocol_errors(text):
     with pytest.raises(ValueError):
         Protocol.parse(text)
 
 
 @pytest.mark.parametrize("protocol", [Protocol.parse("C(1,0) D(11,1)[0.25] E(2,0)"),
-                                      Protocol.parse("C(1,1) D(inf)[0.25] E(2,1)"), PaperProtocol()])
+                                      Protocol.parse("C(1,1) D(inf)[0.25] E(2,1)[0.4] Q=E"), PaperProtocol()])
 def test_protocol_h(protocol):
     lam = np.linspace(0, 1, 201)
     h, dh = protocol.h(lam)
-    assert h.shape == dh.shape == (3, len(lam))
+    assert h.shape == dh.shape == (len(TERMS), len(lam))
     assert np.allclose(h[:, 0], 0) and np.allclose(h[:, -1], 1)
     smooth = (lam > 0.01) & (lam < 0.99) & np.all(np.abs(lam[:, None] - [0.25, 0.4, 0.6, 0.7, 0.8]) > 0.01, axis=1)
     fd = finite_difference(lambda x: protocol.h(x)[0], lam)
     assert np.allclose(dh[:, smooth], fd[:, smooth], rtol=1e-5, atol=1e-7)
+
+
+def test_paper_protocol_is_bare_coulomb():
+    h, dh = PaperProtocol().h(np.linspace(0, 1, 101))
+    assert np.array_equal(h[2], h[3]) and np.array_equal(dh[2], dh[3])
+    assert not PaperProtocol().representable_in(LEGACY_TERMS)
 
 
 def test_window():
@@ -82,6 +104,25 @@ def test_window():
     lam = np.linspace(0, 1, 101)
     assert np.all(h[1, lam <= 0.25] == 0) and np.all(dh[1, lam <= 0.25] == 0)
     assert np.all(h[1, lam > 0.25] > 0)
+
+
+def test_bases():
+    lam = np.linspace(0, 1, 11)
+    capped = Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1)")
+    bare = Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q=E")
+    h, dh = capped.h(lam)
+    assert in_basis(TERMS, h, dh) == (h, dh)
+    h3, dh3 = in_basis(LEGACY_TERMS, h, dh)
+    assert h3.shape == (3, len(lam)) and np.array_equal(h3, h[[0, 1, 3]]) and np.array_equal(dh3, dh[[0, 1, 3]])
+    assert capped.representable_in(LEGACY_TERMS) and bare.representable_in(TERMS)
+    assert not bare.representable_in(LEGACY_TERMS)
+    with pytest.raises(ValueError):
+        in_basis(LEGACY_TERMS, *bare.h(lam))
+    U = np.arange(12.0).reshape(3, 4)
+    assert energies_in_basis(TERMS, U, TERMS) is U
+    assert np.array_equal(energies_in_basis(LEGACY_TERMS, U, TERMS), np.stack([U[:, 0], U[:, 1] + U[:, 2], U[:, 3]], 1))
+    with pytest.raises(ValueError):
+        energies_in_basis(TERMS, U[:, :3], LEGACY_TERMS)
 
 
 def test_equal_length_lambdas():
@@ -128,5 +169,14 @@ def test_load_run(tmp_path):
     run = load_run(str(tmp_path))
     assert run.temperature == 300.0
     assert run.capping_orders == (3, 3)  # the default when a run predates the option
+    assert run.terms == LEGACY_TERMS  # and the single decapping energy when it predates the split
     assert np.array_equal(run.series[0], np.array([U[1, 0], U[2, 1], U[3, 1]]))
     assert np.array_equal(run.series[1], np.array([U[1, 1], U[2, 0], U[3, 0]]))
+    np.savez(
+        tmp_path / "samples.npz", protocol="C(1,0) D(11,1)[0.25] E(2,0) Q=E", lambdas=np.array([0.0, 1.0]),
+        H=np.zeros((2, 4)), terms=np.array(TERMS), temperature=300.0, iteration_ps=1.0, equilibration=1,
+        exchange=True, state_of_replica_history=history, U=np.arange(4 * 2 * 4, dtype=float).reshape(4, 2, 4),
+        accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)), capping_orders=np.array([3, 3]),
+    )
+    run = load_run(str(tmp_path))
+    assert run.terms == TERMS and run.series[0].shape == (3, 4)

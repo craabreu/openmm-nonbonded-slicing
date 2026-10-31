@@ -8,8 +8,8 @@ their coordinates. The energy is linear in the scaling parameters, so one energy
 evaluation per replica gives the reduced potential of every replica in every state, and the exchanges cost
 no extra force evaluations (see lbf.py). With --no-exchange, every replica stays in its state.
 
-OUTDIR/samples.npz holds, per iteration, the state of each replica and its slice energies U_C, U_D and U_E
-(kJ/mol), measured before the exchange. The first --equilibration iterations are stored too and are skipped
+OUTDIR/samples.npz holds, per iteration, the state of each replica and its slice energies U_C, U_D, U_Q and
+U_E (kJ/mol), measured before the exchange. The first --equilibration iterations are stored too and are skipped
 by search.py and validate.py. OUTDIR/checkpoint.npz is written along with it; rerunning the same command
 resumes from it.
 """
@@ -87,7 +87,7 @@ def save(path, **arrays):
 def main():
     args = parse_args()
     protocol, lambdas = read_states(args)
-    H = protocol.h(lambdas)[0].T  # (K, 3): the scaling parameters of each state
+    H = protocol.h(lambdas)[0].T  # (K, 4): the scaling parameters of each state
     num_states = len(lambdas)
     beta_ = beta(args.temperature)
     swap_attempts = num_states**3 if args.swap_attempts is None else args.swap_attempts
@@ -155,11 +155,11 @@ def main():
 
     def checkpoint(iteration):
         common = dict(
-            protocol=str(protocol), lambdas=lambdas, H=H, temperature=args.temperature,
+            protocol=str(protocol), lambdas=lambdas, H=H, terms=np.array(TERMS), temperature=args.temperature,
             capping_orders=np.array(args.capping_orders), iteration_ps=args.iteration_ps,
             equilibration=args.equilibration, exchange=not args.no_exchange,
             state_of_replica_history=np.array(history, dtype=int).reshape(-1, num_states),
-            U=np.array(U).reshape(-1, num_states, 3), accepted=accepted, attempted=attempted,
+            U=np.array(U).reshape(-1, num_states, len(TERMS)), accepted=accepted, attempted=attempted,
         )
         save(samples_path, **common)
         xml = [mm.XmlSerializer.serialize(c.getState(getPositions=True, getVelocities=True)) for c in contexts]
@@ -170,7 +170,7 @@ def main():
 
     clock = time.time()
     for n in range(start, args.iterations):
-        energies = np.empty((num_states, 3))
+        energies = np.empty((num_states, len(TERMS)))
         for i, (context, integrator) in enumerate(zip(contexts, integrators)):
             try:
                 integrator.step(steps_per_iteration)

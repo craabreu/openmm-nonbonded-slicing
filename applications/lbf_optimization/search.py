@@ -14,11 +14,14 @@ reweighting gives <du/dlambda> and var(du/dlambda), with du/dlambda = beta dh/dl
 I_var/L^2 >= 1 measures how much a protocol depends on the spacing of its states; it is 1 when sd(du/dlambda)
 is flat. A protocol counts as explored if the Kish effective sample size is at least --ess at every node.
 
-The decapping term D switches on over [a, 1]. The capped Lennard-Jones term C and the electrostatics E cover
-[0, 1]. By default, every switching function has a zero first derivative at both ends of its interval
-(m0 >= 1 and m1 >= 1), so that the lambda-force vanishes at lambda = 0 and 1, as lambda-dynamics needs; widen
-the ranges to lift this. With --next, the best explored protocol (or --choose) gets --states lambdas at equal increments of
-thermodynamic length, written as JSON for simulate.py --plan.
+The Lennard-Jones decapping term D switches on over [a, 1]. The capped Lennard-Jones term C covers [0, 1],
+and the electrostatics E cover [0, 1] or, with --aE, a window of its own. The Coulomb decapping Q follows D
+(capped Coulomb until the core is decapped) or E (bare Coulomb), as --Q selects; runs that predate the
+split of the decapping terms can only weight the former. By default, every switching function has a zero
+first derivative at both ends of its interval (m0 >= 1 and m1 >= 1), so that the lambda-force vanishes at
+lambda = 0 and 1, as lambda-dynamics needs; widen the ranges to lift this. With --next, the best explored
+protocol (or --choose) gets --states lambdas at equal increments of thermodynamic length, written as JSON
+for simulate.py --plan.
 """
 
 import argparse
@@ -32,7 +35,7 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import numpy as np
 from scipy.special import logsumexp
 
-from lbf import SMOOTH, TERMS, Protocol, beta, equal_length_lambdas, load_run
+from lbf import LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis, load_run
 
 
 def int_range(text):
@@ -58,6 +61,13 @@ def parse_args():
     families.add_argument("--m1D", type=int_range, default=int_range("1:2"))
     families.add_argument("--m0E", type=int_range, default=int_range("1:11"))
     families.add_argument("--m1E", type=int_range, default=int_range("1:2"))
+    families.add_argument(
+        "--aE", type=float, nargs="+", metavar="A", help="starts of the window of E (default: 0 and a)",
+    )
+    families.add_argument(
+        "--Q", choices=("D", "E"), nargs="+", default=["D", "E"],
+        help="which term the Coulomb decapping follows (default: both, as separate protocols)",
+    )
     families.add_argument("--no_smooth_d", action="store_true", help="leave out the C-infinity decapping step")
     families.add_argument(
         "--min_h_at_a", type=min_h, action="append", default=[], metavar="TERM=VALUE",
@@ -85,10 +95,12 @@ def candidates(args):
     decap = [(m0, m1, args.a) for m0, m1 in itertools.product(args.m0D, args.m1D)]
     if not args.no_smooth_d:
         decap.append((SMOOTH, 0, args.a))
+    starts = sorted({0.0, args.a}) if args.aE is None else sorted(set(args.aE))
     for C in itertools.product(args.m0C, args.m1C, [0.0]):
         for D in decap:
-            for E in itertools.product(args.m0E, args.m1E, [0.0]):
-                yield Protocol((C, D, E))
+            for E in itertools.product(args.m0E, args.m1E, starts):
+                for tie in args.Q:
+                    yield Protocol((C, D, D if tie == "D" else E, E))
 
 
 class Reweighter:
@@ -105,17 +117,20 @@ class Reweighter:
         if len(orders) > 1:
             raise SystemExit(f"runs with different capping orders cannot be pooled: {sorted(orders)}")
         self.beta = beta(temperatures.pop())
-        self.h_states = np.concatenate([run.H for run in runs])
-        series = [s for run in runs for s in run.series]
+        # a legacy run pulls the pool down to its basis, where only protocols with h_Q = h_D can be weighted
+        self.terms = LEGACY_TERMS if any(run.terms == LEGACY_TERMS for run in runs) else TERMS
+        self.h_states = np.concatenate([energies_in_basis(self.terms, run.H, run.terms) for run in runs])
+        series = [energies_in_basis(self.terms, s, run.terms) for run in runs for s in run.series]
         N_k = np.array([len(s) for s in series])
-        self.BU = self.beta * np.concatenate(series)  # (N, 3)
+        self.BU = self.beta * np.concatenate(series)  # (N, len(terms))
         u_kn = self.h_states @ self.BU.T
         self.f_k = MBAR(u_kn, N_k, solver_protocol="robust").f_k
         self.log_denominator = logsumexp(np.log(N_k)[:, None] + self.f_k[:, None] - u_kn, axis=0)
         self.chunk = chunk
 
     def at(self, H, dH):
-        """<du/dlambda>, var(du/dlambda) and Kish ESS at the states H (T, 3), with dh/dlambda dH (T, 3)."""
+        """<du/dlambda>, var(du/dlambda) and Kish ESS at the states H (T, 4), with dh/dlambda dH (T, 4)."""
+        H, dH = (x.T for x in in_basis(self.terms, H.T, dH.T))
         mean, var, ess = (np.empty(len(H)) for _ in range(3))
         for start in range(0, len(H), self.chunk):
             sl = slice(start, start + self.chunk)
@@ -156,8 +171,14 @@ def main():
     for term, value in args.min_h_at_a:
         index = TERMS.index(term)
         protocols = [p for p in protocols if p.h(args.a)[0][index, 0] >= value]
-    print(f"{len(protocols)} protocols with the decapping window at a = {args.a:g}")
     references = [Protocol.parse("paper")] + [Protocol.parse(text) for text in args.reference]
+    if reweighter.terms == LEGACY_TERMS:
+        protocols = [p for p in protocols if p.representable_in(LEGACY_TERMS)]
+        dropped = [str(p) for p in references if not p.representable_in(LEGACY_TERMS)]
+        references = [p for p in references if p.representable_in(LEGACY_TERMS)]
+        print("a run stored the decapping terms together: only protocols with h_Q = h_D are scored"
+              + (f"; references left out: {', '.join(dropped)}" if dropped else ""))
+    print(f"{len(protocols)} protocols with the decapping window at a = {args.a:g}")
 
     # screen everything, then rescore the best by either score with more nodes
     scores = reweighter.score(protocols, args.nodes, args.a)

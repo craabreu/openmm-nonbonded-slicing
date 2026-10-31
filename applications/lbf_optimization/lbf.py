@@ -1,21 +1,28 @@
 """Shared pieces of the LBF protocol optimization: switching functions, protocols, the system, and the
 replica-exchange move.
 
-An LBF protocol scales three solute-solvent terms of a SlicedNonbondedForce with switching functions of a
+An LBF protocol scales four solute-solvent terms of a SlicedNonbondedForce with switching functions of a
 single coupling parameter lambda in [0, 1] (Correa et al., J. Chem. Theory Comput. 18, 5876, 2022):
 
     C: capped Lennard-Jones                                  global parameter lambdaLJ    h_C(lambda)
-    D: decapping terms (Lennard-Jones and Coulomb)           global parameter lambdaD     h_D(lambda)
+    D: Lennard-Jones decapping                               global parameter lambdaD     h_D(lambda)
+    Q: Coulomb decapping                                     global parameter lambdaQD    h_Q(lambda)
     E: electrostatics (Coulomb, capped below sigma)          global parameter lambdaQ     h_E(lambda)
 
-The energy is linear in the three scaling parameters,
+The energy is linear in the four scaling parameters,
 
-    U(x; lambda) = U_rest(x) + h_C U_C(x) + h_D U_D(x) + h_E U_E(x),
+    U(x; lambda) = U_rest(x) + h_C U_C(x) + h_D U_D(x) + h_Q U_Q(x) + h_E U_E(x),
 
-where U_C, U_D and U_E are the energy derivatives that the plugin computes along with the energy. The
-reduced potential of any state, and of any protocol, is therefore known from the three slice energies of
+where U_C, U_D, U_Q and U_E are the energy derivatives that the plugin computes along with the energy. The
+reduced potential of any state, and of any protocol, is therefore known from the four slice energies of
 each sample, which is what replica exchange and the protocol search both rely on. U_rest and the pV term
 are the same in every state and cancel.
+
+The two decapping terms are what distinguishes the electrostatic schemes: h_Q = h_D keeps the Coulomb
+potential capped until the core is decapped (the capped-Coulomb scheme), and h_Q = h_E makes h_E switch on
+the bare Coulomb potential, as the original plugin and the protocol of Correa et al. do. Both are protocols
+of the same basis, so samples of either reweight to the other. Runs that predate the split stored the two
+decapping terms as one slice energy (LEGACY_TERMS) and can only represent protocols with h_Q = h_D.
 
 Each term follows S_{m0,m1}(x), the polynomial step whose first m0 derivatives vanish at x = 0 and whose
 first m1 derivatives vanish at x = 1. A term can have a window: it is zero for lambda <= a and switches on
@@ -30,8 +37,9 @@ from math import comb
 import numpy as np
 
 KB = 0.0083144626181532  # kJ/(mol K)
-TERMS = ("C", "D", "E")
-PARAMS = {"C": "lambdaLJ", "D": "lambdaD", "E": "lambdaQ"}
+TERMS = ("C", "D", "Q", "E")
+LEGACY_TERMS = ("C", "D", "E")  # D was both decapping terms
+PARAMS = {"C": "lambdaLJ", "D": "lambdaD", "Q": "lambdaQD", "E": "lambdaQ"}
 SMOOTH = -1  # m0 of the C-infinity step psi(x) = f(x)/(f(x) + f(1-x)), f(x) = exp(-1/x)
 
 
@@ -85,15 +93,18 @@ def smooth_step(x):
 # Protocols
 # ----------------------------------------------------------------------------------------------------------
 
-_SPEC = re.compile(r"([CDE])\((inf|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
+_SPEC = re.compile(r"([CDQE])\((inf|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
+_TIE = re.compile(r"Q=([DE])")
 
 
 @dataclass(frozen=True)
 class Protocol:
-    """Switching functions of the three terms, as (m0, m1, a) each; m0 = SMOOTH selects the C-infinity step,
+    """Switching functions of the four terms, as (m0, m1, a) each; m0 = SMOOTH selects the C-infinity step,
     and a is the start of the term's window (0 for none).
 
-    The text form is, e.g., "C(1,0) D(11,1)[0.25] E(2,0)", with "D(inf)[0.25]" for the C-infinity step.
+    The text form is, e.g., "C(1,0) D(11,1)[0.25] E(2,0)", with "D(inf)[0.25]" for the C-infinity step. The
+    Coulomb decapping Q follows D unless the text ties it to E ("Q=E", the bare-Coulomb scheme) or gives it
+    its own switching function ("Q(7,2)[0.4]").
     """
 
     specs: tuple
@@ -102,25 +113,71 @@ class Protocol:
     def parse(cls, text):
         if text.strip().lower() == "paper":
             return PaperProtocol()
+        compact = text.replace(" ", "")
         found = {}
-        for term, m0, m1, a in _SPEC.findall(text.replace(" ", "")):
+        for term, m0, m1, a in _SPEC.findall(compact):
             m0 = SMOOTH if m0 == "inf" else int(m0)
             found[term] = (m0, int(m1 or 0), float(a or 0.0))
-        if sorted(found) != list(TERMS) or len(_SPEC.sub("", text.replace(" ", ""))) > 0:
-            raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(1,0) D(11,1)[0.25] E(2,0)'")
+        ties = _TIE.findall(compact)
+        rest = _TIE.sub("", _SPEC.sub("", compact))
+        if sorted(found) not in (sorted(LEGACY_TERMS), sorted(TERMS)) or rest or len(ties) + ("Q" in found) > 1:
+            raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(1,0) D(11,1)[0.25] E(2,0) Q=E'")
+        if "Q" not in found:
+            found["Q"] = found[ties[0] if ties else "D"]
         return cls(tuple(found[term] for term in TERMS))
 
     def __str__(self):
         parts = []
         for term, (m0, m1, a) in zip(TERMS, self.specs):
+            if term == "Q":
+                continue
             shape = "inf" if m0 == SMOOTH else f"{m0},{m1}"
             parts.append(f"{term}({shape})" + (f"[{a:g}]" if a > 0 else ""))
+        C, D, Q, E = self.specs
+        if Q == E and Q != D:
+            parts.append("Q=E")
+        elif Q != D:
+            m0, m1, a = Q
+            shape = "inf" if m0 == SMOOTH else f"{m0},{m1}"
+            parts.append(f"Q({shape})" + (f"[{a:g}]" if a > 0 else ""))
         return " ".join(parts)
 
     def h(self, lam):
-        """h (3, n) and dh/dlambda (3, n) at the given lambdas."""
+        """h (4, n) and dh/dlambda (4, n) at the given lambdas."""
         h, dh = zip(*(_term_h(spec, lam) for spec in self.specs))
         return np.array(h), np.array(dh)
+
+    def representable_in(self, terms):
+        """Whether runs with these slice energies can evaluate this protocol (see in_basis)."""
+        try:
+            in_basis(terms, *self.h(np.linspace(0.0, 1.0, 101)))
+        except ValueError:
+            return False
+        return True
+
+
+def in_basis(terms, h, dh):
+    """h and dh (4, n) of a protocol in the basis of a run's slice energies: (4, n) for TERMS, and (3, n)
+    for LEGACY_TERMS, whose single decapping energy can only weight a protocol with h_Q = h_D."""
+    terms = tuple(terms)
+    if terms == TERMS:
+        return h, dh
+    if terms != LEGACY_TERMS:
+        raise ValueError(f"unknown slice energies {terms}")
+    if not (np.allclose(h[2], h[1]) and np.allclose(dh[2], dh[1])):
+        raise ValueError("runs that stored the decapping terms together can only weight protocols with h_Q = h_D")
+    return h[[0, 1, 3]], dh[[0, 1, 3]]
+
+
+def energies_in_basis(terms, U, run_terms):
+    """Slice energies U (n, len(run_terms)) of a run, as the basis terms: summing the decapping terms when
+    a four-term run is pooled with legacy ones."""
+    terms, run_terms = tuple(terms), tuple(run_terms)
+    if terms == run_terms:
+        return U
+    if terms == LEGACY_TERMS and run_terms == TERMS:
+        return np.stack([U[:, 0], U[:, 1] + U[:, 2], U[:, 3]], axis=1)
+    raise ValueError(f"cannot express slice energies {run_terms} as {terms}")
 
 
 def _term_h(spec, lam):
@@ -133,9 +190,10 @@ def _term_h(spec, lam):
 
 
 class PaperProtocol(Protocol):
-    """The windowed S_{2,2} protocol of Correa et al. (2022): each term switches on over its own window."""
+    """The windowed S_{2,2} protocol of Correa et al. (2022): each term switches on over its own window, and
+    the Coulomb potential is bare (h_Q = h_E), as the plugin of the time had no Coulomb capping."""
 
-    WINDOWS = ((0.0, 0.7), (0.4, 0.8), (0.6, 1.0))
+    WINDOWS = {"C": (0.0, 0.7), "D": (0.4, 0.8), "E": (0.6, 1.0)}
 
     def __init__(self):
         super().__init__(specs=())
@@ -145,14 +203,15 @@ class PaperProtocol(Protocol):
 
     def h(self, lam):
         lam = np.atleast_1d(np.asarray(lam, dtype=float))
-        h, dh = [], []
-        for start, end in self.WINDOWS:
+        h, dh = {}, {}
+        for term, (start, end) in self.WINDOWS.items():
             x = np.clip((lam - start) / (end - start), 0.0, 1.0)
             s, ds = switch(2, 2, x)
             inside = (lam > start) & (lam < end)
-            h.append(s)
-            dh.append(np.where(inside, ds / (end - start), 0.0))
-        return np.array(h), np.array(dh)
+            h[term] = s
+            dh[term] = np.where(inside, ds / (end - start), 0.0)
+        h["Q"], dh["Q"] = h["E"], dh["E"]
+        return np.array([h[t] for t in TERMS]), np.array([dh[t] for t in TERMS])
 
 
 def equal_length_lambdas(lam, sd, num_states):
@@ -203,20 +262,22 @@ def mix_replicas(u, state_of_replica, num_attempts, rng, accepted=None, attempte
 
 @dataclass
 class Run:
-    """The samples of one simulation, by state: series[k] holds the slice energies (n_k, 3) sampled in state k,
-    in time order, after equilibration."""
+    """The samples of one simulation, by state: series[k] holds the slice energies (n_k, len(terms)) sampled
+    in state k, in time order, after equilibration; H (K, len(terms)) holds the scaling parameters of the
+    states. terms is TERMS, or LEGACY_TERMS for runs that stored the two decapping terms as one energy."""
 
     lambdas: np.ndarray
     H: np.ndarray
     temperature: float
     series: list
     capping_orders: tuple = (3, 3)
+    terms: tuple = LEGACY_TERMS
 
 
 def load_run(path, default_temperature=298.15):
     """Load OUTDIR/samples.npz written by simulate.py, or a directory of state_*.npz files with h (3,), lam
     and U (n, 3), one per state, as written by the pilot scripts (already equilibrated, at
-    default_temperature, with the default capping orders)."""
+    default_temperature, with the default capping orders and the legacy terms)."""
     import glob
     import os
 
@@ -228,10 +289,11 @@ def load_run(path, default_temperature=298.15):
         history, U = history[keep], U[keep]
         replica_in_state = np.argsort(history, axis=1)  # each row of history is a permutation of the states
         rows = np.arange(len(U))[:, None]
-        by_state = U[rows, replica_in_state]  # (n, K, 3)
+        by_state = U[rows, replica_in_state]  # (n, K, len(terms))
         series = [by_state[:, k] for k in range(by_state.shape[1])]
         orders = tuple(int(m) for m in d["capping_orders"]) if "capping_orders" in d else (3, 3)
-        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders)
+        terms = tuple(str(t) for t in d["terms"]) if "terms" in d else LEGACY_TERMS
+        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, terms)
     files = sorted(glob.glob(os.path.join(path, "state_*.npz")))
     if not files:
         raise FileNotFoundError(f"no samples.npz or state_*.npz in {path}")
@@ -264,8 +326,8 @@ def build_system(
     """A solute in water with a SlicedNonbondedForce, whose subset 1 is the solute and subset 0 the solvent.
 
     forcefield is a SMIRNOFF force field (e.g. "openff-2.2.1") or GAFF (e.g. "gaff-2.11") for the solute;
-    water is an OpenMM force field file for the solvent. Both decapping terms of the solute-solvent slice
-    are multiplied by lambdaD. Particles with zero epsilon (e.g. TIP3P hydrogens) get sigma = 0, so that
+    water is an OpenMM force field file for the solvent. The four terms of the solute-solvent slice get the
+    global parameters of PARAMS. Particles with zero epsilon (e.g. TIP3P hydrogens) get sigma = 0, so that
     their Coulomb cap radius is half that of their partner instead of an arbitrary placeholder sigma.
     capping_orders are (m0, m1) of the capped potentials, which set the height of the cap: the default
     (3, 3) caps the Lennard-Jones potential at 119 epsilon.
@@ -311,9 +373,11 @@ def build_system(
         force.setParticleSubset(atom, 1)
     for term in TERMS:
         force.addGlobalParameter(PARAMS[term], 1.0)
-    force.addScalingParameter(PARAMS["C"], 0, 1, False, True)
-    force.addScalingParameter(PARAMS["D"], 0, 1, False, False, True, True)
-    force.addScalingParameter(PARAMS["E"], 0, 1, True, False)
+    # (includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping)
+    force.addScalingParameter(PARAMS["C"], 0, 1, False, True, False, False)
+    force.addScalingParameter(PARAMS["D"], 0, 1, False, False, False, True)
+    force.addScalingParameter(PARAMS["Q"], 0, 1, False, False, True, False)
+    force.addScalingParameter(PARAMS["E"], 0, 1, True, False, False, False)
     for term in TERMS:
         force.addEnergyParameterDerivative(PARAMS[term])
     system.removeForce(index)

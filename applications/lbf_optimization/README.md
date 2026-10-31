@@ -7,27 +7,37 @@ and place the states of the next round. They are meant to be read and adapted, n
 
 ## The protocol
 
-Three solute-solvent terms of a `SlicedNonbondedForce` are scaled by functions of one coupling parameter
+Four solute-solvent terms of a `SlicedNonbondedForce` are scaled by functions of one coupling parameter
 λ ∈ [0, 1] (Correa et al., *J. Chem. Theory Comput.* 18, 5876, 2022):
 
 | term | scales | global parameter |
 |------|--------|------------------|
 | C | capped Lennard-Jones | `lambdaLJ` |
-| D | decapping terms, Lennard-Jones and Coulomb | `lambdaD` |
+| D | Lennard-Jones decapping | `lambdaD` |
+| Q | Coulomb decapping | `lambdaQD` |
 | E | electrostatics (Coulomb, capped below σ) | `lambdaQ` |
 
-The energy is linear in the three parameters, U = U_rest + h_C U_C + h_D U_D + h_E U_E, and the plugin
-computes U_C, U_D and U_E along with the energy. So the reduced potential of any state is known from the
-three slice energies of each sample. Replica exchange gets the energies of every replica in every state
-from one evaluation, and the search can reweight the samples to any protocol.
+The energy is linear in the four parameters, U = U_rest + h_C U_C + h_D U_D + h_Q U_Q + h_E U_E, and the
+plugin computes the four slice energies along with the energy. So the reduced potential of any state is
+known from the four slice energies of each sample. Replica exchange gets the energies of every replica in
+every state from one evaluation, and the search can reweight the samples to any protocol.
+
+The two decapping terms tell the electrostatic schemes apart. With h_Q = h_D, the Coulomb potential stays
+capped until the Lennard-Jones core is decapped, so the charges can switch on while solvent still overlaps
+the solute. With h_Q = h_E, the charges switch on the bare Coulomb potential, as in Correa et al., whose
+plugin had no Coulomb capping; this is safe only when the charges follow the decapping, since nothing but
+the decapped core keeps an attractive pair apart. Both are protocols of the same basis, so samples of either
+reweight to the other. Runs made before the split stored the two decapping terms as one energy and can
+only weight protocols with h_Q = h_D; `search.py` says so when it pools one.
 
 Each term follows S_{m0,m1}(x) = x^(m0+1) P(x), the polynomial step whose first m0 derivatives vanish at
 x = 0 and first m1 derivatives at x = 1. Written as text, a protocol is, e.g.,
 
     C(1,0) D(11,1)[0.25] E(2,0)
 
-that is, h_C = λ², h_E = λ³, and h_D zero up to a = 0.25 and S_{11,1} over [0.25, 1]. `D(inf)[0.25]` is a
-C∞ step, and `paper` is the windowed S_{2,2} protocol of Correa et al.
+that is, h_C = λ², h_E = λ³, and h_D zero up to a = 0.25 and S_{11,1} over [0.25, 1]. Q follows D unless
+the text says `Q=E` or gives it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.25]` is a C∞
+step, and `paper` is the windowed S_{2,2} protocol of Correa et al., with bare Coulomb.
 
 By default, the search keeps only switching functions whose first derivative vanishes at both ends of
 their interval (m0 ≥ 1 and m1 ≥ 1). Then dh/dλ, and with it the λ-force, is zero at λ = 0 and 1, which
@@ -39,13 +49,19 @@ also keeps the hazard of a configuration where solvent overlaps the solute's cap
 tiny but nonzero h_D, away from small λ. The window start is a fixed choice, not a searched variable: the
 scores measure efficiency, and overlaps are too rare for reweighted variances to see.
 
+The electrostatics can have a window too (`--aE`, by default none and the start of the decapping window).
+With capped Coulomb, charging against a still-capped core is a contest between the capped attraction,
+scaled by h_E, and the capped repulsion, scaled by h_C; for phenol in water, a hydrogen bond collapses onto
+the hydroxyl once h_E exceeds about half of h_C while h_D is below 10⁻³. A window on E that starts with
+the decapping avoids the contest at a few percent of thermodynamic length.
+
 ## Files
 
 | file | what it does |
 |------|--------------|
 | `lbf.py` | switching functions, `Protocol`, state placement, the replica-exchange move, the system builder, the run loader |
 | `simulate.py` | replica exchange of λ among the states of a protocol → `samples.npz` |
-| `search.py` | pools runs, solves MBAR, scores protocol families → ranked table, `results.npz` and the next round's states |
+| `search.py` | pools runs, solves MBAR, scores protocol families (both Coulomb schemes, `--Q`) → ranked table, `results.npz` and the next round's states |
 | `validate.py` | ΔG of independent runs of one or more protocols, and its spread over runs |
 | `test_lbf.py` | unit tests (`python -m pytest test_lbf.py`) |
 
