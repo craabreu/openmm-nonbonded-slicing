@@ -74,6 +74,32 @@ when I_var/L² is near 1 without a change of coordinate. (I_var/L² was 1.29 for
    and orders. If they agree, publish them as defaults and the per-solute search becomes optional. If
    they do not, the deliverable is the one-round procedure, at the cost of one reference run per solute.
 
+## Results for phenol (31 October 2026)
+
+Steps 1 to 5 are done. Runs and tables are in `~/github_repos/lbf_runs/`.
+
+1. **System.** At full coupling the four-term system matches the plain force field to 5e-9 relative in
+   energy and 2e-10 kJ/mol/nm in forces (CUDA, double precision).
+2. **Diagnostic.** Its first rule (any contact below 0.24 nm) flagged single-frame overlaps through the
+   capped core, which are normal. The rule now counts the fraction of frames within 0.2 nm and flags it
+   above 5% where the charges are on and h_D < 10⁻³. The mechanism of the collapse was found on the way. A
+   water hydrogen has no Lennard-Jones sphere, so with bare Coulomb a protocol that charges while h_D ≈ 0
+   crashes with NaN coordinates, and with capped Coulomb it samples a water fused onto the hydroxyl.
+3. **Reference run** (`run_exp`) of `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`, the best protocol predicted
+   from the pilot run (the seed of b = 2 above was superseded by that search). No state is flagged.
+4. **Search** on `run_exp` (`search_s4_a0{3,4,5}.txt`). The seed ranks first at a = 0.4, with I_var 202.4
+   against 202.2 predicted; a = 0.3 gives 200.6 at the hazard limit, and a = 0.5 gives 208. The hazard limit
+   was checked with 2 ns single-state runs of family members: 0.25 and 0.35 are stable, 0.5 crashes once,
+   and 0.7 and 0.9 collapse. The limit of 0.25 keeps a margin of about 2.
+5. **Second round** (`run_exp2`, 21 states at equal thermodynamic length). Pooled with `run_exp`, the
+   ranking holds (I_var 202.3, I_var/L² 1.08) and nothing is flagged. Neighbor acceptance is 0.62 to
+   0.67, against 0.49 to 0.84 for uniform states. Round trips in 2000 iterations: 141, against 128 for
+   uniform states and 99 for the pilot's polynomial-step protocol. ΔG over the three runs of the bare
+   basis: −10.68, −10.56 and −10.65 kT.
+
+**Chosen protocol for phenol: `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`.** Steps 6 (Lambda-UFED) and 7 (other
+solutes: methane, anisole, paracetamol, reference runs in progress) remain.
+
 ## Code changes
 
 Done on this branch, all in `applications/lbf_optimization`:
