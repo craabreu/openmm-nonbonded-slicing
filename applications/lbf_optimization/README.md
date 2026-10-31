@@ -56,12 +56,21 @@ tiny but nonzero h_D, away from small λ. The window start is a fixed choice, no
 scores measure efficiency, and overlaps are too rare for reweighted variances to see.
 
 The electrostatics have a window too (`--aE`, by default the start of the decapping window). Charging
-against a still-capped core is a contest between the capped attraction, scaled by h_E, and the capped
-repulsion, scaled by h_C; for phenol in water, a hydrogen bond collapses onto the hydroxyl once h_E exceeds
-about half of h_C while h_D is below 10⁻³. The samples contain no collapsed configurations, so no reweighted
-score can see this: the search drops protocols whose hazard, max h_E/h_C where h_D < 10⁻³, exceeds
-`--max_hazard` (0.25 by default), and `simulate.py` records the closest approach of a solute N or O to a
-water oxygen in every frame, reporting per state at the end whether a water fused onto the solute.
+against a still-capped core is a contest between the attraction, scaled by h_E, and the capped repulsion,
+scaled by h_C. A water hydrogen has no Lennard-Jones sphere, so only the capped O–O repulsion holds it off
+a solute acceptor. With bare Coulomb (`Q=E`) the attraction is unbounded at contact: a protocol that charges
+while h_D is still essentially zero pulls the hydrogen in and the simulation crashes with NaN coordinates.
+For phenol this happened within 40 ps at h_E = 0.02 and h_D = 0. With the Coulomb capped until the core is
+restored (Q following D), the same protocol does not crash but samples a water fused onto the hydroxyl
+(O–Ow 1 Å). Once h_D reaches about 10⁻⁵, the decapped r⁻¹² core is far stronger than any charge. Windowing
+E with D keeps h_E small where h_D is negligible, and the search drops protocols whose hazard,
+max h_E/h_C where h_D < 10⁻³, exceeds `--max_hazard` (0.25 by default). The samples never contain a collapse,
+so no reweighted score can see it. Instead, `simulate.py` records, per frame, the closest approach of a
+solute N or O to a water oxygen. At the end it reports, per state, the fraction of frames within 0.2 nm,
+and it flags states with the charges on and h_D < 10⁻³ where that fraction exceeds 5%. Brief overlaps
+are normal wherever the core is capped, so it is their frequency that marks early charging: for phenol,
+0 to 1.5% under the searched protocols against 7 to 15% under one that charges early. A crash in such a
+state is reported with its likely cause.
 
 ## Files
 

@@ -29,7 +29,8 @@ import openmm.unit as unit
 
 from lbf import PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
 
-COLLAPSE_NM = 0.24  # a polar atom this close to a water oxygen is fused to it, not hydrogen-bonded
+COLLAPSE_NM = 0.2  # a polar atom this close to a water oxygen overlaps it; a hydrogen bond is 0.25-0.3 nm
+COLLAPSE_FRACTION = 0.05  # of the frames of a charged state with weak decapping
 
 
 def parse_args():
@@ -190,6 +191,12 @@ def main():
                     f"replica {i} failed at iteration {n} in state {state_of_replica[i]} "
                     f"(lambda = {lambdas[state_of_replica[i]]:.4f}, h = {np.round(H[state_of_replica[i]], 6)}); "
                     f"rerun to resume from the last checkpoint"
+                    + (
+                        "; with bare Coulomb, charges on and h_D ~ 0, this is usually a water hydrogen fused onto a "
+                        "solute acceptor (or the reverse): the protocol charges too early"
+                        if H[state_of_replica[i], 3] > 0 and H[state_of_replica[i], 1] < 1e-3
+                        else ""
+                    )
                 ) from error
             derivatives = state.getEnergyParameterDerivatives()
             energies[i] = [derivatives[PARAMS[term]] for term in TERMS]
@@ -218,24 +225,32 @@ def main():
     print(collapse_report(np.array(contacts), np.array(history), H))
 
 
-def collapse_report(contact, history, H, threshold=COLLAPSE_NM, weak=1e-3):
-    """The smallest contact distance sampled in each state, with a mark where it is below the threshold
-    while the Lennard-Jones decapping is weak: a collapsed configuration that the scores cannot see."""
+def collapse_report(contact, history, H, threshold=COLLAPSE_NM, fraction=COLLAPSE_FRACTION, weak=1e-3):
+    """The fraction of frames of each state in which a solute polar atom is closer than the threshold to a
+    water oxygen, marked where it exceeds the given fraction while the charges are on and the Lennard-Jones
+    decapping is weak: there the capped core lets the charges pull a water into the solute.
+
+    Brief overlaps are normal wherever the core is capped, with or without charges, so a single short contact
+    means nothing; what marks early charging is how often they happen. For phenol, states with the charges
+    on and h_D < 1e-3 show 0-1.5% under the protocols of the search and 7-15% under one that charges from
+    lambda = 0.2 with capped Coulomb. With bare Coulomb such a protocol crashes instead (simulate.py says so).
+    """
     num_states = H.shape[0]
-    by_state = np.full(num_states, np.inf)
+    short = np.full(num_states, np.nan)
     for k in range(num_states):
         sampled = contact[history == k]
         if len(sampled):
-            by_state[k] = sampled.min()
+            short[k] = np.mean(sampled < threshold)
     # with the charges off, water passing through a weakly coupled solute is normal, not a collapse
-    collapsed = (by_state < threshold) & (H[:, 1] < weak) & (H[:, 3] > 0)
-    lines = [f"closest solute polar atom to a water oxygen, per state (nm; ! = below {threshold:g} nm "
-             f"with h_D < {weak:g} and h_E > 0):"]
-    lines.append("  " + " ".join(f"{d:.3f}{'!' if c else ' '}" for d, c in zip(by_state, collapsed)))
+    collapsed = (short > fraction) & (H[:, 1] < weak) & (H[:, 3] > 0)
+    lines = [
+        f"fraction of frames with a solute polar atom within {threshold:g} nm of a water oxygen, per state "
+        f"(! = above {fraction:g} with h_D < {weak:g} and h_E > 0):"
+    ]
+    lines.append("  " + " ".join(f"{f:.3f}{'!' if c else ' '}" for f, c in zip(short, collapsed)))
     if collapsed.any():
         lines.append(f"  collapse in states {np.flatnonzero(collapsed).tolist()}: the protocol charges too early there")
     return "\n".join(lines)
-
 
 if __name__ == "__main__":
     main()

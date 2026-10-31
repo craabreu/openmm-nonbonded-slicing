@@ -216,6 +216,20 @@ def test_closest_contact():
     assert closest_contact(positions, box, np.array([1]), np.array([3])) == pytest.approx(np.sqrt(3 * 0.25))
 
 
+
+def test_collapse_report():
+    from simulate import collapse_report
+
+    # three states: decoupled, charged with weak decapping, and fully coupled; two replicas that swap
+    H = np.array([[0.0, 0.0, 0.0, 0.0], [0.2, 1e-5, 0.02, 0.02], [1.0, 1.0, 1.0, 1.0]])
+    history = np.array([[0, 1, 2], [1, 0, 2]] * 50)
+    contact = np.full(history.shape, 0.28)
+    contact[:, 0] = 0.05  # the replica in state 0 or 1 overlaps every other frame, which is normal at state 0
+    report = collapse_report(contact, history, H)
+    assert "collapse in states [1]" in report
+    contact[history == 1] = np.where(np.arange(100) % 25 == 0, 0.15, 0.28)  # 4% of state 1: brief overlaps
+    assert "collapse" not in collapse_report(contact, history, H).splitlines()[-1]
+
 def test_end_orders():
     assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E").end_orders() == (2, 1)
     assert Protocol.parse("C(3,2) D(inf)[0.4] E(1,1)").end_orders() == (1, 1)
