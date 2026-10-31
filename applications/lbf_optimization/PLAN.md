@@ -97,8 +97,25 @@ Steps 1 to 5 are done. Runs and tables are in `~/github_repos/lbf_runs/`.
    uniform states and 99 for the pilot's polynomial-step protocol. ΔG over the three runs of the bare
    basis: −10.68, −10.56 and −10.65 kT.
 
-**Chosen protocol for phenol: `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`.** Steps 6 (Lambda-UFED) and 7 (other
-solutes: methane, anisole, paracetamol, reference runs in progress) remain.
+**Chosen protocol for phenol: `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`.** Step 6 (Lambda-UFED) is postponed.
+
+7. **Generality** (`run_methane`, `run_anisole`, `run_paracetamol`: reference runs of the phenol protocol,
+   uniform states; searches `search_<solute>_a0{3,4,5}.txt`, with b from 0.5; `common.py` compares). No run
+   flags a collapse. I_var in kT²:
+
+   | solute | ΔG (kT) | paper | pilot C(2,1) | phenol protocol | own best |
+   |---|---|---|---|---|---|
+   | phenol | −10.6 | 409 | 240 | 202 | 201, C(exp 2.5) D(11,3)[0.3] E(3,1)[0.3] |
+   | methane | +4.1 | 101 | 63 | 56 | 48, C(exp 2.5) D(9,1)[0.5] E(3,1)[0.5] |
+   | anisole | −4.3 | 409 | 241 | 197 | 188, C(exp 3) D(8,1)[0.4] E(3,1)[0.4] |
+   | paracetamol | −26.7 | 681 | 401 | 344 | 335, C(exp 2.5) D(7,3)[0.3] E(2,1)[0.3] |
+
+   The optima agree on b = 2.5 to 3 and differ in D and E orders that barely matter. Over the protocols
+   explored for all four, the one closest to every optimum is **`C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`**:
+   within 8% of each solute's best, with hazard 0.13. The phenol protocol is within 3% for the three polar
+   solutes and 18% off for methane. The per-solute search is therefore optional: the default loses at most
+   8%, which is less than the spread of ΔG between independent runs suggests is resolvable. A second-round
+   run of the default on paracetamol, the hardest case (`run_paracetamol2`), checks it directly.
 
 ## Code changes
 
