@@ -13,7 +13,8 @@ protocols can be scored as references: under the ordering rule it buys nothing (
 **Safety constraints, imposed a priori.**
 
 - Decapping onset power k = m0 + 1 ≥ 8 at the window start, so that var(du/dλ) stays finite there.
-- Charging hazard max h_E/h_C ≤ 0.25 wherever h_D < 10⁻³. Above about 0.5 a water fuses onto the phenol
+- Charging hazard max h_E/h_C ≤ 0.15 wherever h_D < 10⁻³ (0.25 before step 4 of the results below). Above
+  about 0.5 a water fuses onto the phenol
   hydroxyl (O–Ow 1.1 Å). Reweighting cannot see the collapse, since the samples contain no collapsed
   configurations, so this constraint is the only thing that prevents it, and it must be checked on
   configurations, not on scores.
@@ -51,7 +52,7 @@ when I_var/L² is near 1 without a change of coordinate. (I_var/L² was 1.29 for
 
 4. **Search by reweighting.** Score the family over b ∈ [1, 4]; D with m0 from 7 to 11 and m1 from 1
    to 3; window starts a ∈ {0.3, 0.4, 0.5}; E with m0, m1 from 1 to 3 and a_E ≥ a. Keep only protocols
-   with Kish ESS ≥ 100 at every quadrature node and hazard ≤ 0.25. Rank by I_var. Verify that every
+   with Kish ESS ≥ 100 at every quadrature node and hazard ≤ 0.15. Rank by I_var. Verify that every
    protocol integrates to the same ΔG, which checks the quadrature. Score the paper protocol and the
    pilot's polynomial-step protocols as references.
 
@@ -90,14 +91,20 @@ Steps 1 to 5 are done. Runs and tables are in `~/github_repos/lbf_runs/`.
 4. **Search** on `run_exp` (`search_s4_a0{3,4,5}.txt`). The seed ranks first at a = 0.4, with I_var 202.4
    against 202.2 predicted; a = 0.3 gives 200.6 at the hazard limit, and a = 0.5 gives 208. The hazard limit
    was checked with 2 ns single-state runs of family members: 0.25 and 0.35 are stable, 0.5 crashes once,
-   and 0.7 and 0.9 collapse. The limit of 0.25 keeps a margin of about 2.
+   and 0.7 and 0.9 collapse. These measure how fast a collapse happens; whether the fused state is
+   favorable came out later, when a third phenol run (`run_phenol_default_parastates`, see step 7) added a
+   fused configuration to the pool. Protocols above hazard 0.15 then mostly lost their effective sample
+   size at some λ (22 of 76 kept it, against 50 of 51 below), the chosen one among them: at λ = 0.48 its
+   fused water has a reduced energy of −3.5 kT, against +5.8 and +21 kT at the sampled states around it.
+   The limit is now 0.15.
 5. **Second round** (`run_exp2`, 21 states at equal thermodynamic length). Pooled with `run_exp`, the
    ranking holds (I_var 202.3, I_var/L² 1.08) and nothing is flagged. Neighbor acceptance is 0.62 to
    0.67, against 0.49 to 0.84 for uniform states. Round trips in 2000 iterations: 141, against 128 for
    uniform states and 99 for the pilot's polynomial-step protocol. ΔG over the three runs of the bare
    basis: −10.68, −10.56 and −10.65 kT.
 
-**Chosen protocol for phenol: `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`.** Step 6 (Lambda-UFED) is postponed.
+The protocol chosen here, `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E`, was later found to favor a fused water
+near λ = 0.48 (step 4 above) and is superseded by the default of step 7. Step 6 (Lambda-UFED) is postponed.
 
 7. **Generality** (`run_methane`, `run_anisole`, `run_paracetamol`: reference runs of the phenol protocol,
    uniform states; searches `search_<solute>_a0{3,4,5}.txt`, with b from 0.5; `common.py` compares). No run
@@ -110,12 +117,17 @@ Steps 1 to 5 are done. Runs and tables are in `~/github_repos/lbf_runs/`.
    | anisole | −4.3 | 409 | 241 | 197 | 188, C(exp 3) D(8,1)[0.4] E(3,1)[0.4] |
    | paracetamol | −26.7 | 681 | 401 | 344 | 335, C(exp 2.5) D(7,3)[0.3] E(2,1)[0.3] |
 
-   The optima agree on b = 2.5 to 3 and differ in D and E orders that barely matter. Over the protocols
-   explored for all four, the one closest to every optimum is **`C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`**:
-   within 8% of each solute's best, with hazard 0.13. The phenol protocol is within 3% for the three polar
-   solutes and 18% off for methane. The per-solute search is therefore optional: the default loses at most
-   8% in I_var, that is, in simulation time for a given error. A second-round
-   run of the default on paracetamol, the hardest case (`run_paracetamol2`), checks it directly.
+   The optima agree on b = 2.5 to 3 and differ in D and E orders that barely matter. Under the hazard
+   limit of 0.15 (`python common.py --max_hazard=0.15`), the protocol closest to every optimum is
+   **`C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`** (hazard 0.13): within 7% of each solute's own best under the
+   same limit (phenol 2%, methane 7%, anisole 1%, paracetamol 5%). `C(exp 2.5) D(7,1)[0.4] E(3,1)[0.4]`
+   (hazard 0.15) is as close. The per-solute search is therefore optional: the default loses at most 7% in
+   I_var, that is, in simulation time for a given error, and needs no reference run.
+
+   A run of the default meant for paracetamol sampled phenol instead, because the plan file did not carry
+   the solute (fixed since: runs and plans now store it). It is kept as `run_phenol_default_parastates`:
+   ΔG −10.68 ± 0.07 kT, 144 round trips in 2000 iterations, nothing flagged, and it supplied the fused
+   configuration of step 4. The paracetamol run of the default (`run_paracetamol2`) is the direct check.
 
 ## Code changes
 
@@ -124,7 +136,7 @@ Done on this branch, all in `applications/lbf_optimization`:
 - `lbf.py`: the exponential family in the protocol text (`C(exp 2.5)`), with its h and dh, and end orders
   (0, 0); `polar_atoms` and `closest_contact` for the diagnostic.
 - `search.py`: the family of step 4 as the defaults (`--bC` 1 to 4, D with m0 7 to 11 and m1 1 to 3, E
-  with m0 and m1 1 to 3 at `--aE` = a, `--Q E`); `--max_hazard 0.25` and `--rank I_var` by default;
+  with m0 and m1 1 to 3 at `--aE` = a, `--Q E`); `--max_hazard 0.15` and `--rank I_var` by default;
   polynomial steps for C only on request (`--m0C`, `--m1C`).
 - `simulate.py`: the collapse diagnostic, `contact` in `samples.npz` (per iteration and replica, nm), and
   the per-state report at the end of a run.

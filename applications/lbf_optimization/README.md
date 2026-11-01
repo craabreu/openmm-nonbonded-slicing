@@ -63,11 +63,18 @@ while h_D is still essentially zero pulls the hydrogen in and the simulation cra
 For phenol this happened within 40 ps at h_E = 0.02 and h_D = 0. With the Coulomb capped until the core is
 restored (Q following D), the same protocol does not crash but samples a water fused onto the hydroxyl
 (O–Ow 1 Å). Windowing E with D keeps h_E small where h_D is negligible, and the search drops protocols
-whose hazard, max h_E/h_C where h_D < 10⁻³, exceeds `--max_hazard` (0.25 by default). The limit was checked
+whose hazard, max h_E/h_C where h_D < 10⁻³, exceeds `--max_hazard` (0.15 by default). The limit was checked
 with 2 ns single-state runs of family members, at the λ where h_D reaches 10⁻⁶ and at the peak of
 h_E/h_C. Hazards of 0.25 and 0.35 were stable. At 0.5 one state crashed after 900 ps and the other had a
 water within 0.2 nm of the hydroxyl in 7% of frames. At 0.7 and 0.9 the water fused within 100 ps, at
-h_D = 10⁻³, and the runs crashed. The limit of 0.25 leaves a margin of about 2. The samples never contain a collapse,
+h_D = 10⁻³, and the runs crashed. Those runs measure how fast a collapse happens, not whether the fused state
+is favorable. Reweighting answers the second question once the pool holds a fused configuration, which
+the uncharged, undecapped states near λ = 0.2 sample freely. Pooling three phenol runs that held one made
+the effective sample size drop to 1-3 at some λ for protocols that favor it: 50 of 51 protocols with
+hazard below 0.15 kept their ESS, against 22 of 76 above it. For the protocol then chosen,
+C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] (hazard 0.18), the fused water has a reduced energy of −3.5 kT at
+λ = 0.48 against +5.8 and +21 kT at its sampled states 0.45 and 0.5: replica exchange never sees it, but a
+continuous walk in λ can. Hence the limit of 0.15. The samples never contain a collapse,
 so no reweighted score can see it. Instead, `simulate.py` records, per frame, the closest approach of a
 solute N or O to a water oxygen. At the end it reports, per state, the fraction of frames within 0.2 nm,
 and it flags states with the charges on and h_D < 10⁻³ where that fraction exceeds 5%. Brief overlaps

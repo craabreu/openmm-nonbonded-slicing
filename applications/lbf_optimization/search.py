@@ -94,8 +94,8 @@ def parse_args():
     scoring.add_argument("--chunk", type=int, default=1500, help="targets reweighted at once (memory)")
     scoring.add_argument("--reference", action="append", default=[], help='protocols to score as references')
     scoring.add_argument(
-        "--max_hazard", type=float, default=0.25,
-        help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this (default: 0.25; inf for all)",
+        "--max_hazard", type=float, default=0.15,
+        help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this (default: 0.15; inf for all)",
     )
     output = parser.add_argument_group("output")
     output.add_argument("--out", default="results.npz")
