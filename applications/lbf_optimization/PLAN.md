@@ -127,7 +127,14 @@ near λ = 0.48 (step 4 above) and is superseded by the default of step 7. Step 6
    A run of the default meant for paracetamol sampled phenol instead, because the plan file did not carry
    the solute (fixed since: runs and plans now store it). It is kept as `run_phenol_default_parastates`:
    ΔG −10.68 ± 0.07 kT, 144 round trips in 2000 iterations, nothing flagged, and it supplied the fused
-   configuration of step 4. The paracetamol run of the default (`run_paracetamol2`) is the direct check.
+   configuration of step 4. The paracetamol run of the default (`run_paracetamol2`, equal-length states) is
+   the direct check: nothing flagged, weakest neighbor acceptance 0.52 against 0.36 for the uniform run of
+   the phenol protocol, and 76 round trips in 2000 iterations against 60. Pooled with the uniform run, the
+   default scores I_var 362 against 345 for the phenol protocol (5%). ΔG is −26.99 ± 0.09 kT against
+   −26.72 ± 0.10 from the uniform run, two standard errors apart, so paracetamol may have slow degrees of
+   freedom that 2 ns per state does not average; independent repeats would tell. Neither paracetamol run
+   sampled a fused configuration deep enough to probe the hazard as phenol's did, so for paracetamol the
+   limit rests on the phenol evidence.
 
 ## Code changes
 
