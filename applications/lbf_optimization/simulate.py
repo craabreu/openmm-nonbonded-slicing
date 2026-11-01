@@ -3,7 +3,7 @@
 usage: python simulate.py OUTDIR --smiles SMILES [--protocol P] [--nstates 21 | --lambdas ...]
        python simulate.py OUTDIR --plan next.json        (solute, protocol and lambdas from search.py)
 
-The protocol defaults to C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E, chosen for four solutes (RESULTS.md).
+The protocol defaults to C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E, chosen for four solutes (RESULTS.md).
 The default platform is CUDA; --platform OpenCL or CPU (much slower) run elsewhere.
 
 Each replica has its own Context, so an exchange only swaps the global parameters of two Contexts, never

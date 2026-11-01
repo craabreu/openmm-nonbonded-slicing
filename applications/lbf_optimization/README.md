@@ -21,9 +21,9 @@ to be read and adapted, not used as a library.
 
 ## Quick start
 
-The default protocol, `C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`, was chosen for phenol, methane, anisole and
+The default protocol, `C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E`, was chosen for phenol, methane, anisole and
 paracetamol. It needs about half the simulation time of the protocol of Correa et al. for the same error,
-and for each solute it is within 7% of the best protocol found for that solute alone (`RESULTS.md`):
+and for each solute it is within 8% of the best protocol found for that solute alone (`RESULTS.md`):
 
 ![Cost of the default protocol relative to the paper protocol, for four solutes](figures/cost_by_solute.png)
 
@@ -79,12 +79,12 @@ Each term follows S_{m0,m1}(x) = x^(m0+1) P(x), the polynomial step whose first 
 x = 0 and first m1 derivatives at x = 1, or the exponential (e^(bx) − 1)/(e^b − 1). Written as text, a
 protocol is, e.g.,
 
-    C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E
+    C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E
 
-that is, h_C the exponential with rate 2.5, h_D zero up to a = 0.4 and S_{8,2} over [0.4, 1], h_E S_{3,1}
-over the same window, and the Coulomb decapping tied to E. Q follows D unless the text says `Q=E` or gives
-it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.4]` is a C∞ step, `paper` is the windowed
-S_{2,2} protocol of Correa et al., with bare Coulomb, and `default` is the default protocol.
+that is, h_C the exponential with rate 2.5, h_D zero up to a = 0.4 and S_{8,2} over [0.4, 1], h_E zero up
+to 0.5 and S_{2,1} over [0.5, 1], and the Coulomb decapping tied to E. Q follows D unless the text says
+`Q=E` or gives it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.4]` is a C∞ step, `paper` is
+the windowed S_{2,2} protocol of Correa et al., with bare Coulomb, and `default` is the default protocol.
 
 The exponential is the family for C. Every polynomial step has a zero slope at one end or both, and with
 any of them sd(du/dλ) keeps a peak where the cavity grows, at small λ; the exponential, whose slope is finite
@@ -96,8 +96,9 @@ finite there; whether λ-dynamics minds is still to be tested.
 The decapping window keeps h_D, and the λ-force of decapping, exactly zero while the capped terms are weak.
 Where decapping starts, solvent still overlaps the capped core now and then, and the decapping energy of
 such a configuration is large; du/dλ weights it by dh_D/dλ ∝ x^m0, so the onset power m0 + 1 must be high
-for var(du/dλ) to stay finite there. The searches keep m0 + 1 ≥ 8. The electrostatics have a window too,
-by default the same one.
+for var(du/dλ) to stay finite there. The searches keep m0 + 1 ≥ 8. The electrostatics have a window too.
+The default starts it at 0.5, after the decapping has started: charging at 0.4 with it costs up to 2% less
+but has twice the charging hazard (next section).
 
 ## Charging too early
 
@@ -107,9 +108,10 @@ that charges while h_D is still essentially zero pulls a water onto the solute, 
 crashes with NaN coordinates or holds a fused water (O–Ow ≈ 1 Å).
 
 The rule is a bound on the **charging hazard**, max h_E/h_C wherever h_D < 10⁻³. `search.py` keeps only
-protocols with a hazard of at most 0.15 (`--max_hazard`); the default has 0.13. For phenol, a hazard of 0.5
+protocols with a hazard of at most 0.15 (`--max_hazard`); the default has 0.07. For phenol, a hazard of 0.5
 or more collapses within nanoseconds, and above 0.15 reweighting showed the fused water favorable between
-the sampled states (`RESULTS.md`).
+the sampled states. Below the limit, the same fused configuration stays at least 11 kT from favorable at
+every λ, and about 60 kT under the default (`RESULTS.md`).
 
 `simulate.py` checks it on configurations. Per frame it records the closest approach of a solute N or O
 (every solute heavy atom if it has neither, as for methane) to a water oxygen. At the end it prints, per
@@ -183,8 +185,9 @@ python search.py run0 run1 --a 0.4 --out phenol_a04.npz
 ```
 
 The family is set by options of `search.py`: the rates of the exponential C (`--bC`), the orders of D and
-E (`--m0D`, `--m1D`, `--m0E`, `--m1E`), the window starts (`--a`, and `--aE` ≥ a for E), and the scheme
-(`--Q`). The window start is a fixed choice per search, not a searched variable. The paper protocol, the
+E (`--m0D`, `--m1D`, `--m0E`, `--m1E`), the window starts (`--a`, and `--aE` ≥ a for E, by default a,
+a + 0.05 and a + 0.1), and the scheme (`--Q`). The decapping start a is a fixed choice per search, not a
+searched variable. The paper protocol, the
 default and any `--reference` are scored for comparison, and `--next` writes the plan for the best
 explored protocol, or for `--choose`.
 

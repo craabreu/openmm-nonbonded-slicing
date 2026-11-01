@@ -17,8 +17,9 @@ is flat. A protocol counts as explored if the Kish effective sample size is at l
 The family (see RESULTS.md): the capped Lennard-Jones term C is the exponential (e^(b lambda) - 1)/(e^b - 1)
 with b from --bC (polynomial steps for C only with --m0C and --m1C); the Lennard-Jones decapping D is a
 polynomial step over [a, 1] with onset power m0 + 1 >= 8, so that var(du/dlambda) is finite where it
-starts; the electrostatics E are a polynomial step over [aE, 1] with aE >= a, and the Coulomb decapping Q
-follows E (bare Coulomb; --Q D scores the capped-Coulomb scheme). Protocols whose charging hazard,
+starts; the electrostatics E are a polynomial step over [aE, 1] with aE >= a (by default a, a + 0.05 and
+a + 0.1: charging after the decapping has started lowers the charging hazard at little cost), and the
+Coulomb decapping Q follows E (bare Coulomb; --Q D scores the capped-Coulomb scheme). Protocols whose charging hazard,
 max h_E/h_C where h_D < 0.001, exceeds --max_hazard are left out: above it a water can fuse onto a solute
 acceptor between the sampled states, which the samples rarely contain and so the scores rarely see. The
 ranking is by I_var, the cost of uniform sampling in lambda. With --next, the best explored protocol
@@ -64,7 +65,10 @@ def parse_args():
     families.add_argument("--m1D", type=int_range, default="1:3", help="m1 of the decapping step D")
     families.add_argument("--m0E", type=int_range, default="1:3", help="m0 of the electrostatics step E")
     families.add_argument("--m1E", type=int_range, default="1:3", help="m1 of the electrostatics step E")
-    families.add_argument("--aE", type=float, nargs="+", metavar="A", help="starts of the window of E, each >= a (default: a)")
+    families.add_argument(
+        "--aE", type=float, nargs="+", metavar="A",
+        help="starts of the window of E, each >= a (default: a, a + 0.05 and a + 0.1)",
+    )
     families.add_argument(
         "--Q", choices=("D", "E"), nargs="+", default=["E"],
         help="which term the Coulomb decapping follows: E for bare Coulomb, D for capped Coulomb",
@@ -104,8 +108,11 @@ def parse_args():
     args = parser.parse_args()
     if not 0 < args.a < 1:
         parser.error("--a must lie in (0, 1)")
-    if args.aE is not None and min(args.aE) < args.a:
-        parser.error("every --aE must be at least --a: the charges follow the decapping")
+    if args.aE is None:
+        args.aE = [round(args.a + step, 6) for step in (0.0, 0.05, 0.1) if args.a + step < 1]
+    if min(args.aE) < args.a or max(args.aE) >= 1:
+        parser.error("every --aE must lie in [a, 1): the charges follow the decapping")
+    args.aE = sorted(set(args.aE))
     return args
 
 
@@ -114,10 +121,9 @@ def candidates(args):
     decap = [(m0, m1, args.a) for m0, m1 in itertools.product(args.m0D, args.m1D)]
     if args.smooth_d:
         decap.append((SMOOTH, 0, args.a))
-    starts = [args.a] if args.aE is None else sorted(set(args.aE))
     for C in capped:
         for D in decap:
-            for E in itertools.product(args.m0E, args.m1E, starts):
+            for E in itertools.product(args.m0E, args.m1E, args.aE):
                 for tie in args.Q:
                     yield Protocol((C, D, D if tie == "D" else E, E))
 
@@ -192,7 +198,7 @@ def main():
     protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
     if not protocols:
         raise SystemExit("no protocol in the family satisfies the constraints; widen the family or --max_hazard")
-    breaks = [args.a] + (args.aE or [])
+    breaks = [args.a] + args.aE
     references = [Protocol.parse(text) for text in ["paper", DEFAULT_PROTOCOL] + args.reference]
     print(f"{len(protocols)} protocols with the decapping window at a = {args.a:g}")
 
@@ -245,7 +251,7 @@ def main():
             chosen = protocols[ranked[0]]
         else:
             raise SystemExit("no explored protocol to place states for; give --choose")
-        grid = np.unique(np.concatenate([np.linspace(0.0, 1.0, 401), [args.a]]))
+        grid = np.unique(np.concatenate([np.linspace(0.0, 1.0, 401), breaks]))
         _, var, ess = reweighter.profile([chosen], grid)
         lambdas = equal_length_lambdas(grid, np.sqrt(var[0]), args.states)
         with open(args.next, "w") as f:

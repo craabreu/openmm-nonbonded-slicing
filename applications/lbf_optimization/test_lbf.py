@@ -363,7 +363,7 @@ def test_help_formatter_shows_defaults():
 def test_default_protocol():
     protocol = Protocol.parse(DEFAULT_PROTOCOL)
     assert str(protocol) == DEFAULT_PROTOCOL and Protocol.parse(" Default ") == protocol
-    assert protocol.charging_hazard() == pytest.approx(0.13, abs=0.01)
+    assert protocol.charging_hazard() == pytest.approx(0.07, abs=0.01)
 
 
 def test_compare_solutes_keeps_the_best_explored(tmp_path):

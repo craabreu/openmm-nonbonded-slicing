@@ -48,7 +48,7 @@ TERMS = ("C", "D", "Q", "E")
 PARAMS = {"C": "lambdaLJ", "D": "lambdaD", "Q": "lambdaQD", "E": "lambdaQ"}
 SMOOTH = -1  # m0 of the C-infinity step psi(x) = f(x)/(f(x) + f(1-x)), f(x) = exp(-1/x)
 EXP = -2  # m0 of the exponential (e^(bx) - 1)/(e^b - 1); the m1 slot holds the rate b
-DEFAULT_PROTOCOL = "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E"
+DEFAULT_PROTOCOL = "C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E"
 DEFAULT_FORCEFIELD = "openff-2.2.1"
 DEFAULT_WATER = "amber/tip3p_standard.xml"
 # What makes two runs samples of different systems: every run stores these, every plan carries them, and
@@ -138,7 +138,7 @@ def smooth_step(x):
 # ----------------------------------------------------------------------------------------------------------
 
 _SPEC = re.compile(r"([CDQE])\((inf|exp[0-9.]+|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
-_EXPECTED = "expected e.g. 'C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E'"
+_EXPECTED = "expected e.g. 'C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E'"
 _TIE = re.compile(r"Q=([DE])")
 
 
@@ -155,7 +155,7 @@ class Protocol:
     """Switching functions of the four terms, as (m0, m1, a) each; m0 = SMOOTH selects the C-infinity step,
     m0 = EXP the exponential with rate b in the m1 slot, and a is the start of the term's window (0 for none).
 
-    The text form is, e.g., "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E", with "C(2,1)" for a polynomial step and
+    The text form is, e.g., "C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E", with "C(2,1)" for a polynomial step and
     "D(inf)[0.4]" for the C-infinity step. The Coulomb decapping Q follows D unless the text ties it to E ("Q=E",
     the bare-Coulomb scheme) or gives it its own switching function ("Q(7,2)[0.4]"). "paper" is the protocol
     of Correa et al. (PaperProtocol) and "default" is DEFAULT_PROTOCOL.
