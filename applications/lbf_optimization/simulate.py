@@ -1,7 +1,9 @@
 """Sample the states of an LBF protocol by replica exchange of lambda values.
 
-usage: python simulate.py OUTDIR --protocol "C(1,0) D(11,1)[0.25] E(2,0)" [--nstates 21 | --lambdas ...]
-       python simulate.py OUTDIR --plan next.json        (protocol and lambdas chosen by search.py)
+usage: python simulate.py OUTDIR --smiles SMILES [--protocol P] [--nstates 21 | --lambdas ...]
+       python simulate.py OUTDIR --plan next.json        (solute, protocol and lambdas from search.py)
+
+The protocol defaults to C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E, chosen for four solutes (RESULTS.md).
 
 Each replica has its own Context, so an exchange only swaps the global parameters of two Contexts, never
 their coordinates. The energy is linear in the scaling parameters, so one energy and parameter-derivative
@@ -10,12 +12,12 @@ no extra force evaluations (see lbf.py). With --no-exchange, every replica stays
 
 OUTDIR/samples.npz holds, per iteration, the state of each replica and its slice energies U_C, U_D, U_Q and
 U_E (kJ/mol), measured before the exchange, and the collapse diagnostic: the shortest distance (nm) between a
-solute N or O (every solute heavy atom if it has none) and a water oxygen. A distance below about 0.24 nm in
-a state whose charges are on while the Lennard-Jones decapping is weak (h_D < 0.001) is a water fused onto
-the solute, which the reweighting scores cannot see; the run reports the smallest distance per state at the
-end. The first
---equilibration iterations are stored too and are skipped by search.py and validate.py. OUTDIR/checkpoint.npz
-is written along with it; rerunning the same command resumes from it.
+solute N or O (every solute heavy atom if it has none) and a water oxygen. At the end the run reports, per
+state, the fraction of frames within 0.2 nm, and flags states where it exceeds 5% while the charges are on
+and the Lennard-Jones decapping is weak (h_D < 0.001): there the protocol charges too early and a water
+fuses onto the solute (see collapse_report). The first --equilibration iterations are stored too and are
+skipped by the other scripts. OUTDIR/checkpoint.npz is written along with it; rerunning the same command
+resumes from it.
 """
 
 import argparse
@@ -27,7 +29,7 @@ import numpy as np
 import openmm as mm
 import openmm.unit as unit
 
-from lbf import DEFAULT_SYSTEM, PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
+from lbf import DEFAULT_FORCEFIELD, DEFAULT_PROTOCOL, DEFAULT_WATER, PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
 
 COLLAPSE_NM = 0.2  # a polar atom this close to a water oxygen overlaps it; a hydrogen bond is 0.25-0.3 nm
 COLLAPSE_FRACTION = 0.05  # of the frames of a charged state with weak decapping
@@ -37,7 +39,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("outdir")
     what = parser.add_argument_group("protocol and states")
-    what.add_argument("--protocol", help='e.g. "C(1,0) D(11,1)[0.25] E(2,0)", or "paper"')
+    what.add_argument("--protocol", help=f'default: "{DEFAULT_PROTOCOL}"; or "paper", or another')
     what.add_argument("--nstates", type=int, default=21, help="uniformly spaced states (default: 21)")
     what.add_argument("--lambdas", help="comma-separated lambdas, or a file with one per line")
     what.add_argument("--plan", help="JSON file with the protocol and lambdas, as written by search.py --next")
@@ -55,9 +57,11 @@ def parse_args():
     run.add_argument("--platform", default="CUDA")
     run.add_argument("--precision", default="mixed")
     system = parser.add_argument_group("system")
-    system.add_argument("--smiles", help="solute (default: that of --plan, else phenol)")
-    system.add_argument("--forcefield", help="SMIRNOFF or GAFF force field of the solute (default: openff-2.2.1)")
-    system.add_argument("--water", help="OpenMM force field file (default: amber/tip3p_standard.xml)")
+    system.add_argument("--smiles", help="solute; required unless --plan gives it")
+    system.add_argument(
+        "--forcefield", help=f"SMIRNOFF or GAFF force field of the solute (default: {DEFAULT_FORCEFIELD})"
+    )
+    system.add_argument("--water", help=f"OpenMM force field file (default: {DEFAULT_WATER})")
     system.add_argument("--box_nm", type=float, default=3.0)
     system.add_argument("--hydrogen_mass", type=float, default=3.0, help="amu; 0 for no mass repartitioning")
     system.add_argument("--temperature", type=float, default=298.15)
@@ -72,12 +76,14 @@ def parse_args():
 def resolve_system(args, plan=None):
     """Fill args.smiles, args.forcefield and args.water: given > the plan's (the runs it came from) > default.
     A plan written for another solute is refused, since its states are placed for that solute."""
-    for name, default in zip(("smiles", "forcefield", "water"), DEFAULT_SYSTEM):
+    for name, default in (("smiles", None), ("forcefield", DEFAULT_FORCEFIELD), ("water", DEFAULT_WATER)):
         planned = (plan or {}).get(name)
         given = getattr(args, name)
         if given is not None and planned is not None and given != planned:
             raise SystemExit(f"--{name} {given} differs from the {name} of {args.plan}: {planned}")
         setattr(args, name, given or planned or default)
+    if args.smiles is None:
+        raise SystemExit("give the solute with --smiles")
 
 
 def read_states(args):
@@ -87,15 +93,13 @@ def read_states(args):
         resolve_system(args, plan)
         return Protocol.parse(plan["protocol"]), np.array(plan["lambdas"], dtype=float)
     resolve_system(args)
-    if not args.protocol:
-        raise SystemExit("give --protocol or --plan")
     if args.lambdas is None:
         lambdas = np.linspace(0.0, 1.0, args.nstates)
     elif os.path.exists(args.lambdas):
         lambdas = np.loadtxt(args.lambdas, ndmin=1)
     else:
         lambdas = np.array([float(x) for x in args.lambdas.split(",")])
-    return Protocol.parse(args.protocol), np.sort(lambdas)
+    return Protocol.parse(args.protocol or DEFAULT_PROTOCOL), np.sort(lambdas)
 
 
 def save(path, **arrays):
@@ -130,7 +134,7 @@ def main():
         cp = np.load(checkpoint_path)
         if str(cp["protocol"]) != str(protocol) or not np.allclose(cp["lambdas"], lambdas):
             raise SystemExit(f"{checkpoint_path} is for another protocol or set of states")
-        stored = tuple(str(x) for x in cp["system"]) if "system" in cp else DEFAULT_SYSTEM
+        stored = tuple(str(x) for x in cp["system"])
         if stored != (args.smiles, args.forcefield, args.water):
             raise SystemExit(f"{checkpoint_path} is for another system: {stored}")
         start = int(cp["iteration"])
@@ -268,6 +272,7 @@ def collapse_report(contact, history, H, threshold=COLLAPSE_NM, fraction=COLLAPS
     if collapsed.any():
         lines.append(f"  collapse in states {np.flatnonzero(collapsed).tolist()}: the protocol charges too early there")
     return "\n".join(lines)
+
 
 if __name__ == "__main__":
     main()

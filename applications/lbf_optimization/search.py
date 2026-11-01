@@ -1,8 +1,8 @@
 """Score LBF protocols by reweighting pooled samples with MBAR, and place the states of the next round.
 
-usage: python search.py RUN [RUN ...] [--a 0.25] [--rank L] [--next next.json [--states 21]]
+usage: python search.py RUN [RUN ...] [--a 0.4] [--rank L] [--next next.json [--states 21]]
 
-RUN is an output directory of simulate.py (or a directory of state_*.npz files from the pilot). The reduced
+RUN is an output directory of simulate.py; runs of different solutes cannot be pooled. The reduced
 potential of a protocol h(lambda) is u = beta h . U plus terms common to all states (see lbf.py), so any
 protocol can be evaluated at any lambda from the stored slice energies. At Gauss-Legendre nodes, MBAR
 reweighting gives <du/dlambda> and var(du/dlambda), with du/dlambda = beta dh/dlambda . U, and (in kT):
@@ -14,14 +14,14 @@ reweighting gives <du/dlambda> and var(du/dlambda), with du/dlambda = beta dh/dl
 I_var/L^2 >= 1 measures how much a protocol depends on the spacing of its states; it is 1 when sd(du/dlambda)
 is flat. A protocol counts as explored if the Kish effective sample size is at least --ess at every node.
 
-The family (see PLAN.md): the capped Lennard-Jones term C is the exponential (e^(b lambda) - 1)/(e^b - 1)
+The family (see RESULTS.md): the capped Lennard-Jones term C is the exponential (e^(b lambda) - 1)/(e^b - 1)
 with b from --bC (polynomial steps for C only with --m0C and --m1C); the Lennard-Jones decapping D is a
 polynomial step over [a, 1] with onset power m0 + 1 >= 8, so that var(du/dlambda) is finite where it
 starts; the electrostatics E are a polynomial step over [aE, 1] with aE >= a, and the Coulomb decapping Q
-follows E (bare Coulomb; --Q D scores the capped-Coulomb scheme, the only one that runs predating the split
-of the decapping terms can weight). Protocols whose charging hazard, max h_E/h_C where h_D < 0.001, exceeds
---max_hazard are left out: above about 0.5 a water fuses onto a hydroxyl, which reweighting cannot see.
-The ranking is by I_var, the cost of uniform sampling in lambda. With --next, the best explored protocol
+follows E (bare Coulomb; --Q D scores the capped-Coulomb scheme). Protocols whose charging hazard,
+max h_E/h_C where h_D < 0.001, exceeds --max_hazard are left out: above it a water can fuse onto a solute
+acceptor between the sampled states, which the samples rarely contain and so the scores rarely see. The
+ranking is by I_var, the cost of uniform sampling in lambda. With --next, the best explored protocol
 (or --choose) gets --states lambdas at equal increments of thermodynamic length, written as JSON for
 simulate.py --plan.
 """
@@ -37,10 +37,7 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import numpy as np
 from scipy.special import logsumexp
 
-from lbf import (
-    EXP, LEGACY_TERMS, SMOOTH, TERMS, Protocol, beta, energies_in_basis, equal_length_lambdas, in_basis,
-    load_run, states_in_basis,
-)
+from lbf import DEFAULT_PROTOCOL, EXP, SMOOTH, TERMS, Protocol, beta, equal_length_lambdas, load_run
 
 
 def int_range(text):
@@ -92,7 +89,9 @@ def parse_args():
     scoring.add_argument("--refine", type=int, default=150, help="rescore this many best by each score")
     scoring.add_argument("--dg_tol", type=float, default=0.05, help="kT")
     scoring.add_argument("--chunk", type=int, default=1500, help="targets reweighted at once (memory)")
-    scoring.add_argument("--reference", action="append", default=[], help='protocols to score as references')
+    scoring.add_argument(
+        "--reference", action="append", default=[], help="more protocols to score besides paper and the default",
+    )
     scoring.add_argument(
         "--max_hazard", type=float, default=0.15,
         help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this (default: 0.15; inf for all)",
@@ -137,15 +136,10 @@ class Reweighter:
             raise SystemExit(f"runs of different systems (solute, force field, water) cannot be pooled: {sorted(systems)}")
         self.system = systems.pop()
         self.beta = beta(temperatures.pop())
-        # a legacy run pulls the pool down to its basis, where only states and protocols with h_Q = h_D exist
-        self.terms = LEGACY_TERMS if any(run.terms == LEGACY_TERMS for run in runs) else TERMS
-        try:
-            self.h_states = np.concatenate([states_in_basis(self.terms, run.H, run.terms) for run in runs])
-        except ValueError as error:
-            raise SystemExit(str(error)) from None
-        series = [energies_in_basis(self.terms, s, run.terms) for run in runs for s in run.series]
+        self.h_states = np.concatenate([run.H for run in runs])
+        series = [s for run in runs for s in run.series]
         N_k = np.array([len(s) for s in series])
-        self.BU = self.beta * np.concatenate(series)  # (N, len(terms))
+        self.BU = self.beta * np.concatenate(series)  # (N, 4)
         u_kn = self.h_states @ self.BU.T
         self.f_k = MBAR(u_kn, N_k, solver_protocol="robust").f_k
         self.log_denominator = logsumexp(np.log(N_k)[:, None] + self.f_k[:, None] - u_kn, axis=0)
@@ -153,7 +147,6 @@ class Reweighter:
 
     def at(self, H, dH):
         """<du/dlambda>, var(du/dlambda) and Kish ESS at the states H (T, 4), with dh/dlambda dH (T, 4)."""
-        H, dH = (x.T for x in in_basis(self.terms, H.T, dH.T))
         mean, var, ess = (np.empty(len(H)) for _ in range(3))
         for start in range(0, len(H), self.chunk):
             sl = slice(start, start + self.chunk)
@@ -195,13 +188,7 @@ def main():
         index = TERMS.index(term)
         protocols = [p for p in protocols if p.h(args.a)[0][index, 0] >= value]
     protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
-    references = [Protocol.parse("paper")] + [Protocol.parse(text) for text in args.reference]
-    if reweighter.terms == LEGACY_TERMS:
-        protocols = [p for p in protocols if p.representable_in(LEGACY_TERMS)]
-        dropped = [str(p) for p in references if not p.representable_in(LEGACY_TERMS)]
-        references = [p for p in references if p.representable_in(LEGACY_TERMS)]
-        print("a run stored the decapping terms together: only protocols with h_Q = h_D are scored"
-              + (f"; references left out: {', '.join(dropped)}" if dropped else ""))
+    references = [Protocol.parse(text) for text in ["paper", DEFAULT_PROTOCOL] + args.reference]
     print(f"{len(protocols)} protocols with the decapping window at a = {args.a:g}")
 
     # screen everything, then rescore the best by either score with more nodes

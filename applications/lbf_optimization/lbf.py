@@ -21,8 +21,7 @@ are the same in every state and cancel.
 The two decapping terms are what distinguishes the electrostatic schemes: h_Q = h_D keeps the Coulomb
 potential capped until the core is decapped (the capped-Coulomb scheme), and h_Q = h_E makes h_E switch on
 the bare Coulomb potential, as the original plugin and the protocol of Correa et al. do. Both are protocols
-of the same basis, so samples of either reweight to the other. Runs that predate the split stored the two
-decapping terms as one slice energy (LEGACY_TERMS) and can only represent protocols with h_Q = h_D.
+of the same basis, so samples of either reweight to the other.
 
 Each term follows S_{m0,m1}(x), the polynomial step whose first m0 derivatives vanish at x = 0 and whose
 first m1 derivatives vanish at x = 1, or the exponential (e^(bx) - 1)/(e^b - 1), whose slope is finite at
@@ -31,6 +30,8 @@ both ends. A term can have a window: it is zero for lambda <= a and switches on 
 The exponential is the shape the capped Lennard-Jones term wants: with it, sd(du/dlambda) is nearly flat
 along lambda, where every polynomial step leaves the cavity-growth peak (for phenol, I_var drops from 240
 to 204 kT^2 relative to S_{2,1}). The polynomial steps' zero end slopes are what excluded it.
+
+DEFAULT_PROTOCOL is the protocol chosen for phenol, methane, anisole and paracetamol (see RESULTS.md).
 """
 
 import re
@@ -42,10 +43,12 @@ import numpy as np
 
 KB = 0.0083144626181532  # kJ/(mol K)
 TERMS = ("C", "D", "Q", "E")
-LEGACY_TERMS = ("C", "D", "E")  # D was both decapping terms
 PARAMS = {"C": "lambdaLJ", "D": "lambdaD", "Q": "lambdaQD", "E": "lambdaQ"}
 SMOOTH = -1  # m0 of the C-infinity step psi(x) = f(x)/(f(x) + f(1-x)), f(x) = exp(-1/x)
 EXP = -2  # m0 of the exponential (e^(bx) - 1)/(e^b - 1); the m1 slot holds the rate b
+DEFAULT_PROTOCOL = "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E"
+DEFAULT_FORCEFIELD = "openff-2.2.1"
+DEFAULT_WATER = "amber/tip3p_standard.xml"
 
 
 def beta(temperature):
@@ -125,8 +128,8 @@ class Protocol:
     """Switching functions of the four terms, as (m0, m1, a) each; m0 = SMOOTH selects the C-infinity step,
     m0 = EXP the exponential with rate b in the m1 slot, and a is the start of the term's window (0 for none).
 
-    The text form is, e.g., "C(1,0) D(11,1)[0.25] E(2,0)", with "D(inf)[0.25]" for the C-infinity step and
-    "C(exp 2.5)" for the exponential. The Coulomb decapping Q follows D unless the text ties it to E ("Q=E",
+    The text form is, e.g., "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E", with "C(2,1)" for a polynomial step and
+    "D(inf)[0.4]" for the C-infinity step. The Coulomb decapping Q follows D unless the text ties it to E ("Q=E",
     the bare-Coulomb scheme) or gives it its own switching function ("Q(7,2)[0.4]").
     """
 
@@ -147,7 +150,7 @@ class Protocol:
                 found[term] = (SMOOTH if m0 == "inf" else int(m0), int(m1 or 0), float(a or 0.0))
         ties = _TIE.findall(compact)
         rest = _TIE.sub("", _SPEC.sub("", compact))
-        if sorted(found) not in (sorted(LEGACY_TERMS), sorted(TERMS)) or rest or len(ties) + ("Q" in found) > 1:
+        if set(found) not in ({"C", "D", "E"}, set(TERMS)) or rest or len(ties) + ("Q" in found) > 1:
             raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E'")
         if "Q" not in found:
             found["Q"] = found[ties[0] if ties else "D"]
@@ -175,8 +178,9 @@ class Protocol:
     def charging_hazard(self, weak=1e-3):
         """The largest h_E/h_C where the Lennard-Jones decapping is still weak (h_D < weak). Charging against
         a capped core is a contest between the capped attraction, scaled by h_E, and the capped repulsion,
-        scaled by h_C; for phenol in water a hydrogen bond collapses onto the hydroxyl above about 0.5.
-        With bare Coulomb (h_Q = h_E) the hazard is the same ratio, since nothing else holds the pair apart."""
+        scaled by h_C. For phenol in water, a water fuses onto the hydroxyl within nanoseconds above about
+        0.5, and reweighting shows the fused state favorable between the sampled states above 0.15, the
+        limit search.py applies (see RESULTS.md)."""
         h = self.h(np.linspace(0.0, 1.0, 1001))[0]
         with np.errstate(divide="ignore", invalid="ignore"):
             ratio = np.where(h[3] > 0, h[3] / h[0], 0.0)
@@ -190,52 +194,6 @@ class Protocol:
         at_zero = [0 if m0 == EXP else m0 for m0, m1, a in self.specs if a == 0 and m0 != SMOOTH]
         at_one = [0 if m0 == EXP else m1 for m0, m1, a in self.specs if m0 != SMOOTH]
         return min(at_zero), min(at_one)
-
-    def representable_in(self, terms):
-        """Whether runs with these slice energies can evaluate this protocol (see in_basis)."""
-        try:
-            in_basis(terms, *self.h(np.linspace(0.0, 1.0, 101)))
-        except ValueError:
-            return False
-        return True
-
-
-def in_basis(terms, h, dh):
-    """h and dh (4, n) of a protocol in the basis of a run's slice energies: (4, n) for TERMS, and (3, n)
-    for LEGACY_TERMS, whose single decapping energy can only weight a protocol with h_Q = h_D."""
-    terms = tuple(terms)
-    if terms == TERMS:
-        return h, dh
-    if terms != LEGACY_TERMS:
-        raise ValueError(f"unknown slice energies {terms}")
-    if not (np.allclose(h[2], h[1]) and np.allclose(dh[2], dh[1])):
-        raise ValueError("runs that stored the decapping terms together can only weight protocols with h_Q = h_D")
-    return h[[0, 1, 3]], dh[[0, 1, 3]]
-
-
-def energies_in_basis(terms, U, run_terms):
-    """Slice energies U (n, len(run_terms)) of a run, as the basis terms: summing the decapping terms when
-    a four-term run is pooled with legacy ones."""
-    terms, run_terms = tuple(terms), tuple(run_terms)
-    if terms == run_terms:
-        return U
-    if terms == LEGACY_TERMS and run_terms == TERMS:
-        return np.stack([U[:, 0], U[:, 1] + U[:, 2], U[:, 3]], axis=1)
-    raise ValueError(f"cannot express slice energies {run_terms} as {terms}")
-
-
-def states_in_basis(terms, H, run_terms):
-    """Scaling parameters H (K, len(run_terms)) of a run's states, as the basis terms. In the legacy basis the
-    two decapping terms share one energy, so a four-term run's states must have h_Q = h_D to be pooled."""
-    terms, run_terms = tuple(terms), tuple(run_terms)
-    if terms == run_terms:
-        return H
-    if terms == LEGACY_TERMS and run_terms == TERMS:
-        if not np.allclose(H[:, 1], H[:, 2]):
-            raise ValueError("a run whose states have h_Q != h_D cannot be pooled with runs that stored the "
-                             "decapping terms together")
-        return H[:, [0, 1, 3]]
-    raise ValueError(f"cannot express states with terms {run_terms} as {terms}")
 
 
 def _term_h(spec, lam):
@@ -431,54 +389,39 @@ def mix_replicas(u, state_of_replica, num_attempts, rng, accepted=None, attempte
 
 @dataclass
 class Run:
-    """The samples of one simulation, by state: series[k] holds the slice energies (n_k, len(terms)) sampled
-    in state k, in time order, after equilibration; H (K, len(terms)) holds the scaling parameters of the
-    states. terms is TERMS, or LEGACY_TERMS for runs that stored the two decapping terms as one energy."""
+    """The samples of one simulation, by state: series[k] holds the slice energies (n_k, 4) sampled in state
+    k, in time order, after equilibration; H (K, 4) holds the scaling parameters of the states; system is
+    (smiles, forcefield, water)."""
 
     lambdas: np.ndarray
     H: np.ndarray
     temperature: float
     series: list
-    capping_orders: tuple = (3, 3)
-    terms: tuple = LEGACY_TERMS
-    system: tuple = None  # (smiles, forcefield, water); runs that did not store it are the phenol default
+    capping_orders: tuple
+    system: tuple
 
 
-DEFAULT_SYSTEM = ("c1ccc(cc1)O", "openff-2.2.1", "amber/tip3p_standard.xml")
-
-
-def load_run(path, default_temperature=298.15):
-    """Load OUTDIR/samples.npz written by simulate.py, or a directory of state_*.npz files with h (3,), lam
-    and U (n, 3), one per state, as written by the pilot scripts (already equilibrated, at
-    default_temperature, with the default capping orders and the legacy terms)."""
-    import glob
+def load_run(path):
+    """Load OUTDIR/samples.npz written by simulate.py."""
     import os
 
     samples = os.path.join(path, "samples.npz")
-    if os.path.exists(samples):
-        d = np.load(samples)
-        history, U = d["state_of_replica_history"], d["U"]
-        keep = slice(int(d["equilibration"]), None)
-        history, U = history[keep], U[keep]
-        replica_in_state = np.argsort(history, axis=1)  # each row of history is a permutation of the states
-        rows = np.arange(len(U))[:, None]
-        by_state = U[rows, replica_in_state]  # (n, K, len(terms))
-        series = [by_state[:, k] for k in range(by_state.shape[1])]
-        orders = tuple(int(m) for m in d["capping_orders"]) if "capping_orders" in d else (3, 3)
-        terms = tuple(str(t) for t in d["terms"]) if "terms" in d else LEGACY_TERMS
-        system = tuple(str(x) for x in d["system"]) if "system" in d else DEFAULT_SYSTEM
-        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, terms, system)
-    files = sorted(glob.glob(os.path.join(path, "state_*.npz")))
-    if not files:
-        raise FileNotFoundError(f"no samples.npz or state_*.npz in {path}")
-    states = sorted((np.load(f) for f in files), key=lambda s: float(s["lam"]))
-    return Run(
-        np.array([float(s["lam"]) for s in states]),
-        np.array([s["h"] for s in states]),
-        default_temperature,
-        [s["U"] for s in states],
-        system=DEFAULT_SYSTEM,
-    )
+    if not os.path.exists(samples):
+        raise FileNotFoundError(f"no samples.npz in {path}")
+    d = np.load(samples)
+    if "system" not in d or tuple(str(t) for t in d["terms"]) != TERMS:
+        raise SystemExit(f"{samples} was written by an older simulate.py (no solute, or no separate Coulomb "
+                         "decapping energy) and cannot be read")
+    history, U = d["state_of_replica_history"], d["U"]
+    keep = slice(int(d["equilibration"]), None)
+    history, U = history[keep], U[keep]
+    replica_in_state = np.argsort(history, axis=1)  # each row of history is a permutation of the states
+    rows = np.arange(len(U))[:, None]
+    by_state = U[rows, replica_in_state]  # (n, K, 4)
+    series = [by_state[:, k] for k in range(by_state.shape[1])]
+    orders = tuple(int(m) for m in d["capping_orders"])
+    system = tuple(str(x) for x in d["system"])
+    return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, system)
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -508,8 +451,8 @@ def closest_contact(positions, box, polar, waters):
 
 def build_system(
     smiles,
-    forcefield="openff-2.2.1",
-    water="amber/tip3p_standard.xml",
+    forcefield=DEFAULT_FORCEFIELD,
+    water=DEFAULT_WATER,
     box_nm=3.0,
     hydrogen_mass=3.0,
     temperature=298.15,

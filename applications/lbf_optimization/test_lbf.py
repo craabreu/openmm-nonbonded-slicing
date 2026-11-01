@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from lbf import (
+    DEFAULT_PROTOCOL,
     EXP,
-    LEGACY_TERMS,
     SMOOTH,
     TERMS,
     PaperProtocol,
@@ -13,19 +13,16 @@ from lbf import (
     bernstein,
     closest_contact,
     coefficients,
-    energies_in_basis,
     equal_length_lambdas,
     exponential,
     feedback_lambdas,
     fit_lambda_of_c,
-    in_basis,
     lambda_of_c,
     load_run,
     mix_replicas,
     nonincreasing_fit,
     replica_flow,
     smooth_step,
-    states_in_basis,
     switch,
 )
 
@@ -137,7 +134,6 @@ def test_charging_hazard():
 def test_paper_protocol_is_bare_coulomb():
     h, dh = PaperProtocol().h(np.linspace(0, 1, 101))
     assert np.array_equal(h[2], h[3]) and np.array_equal(dh[2], dh[3])
-    assert not PaperProtocol().representable_in(LEGACY_TERMS)
 
 
 def test_window():
@@ -145,30 +141,6 @@ def test_window():
     lam = np.linspace(0, 1, 101)
     assert np.all(h[1, lam <= 0.25] == 0) and np.all(dh[1, lam <= 0.25] == 0)
     assert np.all(h[1, lam > 0.25] > 0)
-
-
-def test_bases():
-    lam = np.linspace(0, 1, 11)
-    capped = Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1)")
-    bare = Protocol.parse("C(2,1) D(7,2)[0.4] E(4,1) Q=E")
-    h, dh = capped.h(lam)
-    assert in_basis(TERMS, h, dh) == (h, dh)
-    h3, dh3 = in_basis(LEGACY_TERMS, h, dh)
-    assert h3.shape == (3, len(lam)) and np.array_equal(h3, h[[0, 1, 3]]) and np.array_equal(dh3, dh[[0, 1, 3]])
-    assert capped.representable_in(LEGACY_TERMS) and bare.representable_in(TERMS)
-    assert not bare.representable_in(LEGACY_TERMS)
-    with pytest.raises(ValueError):
-        in_basis(LEGACY_TERMS, *bare.h(lam))
-    U = np.arange(12.0).reshape(3, 4)
-    assert energies_in_basis(TERMS, U, TERMS) is U
-    assert np.array_equal(energies_in_basis(LEGACY_TERMS, U, TERMS), np.stack([U[:, 0], U[:, 1] + U[:, 2], U[:, 3]], 1))
-    with pytest.raises(ValueError):
-        energies_in_basis(TERMS, U[:, :3], LEGACY_TERMS)
-    # the states of a four-term run join a legacy pool only if their h_Q equals their h_D
-    H = capped.h(lam)[0].T
-    assert np.array_equal(states_in_basis(LEGACY_TERMS, H, TERMS), H[:, [0, 1, 3]])
-    with pytest.raises(ValueError):
-        states_in_basis(LEGACY_TERMS, bare.h(lam)[0].T, TERMS)
 
 
 def test_equal_length_lambdas():
@@ -216,7 +188,6 @@ def test_closest_contact():
     assert closest_contact(positions, box, np.array([1]), np.array([3])) == pytest.approx(np.sqrt(3 * 0.25))
 
 
-
 def test_collapse_report():
     from simulate import collapse_report
 
@@ -229,6 +200,7 @@ def test_collapse_report():
     assert "collapse in states [1]" in report
     contact[history == 1] = np.where(np.arange(100) % 25 == 0, 0.15, 0.28)  # 4% of state 1: brief overlaps
     assert "collapse" not in collapse_report(contact, history, H).splitlines()[-1]
+
 
 def test_end_orders():
     assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E").end_orders() == (2, 1)
@@ -283,49 +255,71 @@ def test_mix_replicas_samples_the_permutation_distribution():
     assert sorted(state) == list(range(num))
 
 
+PHENOL = ("c1ccc(cc1)O", "openff-2.2.1", "amber/tip3p_standard.xml")
+
+
+def write_samples(path, **changes):
+    history = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])
+    arrays = dict(
+        protocol=DEFAULT_PROTOCOL, lambdas=np.array([0.0, 1.0]), H=np.zeros((2, 4)), terms=np.array(TERMS),
+        temperature=300.0, capping_orders=np.array([3, 3]), system=np.array(PHENOL), iteration_ps=1.0,
+        equilibration=1, exchange=True, state_of_replica_history=history,
+        U=np.arange(4 * 2 * 4, dtype=float).reshape(4, 2, 4), accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)),
+    )
+    arrays.update(changes)
+    np.savez(path / "samples.npz", **{k: v for k, v in arrays.items() if v is not None})
+    return arrays
+
+
 def test_load_run(tmp_path):
     # Two replicas swap states at iteration 2; the series of each state must follow the state.
-    history = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])
-    U = np.arange(4 * 2 * 3, dtype=float).reshape(4, 2, 3)
-    np.savez(
-        tmp_path / "samples.npz", protocol="C(1,0) D(11,1)[0.25] E(2,0)", lambdas=np.array([0.0, 1.0]),
-        H=np.array([[0, 0, 0], [1, 1, 1]], float), temperature=300.0, iteration_ps=1.0, equilibration=1,
-        exchange=True, state_of_replica_history=history, U=U, accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)),
-    )
+    U = write_samples(tmp_path)["U"]
     run = load_run(str(tmp_path))
-    assert run.temperature == 300.0
-    assert run.capping_orders == (3, 3)  # the default when a run predates the option
-    assert run.terms == LEGACY_TERMS  # and the single decapping energy when it predates the split
+    assert run.temperature == 300.0 and run.capping_orders == (3, 3) and run.system == PHENOL
     assert np.array_equal(run.series[0], np.array([U[1, 0], U[2, 1], U[3, 1]]))
     assert np.array_equal(run.series[1], np.array([U[1, 1], U[2, 0], U[3, 0]]))
-    np.savez(
-        tmp_path / "samples.npz", protocol="C(1,0) D(11,1)[0.25] E(2,0) Q=E", lambdas=np.array([0.0, 1.0]),
-        H=np.zeros((2, 4)), terms=np.array(TERMS), temperature=300.0, iteration_ps=1.0, equilibration=1,
-        exchange=True, state_of_replica_history=history, U=np.arange(4 * 2 * 4, dtype=float).reshape(4, 2, 4),
-        accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)), capping_orders=np.array([3, 3]),
-    )
-    run = load_run(str(tmp_path))
-    assert run.terms == TERMS and run.series[0].shape == (3, 4)
+    # runs of older versions, without the solute or with one decapping energy, are refused
+    write_samples(tmp_path, system=None)
+    with pytest.raises(SystemExit, match="older simulate.py"):
+        load_run(str(tmp_path))
+    write_samples(tmp_path, terms=np.array(["C", "D", "E"]), U=np.zeros((4, 2, 3)))
+    with pytest.raises(SystemExit, match="older simulate.py"):
+        load_run(str(tmp_path))
 
 
 def test_system_is_resolved_and_checked():
     from types import SimpleNamespace
 
-    from lbf import DEFAULT_SYSTEM, Run
+    from lbf import DEFAULT_FORCEFIELD, DEFAULT_WATER, Run
     from search import Reweighter
     from simulate import resolve_system
 
     args = SimpleNamespace(plan="next.json", smiles=None, forcefield=None, water=None)
     resolve_system(args, {"smiles": "C"})
-    assert (args.smiles, args.forcefield, args.water) == ("C",) + DEFAULT_SYSTEM[1:]
-    args = SimpleNamespace(plan=None, smiles=None, forcefield=None, water=None)
-    resolve_system(args)
-    assert (args.smiles, args.forcefield, args.water) == DEFAULT_SYSTEM
+    assert (args.smiles, args.forcefield, args.water) == ("C", DEFAULT_FORCEFIELD, DEFAULT_WATER)
+    with pytest.raises(SystemExit, match="--smiles"):  # no default solute
+        resolve_system(SimpleNamespace(plan=None, smiles=None, forcefield=None, water=None))
     with pytest.raises(SystemExit):  # states placed for another solute
         resolve_system(SimpleNamespace(plan="next.json", smiles="C", forcefield=None, water=None), {"smiles": "CO"})
 
     H = np.zeros((2, 4))
-    runs = [Run(np.array([0.0, 1.0]), H, 298.15, [], terms=TERMS, system=DEFAULT_SYSTEM),
-            Run(np.array([0.0, 1.0]), H, 298.15, [], terms=TERMS, system=("C",) + DEFAULT_SYSTEM[1:])]
+    runs = [Run(np.array([0.0, 1.0]), H, 298.15, [], (3, 3), PHENOL),
+            Run(np.array([0.0, 1.0]), H, 298.15, [], (3, 3), ("C",) + PHENOL[1:])]
     with pytest.raises(SystemExit, match="different systems"):
         Reweighter(runs, chunk=10)
+
+
+def test_default_protocol():
+    protocol = Protocol.parse(DEFAULT_PROTOCOL)
+    assert str(protocol) == DEFAULT_PROTOCOL
+    assert protocol.charging_hazard() == pytest.approx(0.13, abs=0.01)
+
+
+def test_compare_solutes_keeps_the_best_explored(tmp_path):
+    from compare_solutes import explored
+
+    for name, i_var in (("a03", [10.0, 20.0, 5.0]), ("a04", [8.0, np.nan, 1.0])):
+        np.savez(tmp_path / f"{name}.npz", protocols=np.array(["P", "Q", "R"]), explored=np.array([True, True, False]),
+                 I_var=np.array(i_var), hazard=np.array([0.1, 0.1, 0.1]))
+    assert explored([tmp_path / "a03.npz", tmp_path / "a04.npz"], 0.15) == {"P": 8.0, "Q": 20.0}
+    assert explored([tmp_path / "a03.npz"], 0.05) == {}

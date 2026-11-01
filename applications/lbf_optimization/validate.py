@@ -2,7 +2,7 @@
 
 usage: python validate.py LABEL=RUN[,RUN...] [LABEL=RUN[,RUN...] ...]
 
-Each RUN is an output directory of simulate.py (or of the pilot scripts) for one replica of a protocol.
+Each RUN is an output directory of simulate.py for one replica of a protocol.
 For each run, MBAR gives dG = f(lambda = 1) - f(lambda = 0) in kT, the coupling free energy, from samples
 subsampled by the statistical inefficiency of each state's time series. For replica exchange, that series
 follows the state, not a replica, so it includes the decorrelation by exchanges. The observable is a proxy
@@ -12,8 +12,8 @@ Per label, it prints dG and the MBAR standard error of each run, and the standar
 which is the honest measure of precision when runs are independent.
 """
 
+import argparse
 import os
-import sys
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")  # keep pymbar's JAX off the GPU that simulate.py uses
 
@@ -39,12 +39,18 @@ def free_energy(path):
     return result["Delta_f"][0, -1], result["dDelta_f"][0, -1], N_k.sum()
 
 
+def labeled_runs(text):
+    label, _, paths = text.partition("=")
+    if not label or not paths:
+        raise argparse.ArgumentTypeError(f"expected LABEL=RUN[,RUN...], got {text!r}")
+    return label, paths.split(",")
+
+
 def main():
-    if len(sys.argv) < 2:
-        raise SystemExit(__doc__)
-    for argument in sys.argv[1:]:
-        label, paths = argument.split("=", 1)
-        dG, error, n = np.array([free_energy(path) for path in paths.split(",")]).T
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("groups", nargs="+", type=labeled_runs, metavar="LABEL=RUN[,RUN...]")
+    for label, paths in parser.parse_args().groups:
+        dG, error, n = np.array([free_energy(path) for path in paths]).T
         spread = f"{dG.std(ddof=1):.3f}" if len(dG) > 1 else "n/a"
         print(
             f"{label:12s} dG (kT): {np.round(dG, 3).tolist()}  mean {dG.mean():.3f}  sd over runs {spread}  "
