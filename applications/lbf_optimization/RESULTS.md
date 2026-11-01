@@ -46,8 +46,8 @@ switching function that makes sd(du/dλ) flat, and the pilot reached the exponen
 through the thermodynamic-length coordinate. For phenol, S_{2,1} → exponential with b = 2.5 takes I_var
 from 240 to 204.
 
-**The cost measure.** I_var = ∫ var(du/dλ) dλ, the cost of uniform sampling in λ, which is what
-Lambda-UFED does with a flat target. L = ∫ sd(du/dλ) dλ and I_var/L² ≥ 1 are reported; a family is good
+**The cost measure.** I_var = ∫ var(du/dλ) dλ, the cost of uniform sampling in λ, as in λ-dynamics
+with a flat target. L = ∫ sd(du/dλ) dλ and I_var/L² ≥ 1 are reported; a family is good
 when I_var/L² is near 1 without a change of coordinate (1.29 for the polynomial steps, 1.08 to 1.16 for
 the exponential C).
 
@@ -120,8 +120,8 @@ Steps 1 to 4 were done for phenol, then step 5 for methane, anisole and paraceta
   −10.65).
 - **The hazard for other solutes.** Neither paracetamol run sampled a fused configuration deep enough to
   probe the hazard as phenol's did, so for paracetamol the limit rests on the phenol evidence.
-- **Validation in Lambda-UFED** (postponed). Run Lambda-UFED with the default and with the paper protocol,
-  several independent replicas each, same wall time, and compare the error of ΔG against simulation time
+- **Validation in λ-dynamics.** Run λ-dynamics with the default and with the paper protocol, several
+  independent replicas each, same wall time, and compare the error of ΔG against simulation time
   and the round trips in λ. This tests what reweighting cannot see: the correlation time along λ, whether
   the finite λ-force of the exponential at λ = 0 and 1 causes trouble, and whether the walk finds fused
   states between the hazard limit and the replica-exchange states.
