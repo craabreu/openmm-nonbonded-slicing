@@ -306,3 +306,26 @@ def test_load_run(tmp_path):
     )
     run = load_run(str(tmp_path))
     assert run.terms == TERMS and run.series[0].shape == (3, 4)
+
+
+def test_system_is_resolved_and_checked():
+    from types import SimpleNamespace
+
+    from lbf import DEFAULT_SYSTEM, Run
+    from search import Reweighter
+    from simulate import resolve_system
+
+    args = SimpleNamespace(plan="next.json", smiles=None, forcefield=None, water=None)
+    resolve_system(args, {"smiles": "C"})
+    assert (args.smiles, args.forcefield, args.water) == ("C",) + DEFAULT_SYSTEM[1:]
+    args = SimpleNamespace(plan=None, smiles=None, forcefield=None, water=None)
+    resolve_system(args)
+    assert (args.smiles, args.forcefield, args.water) == DEFAULT_SYSTEM
+    with pytest.raises(SystemExit):  # states placed for another solute
+        resolve_system(SimpleNamespace(plan="next.json", smiles="C", forcefield=None, water=None), {"smiles": "CO"})
+
+    H = np.zeros((2, 4))
+    runs = [Run(np.array([0.0, 1.0]), H, 298.15, [], terms=TERMS, system=DEFAULT_SYSTEM),
+            Run(np.array([0.0, 1.0]), H, 298.15, [], terms=TERMS, system=("C",) + DEFAULT_SYSTEM[1:])]
+    with pytest.raises(SystemExit, match="different systems"):
+        Reweighter(runs, chunk=10)

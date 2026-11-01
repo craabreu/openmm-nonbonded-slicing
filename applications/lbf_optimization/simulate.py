@@ -27,7 +27,7 @@ import numpy as np
 import openmm as mm
 import openmm.unit as unit
 
-from lbf import PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
+from lbf import DEFAULT_SYSTEM, PARAMS, TERMS, Protocol, beta, build_system, closest_contact, mix_replicas, polar_atoms
 
 COLLAPSE_NM = 0.2  # a polar atom this close to a water oxygen overlaps it; a hydrogen bond is 0.25-0.3 nm
 COLLAPSE_FRACTION = 0.05  # of the frames of a charged state with weak decapping
@@ -55,9 +55,9 @@ def parse_args():
     run.add_argument("--platform", default="CUDA")
     run.add_argument("--precision", default="mixed")
     system = parser.add_argument_group("system")
-    system.add_argument("--smiles", default="c1ccc(cc1)O", help="solute (default: phenol)")
-    system.add_argument("--forcefield", default="openff-2.2.1", help="SMIRNOFF or GAFF force field of the solute")
-    system.add_argument("--water", default="amber/tip3p_standard.xml")
+    system.add_argument("--smiles", help="solute (default: that of --plan, else phenol)")
+    system.add_argument("--forcefield", help="SMIRNOFF or GAFF force field of the solute (default: openff-2.2.1)")
+    system.add_argument("--water", help="OpenMM force field file (default: amber/tip3p_standard.xml)")
     system.add_argument("--box_nm", type=float, default=3.0)
     system.add_argument("--hydrogen_mass", type=float, default=3.0, help="amu; 0 for no mass repartitioning")
     system.add_argument("--temperature", type=float, default=298.15)
@@ -69,11 +69,24 @@ def parse_args():
     return parser.parse_args()
 
 
+def resolve_system(args, plan=None):
+    """Fill args.smiles, args.forcefield and args.water: given > the plan's (the runs it came from) > default.
+    A plan written for another solute is refused, since its states are placed for that solute."""
+    for name, default in zip(("smiles", "forcefield", "water"), DEFAULT_SYSTEM):
+        planned = (plan or {}).get(name)
+        given = getattr(args, name)
+        if given is not None and planned is not None and given != planned:
+            raise SystemExit(f"--{name} {given} differs from the {name} of {args.plan}: {planned}")
+        setattr(args, name, given or planned or default)
+
+
 def read_states(args):
     if args.plan:
         with open(args.plan) as f:
             plan = json.load(f)
+        resolve_system(args, plan)
         return Protocol.parse(plan["protocol"]), np.array(plan["lambdas"], dtype=float)
+    resolve_system(args)
     if not args.protocol:
         raise SystemExit("give --protocol or --plan")
     if args.lambdas is None:
@@ -117,6 +130,9 @@ def main():
         cp = np.load(checkpoint_path)
         if str(cp["protocol"]) != str(protocol) or not np.allclose(cp["lambdas"], lambdas):
             raise SystemExit(f"{checkpoint_path} is for another protocol or set of states")
+        stored = tuple(str(x) for x in cp["system"]) if "system" in cp else DEFAULT_SYSTEM
+        if stored != (args.smiles, args.forcefield, args.water):
+            raise SystemExit(f"{checkpoint_path} is for another system: {stored}")
         start = int(cp["iteration"])
         state_of_replica = cp["state_of_replica"].copy()
         U = list(cp["U"])
@@ -165,7 +181,8 @@ def main():
     def checkpoint(iteration):
         common = dict(
             protocol=str(protocol), lambdas=lambdas, H=H, terms=np.array(TERMS), temperature=args.temperature,
-            capping_orders=np.array(args.capping_orders), iteration_ps=args.iteration_ps,
+            capping_orders=np.array(args.capping_orders), system=np.array([args.smiles, args.forcefield, args.water]),
+            iteration_ps=args.iteration_ps,
             equilibration=args.equilibration, exchange=not args.no_exchange,
             state_of_replica_history=np.array(history, dtype=int).reshape(-1, num_states),
             U=np.array(U).reshape(-1, num_states, len(TERMS)), accepted=accepted, attempted=attempted,

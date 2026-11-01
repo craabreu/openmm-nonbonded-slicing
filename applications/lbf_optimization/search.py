@@ -132,6 +132,10 @@ class Reweighter:
         orders = {run.capping_orders for run in runs}
         if len(orders) > 1:
             raise SystemExit(f"runs with different capping orders cannot be pooled: {sorted(orders)}")
+        systems = {run.system for run in runs}
+        if len(systems) > 1:
+            raise SystemExit(f"runs of different systems (solute, force field, water) cannot be pooled: {sorted(systems)}")
+        self.system = systems.pop()
         self.beta = beta(temperatures.pop())
         # a legacy run pulls the pool down to its basis, where only states and protocols with h_Q = h_D exist
         self.terms = LEGACY_TERMS if any(run.terms == LEGACY_TERMS for run in runs) else TERMS
@@ -253,7 +257,10 @@ def main():
         _, var, ess = reweighter.profile([chosen], grid)
         lambdas = equal_length_lambdas(grid, np.sqrt(var[0]), args.states)
         with open(args.next, "w") as f:
-            json.dump({"protocol": str(chosen), "lambdas": lambdas.round(6).tolist()}, f, indent=1)
+            smiles, forcefield, water = reweighter.system
+            plan = {"protocol": str(chosen), "lambdas": lambdas.round(6).tolist(), "smiles": smiles,
+                    "forcefield": forcefield, "water": water}
+            json.dump(plan, f, indent=1)
         print(f"\n{args.next}: {chosen} at {args.states} lambdas of equal thermodynamic length "
               f"(min ESS on the grid {ess.min():.0f}):\n  {np.round(lambdas, 4).tolist()}")
 

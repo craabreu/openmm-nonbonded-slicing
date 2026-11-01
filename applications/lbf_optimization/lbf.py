@@ -441,6 +441,10 @@ class Run:
     series: list
     capping_orders: tuple = (3, 3)
     terms: tuple = LEGACY_TERMS
+    system: tuple = None  # (smiles, forcefield, water); runs that did not store it are the phenol default
+
+
+DEFAULT_SYSTEM = ("c1ccc(cc1)O", "openff-2.2.1", "amber/tip3p_standard.xml")
 
 
 def load_run(path, default_temperature=298.15):
@@ -462,7 +466,8 @@ def load_run(path, default_temperature=298.15):
         series = [by_state[:, k] for k in range(by_state.shape[1])]
         orders = tuple(int(m) for m in d["capping_orders"]) if "capping_orders" in d else (3, 3)
         terms = tuple(str(t) for t in d["terms"]) if "terms" in d else LEGACY_TERMS
-        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, terms)
+        system = tuple(str(x) for x in d["system"]) if "system" in d else DEFAULT_SYSTEM
+        return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, terms, system)
     files = sorted(glob.glob(os.path.join(path, "state_*.npz")))
     if not files:
         raise FileNotFoundError(f"no samples.npz or state_*.npz in {path}")
@@ -472,6 +477,7 @@ def load_run(path, default_temperature=298.15):
         np.array([s["h"] for s in states]),
         default_temperature,
         [s["U"] for s in states],
+        system=DEFAULT_SYSTEM,
     )
 
 
