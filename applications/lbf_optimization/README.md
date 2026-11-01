@@ -11,8 +11,12 @@ Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`
 ## Quick start
 
 The default protocol, `C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`, was chosen for phenol, methane, anisole and
-paracetamol. For each of them, its cost is within 7% of the best protocol found for that solute alone
-(`RESULTS.md`). For a solute like these, sample it and compute the free energy:
+paracetamol. It needs about half the simulation time of the protocol of Correa et al. for the same error,
+and for each solute it is within 7% of the best protocol found for that solute alone (`RESULTS.md`):
+
+![Cost of the default protocol relative to the paper protocol, for four solutes](figures/cost_by_solute.png)
+
+For a solute like these, sample it and compute the free energy:
 
 ```bash
 python simulate.py run1 --smiles "CC(=O)Nc1ccc(O)cc1"    # 21 states uniform in λ, 2 ns each, one GPU
@@ -22,8 +26,7 @@ python validate.py paracetamol=run1                       # ΔG = G(coupled) −
 At the end, `simulate.py` prints the collapse diagnostic (see [Charging too early](#charging-too-early)).
 No state should be flagged.
 
-States placed at equal thermodynamic length make neighbor exchanges more even and replicas travel faster:
-for paracetamol, 76 round trips in 2 ns against 60, and the weakest acceptance went from 0.36 to 0.52. To
+States placed at equal thermodynamic length make neighbor exchanges even and replicas travel faster. To
 place them from the first run and sample again:
 
 ```bash
@@ -31,6 +34,8 @@ python search.py run1 --choose default --next plan.json   # also scores the prot
 python simulate.py run2 --plan plan.json                  # the plan carries the solute and protocol
 python validate.py paracetamol=run1,run2                  # ΔG of each run and the spread between them
 ```
+
+![Neighbor swap acceptance for uniform and equal-length states](figures/state_placement.png)
 
 ## The protocol
 
@@ -70,6 +75,8 @@ any of them sd(du/dλ) keeps a peak where the cavity grows, at small λ; the exp
 at both ends, flattens it. The price is a finite λ-force at λ = 0 and 1, which is what makes the variance
 finite there; whether λ-dynamics minds is still to be tested.
 
+![The default protocol's switching functions, and its fluctuation profile against the paper protocol](figures/default_protocol.png)
+
 The decapping window keeps h_D, and the λ-force of decapping, exactly zero while the capped terms are weak.
 Its onset power m0 + 1 ≥ 8 keeps var(du/dλ) finite where it starts. The electrostatics have a window too,
 by default the same one.
@@ -88,11 +95,13 @@ the sampled states (`RESULTS.md`).
 
 `simulate.py` checks it on configurations. Per frame it records the closest approach of a solute N or O to
 a water oxygen. At the end it prints, per state, the fraction of frames within 0.2 nm, and it marks with
-`!` the states where that fraction exceeds 5% while the charges are on and h_D < 10⁻³. Brief overlaps are
-normal wherever the core is capped, so a few percent in the weakly coupled states means nothing; for
-phenol, protocols under the limit show 0 to 1.5% there, and one that charges early (with capped Coulomb,
-so that it does not crash) 7 to 15%. A crash in
-such a state is reported with its likely cause.
+`!` the states where that fraction exceeds 5% while the charges are on and h_D < 10⁻³. With the charges
+off, short contacts are normal, since water passes through the capped core: near λ = 0 most frames have
+one. With the charges on and h_D < 10⁻³, protocols under the limit show 0 to 1.5% for phenol, and one that
+charges early (with capped Coulomb, so that it does not crash) 7 to 15%. A crash in such a state is
+reported with its likely cause.
+
+![The collapse diagnostic for the default protocol and for a protocol that charges early](figures/collapse_diagnostic.png)
 
 ## Files
 
