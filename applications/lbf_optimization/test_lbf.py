@@ -6,7 +6,7 @@ import pytest
 from lbf import (
     DEFAULT_PROTOCOL,
     EXP,
-    SMOOTH,
+    SYSTEM_DEFAULTS,
     TERMS,
     PaperProtocol,
     Protocol,
@@ -106,7 +106,8 @@ def test_coulomb_decapping_ties():
 
 
 @pytest.mark.parametrize("text", ["C(1,0) D(11,1)", "C(1,0) D(11,1) E(2,0) X", "C(1,0) D(11) E(2,x)",
-                                  "C(1,0) D(11,1) E(2,0) Q=E Q=D", "C(1,0) D(11,1) E(2,0) Q=E Q(2,0)", "Q=E"])
+                                  "C(1,0) D(11,1) E(2,0) Q=E Q=D", "C(1,0) D(11,1) E(2,0) Q=E Q(2,0)", "Q=E",
+                                  "C(1,0) D(inf,2)[0.4] E(2,0)", "C(1,0) D(8,2)[1] E(2,0)"])
 def test_protocol_errors(text):
     with pytest.raises(ValueError):
         Protocol.parse(text)
@@ -206,6 +207,8 @@ def test_end_orders():
     assert Protocol.parse("C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E").end_orders() == (2, 1)
     assert Protocol.parse("C(3,2) D(inf)[0.4] E(1,1)").end_orders() == (1, 1)
     assert PaperProtocol().end_orders() == (2, 2)
+    with pytest.raises(ValueError, match="switches on at lambda = 0"):
+        Protocol.parse("C(exp 2.5)[0.3] D(8,2)[0.4] E(3,1)[0.4] Q=E").end_orders()
 
 
 def test_lambda_of_c():
@@ -255,16 +258,18 @@ def test_mix_replicas_samples_the_permutation_distribution():
     assert sorted(state) == list(range(num))
 
 
-PHENOL = ("c1ccc(cc1)O", "openff-2.2.1", "amber/tip3p_standard.xml")
+PHENOL = dict(SYSTEM_DEFAULTS, smiles="c1ccc(cc1)O")
 
 
 def write_samples(path, **changes):
+    import json
+
     history = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])
     arrays = dict(
-        protocol=DEFAULT_PROTOCOL, lambdas=np.array([0.0, 1.0]), H=np.zeros((2, 4)), terms=np.array(TERMS),
-        temperature=300.0, capping_orders=np.array([3, 3]), system=np.array(PHENOL), iteration_ps=1.0,
-        equilibration=1, exchange=True, state_of_replica_history=history,
-        U=np.arange(4 * 2 * 4, dtype=float).reshape(4, 2, 4), accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)),
+        protocol=DEFAULT_PROTOCOL, lambdas=np.array([0.0, 1.0]), H=np.array([[0.0] * 4, [1.0] * 4]),
+        terms=np.array(TERMS), system=json.dumps(PHENOL), iteration_ps=1.0, equilibration=1, exchange=True,
+        state_of_replica_history=history, U=np.arange(4 * 2 * 4, dtype=float).reshape(4, 2, 4),
+        accepted=np.zeros((2, 2)), attempted=np.zeros((2, 2)),
     )
     arrays.update(changes)
     np.savez(path / "samples.npz", **{k: v for k, v in arrays.items() if v is not None})
@@ -275,38 +280,84 @@ def test_load_run(tmp_path):
     # Two replicas swap states at iteration 2; the series of each state must follow the state.
     U = write_samples(tmp_path)["U"]
     run = load_run(str(tmp_path))
-    assert run.temperature == 300.0 and run.capping_orders == (3, 3) and run.system == PHENOL
+    assert run.temperature == 298.15 and run.system == PHENOL
     assert np.array_equal(run.series[0], np.array([U[1, 0], U[2, 1], U[3, 1]]))
     assert np.array_equal(run.series[1], np.array([U[1, 1], U[2, 0], U[3, 0]]))
-    # runs of older versions, without the solute or with one decapping energy, are refused
-    write_samples(tmp_path, system=None)
-    with pytest.raises(SystemExit, match="older simulate.py"):
+    # files of older versions (no system, the three-entry system, one decapping energy) are refused
+    for changes in (dict(system=None), dict(system=np.array(["c1ccc(cc1)O", "openff-2.2.1", "tip3p.xml"])),
+                    dict(terms=np.array(["C", "D", "E"]), U=np.zeros((4, 2, 3)))):
+        write_samples(tmp_path, **changes)
+        with pytest.raises(SystemExit, match="older version"):
+            load_run(str(tmp_path))
+    write_samples(tmp_path, equilibration=4)
+    with pytest.raises(SystemExit, match="no samples after the equilibration"):
         load_run(str(tmp_path))
-    write_samples(tmp_path, terms=np.array(["C", "D", "E"]), U=np.zeros((4, 2, 3)))
-    with pytest.raises(SystemExit, match="older simulate.py"):
-        load_run(str(tmp_path))
+    with pytest.raises(SystemExit, match="not an output directory"):
+        load_run(str(tmp_path / "missing"))
 
 
 def test_system_is_resolved_and_checked():
-    from types import SimpleNamespace
-
-    from lbf import DEFAULT_FORCEFIELD, DEFAULT_WATER, Run
+    from lbf import Run
     from search import Reweighter
-    from simulate import resolve_system
+    from simulate import parse_args, resolve_system
 
-    args = SimpleNamespace(plan="next.json", smiles=None, forcefield=None, water=None)
-    resolve_system(args, {"smiles": "C"})
-    assert (args.smiles, args.forcefield, args.water) == ("C", DEFAULT_FORCEFIELD, DEFAULT_WATER)
+    args = parse_args(["out", "--plan", "next.json"])
+    resolve_system(args, {"system": dict(PHENOL, smiles="C", capping_orders=[2, 4])})
+    assert args.system == dict(PHENOL, smiles="C", capping_orders=[2, 4])  # the plan's settings carry over
+    args = parse_args(["out", "--smiles", "C", "--box_nm", "4"])
+    resolve_system(args)
+    assert args.system == dict(PHENOL, smiles="C", box_nm=4.0)
     with pytest.raises(SystemExit, match="--smiles"):  # no default solute
-        resolve_system(SimpleNamespace(plan=None, smiles=None, forcefield=None, water=None))
-    with pytest.raises(SystemExit):  # states placed for another solute
-        resolve_system(SimpleNamespace(plan="next.json", smiles="C", forcefield=None, water=None), {"smiles": "CO"})
+        resolve_system(parse_args(["out"]))
+    for option in (["--smiles", "CO"], ["--capping_orders", "3", "3"], ["--temperature", "300"]):
+        with pytest.raises(SystemExit, match="differs from"):  # the plan's states are placed for its system
+            resolve_system(parse_args(["out", "--plan", "next.json"] + option),
+                           {"system": dict(PHENOL, smiles="C", capping_orders=[2, 4])})
 
     H = np.zeros((2, 4))
-    runs = [Run(np.array([0.0, 1.0]), H, 298.15, [], (3, 3), PHENOL),
-            Run(np.array([0.0, 1.0]), H, 298.15, [], (3, 3), ("C",) + PHENOL[1:])]
-    with pytest.raises(SystemExit, match="different systems"):
-        Reweighter(runs, chunk=10)
+    runs = [Run(np.array([0.0, 1.0]), H, [], PHENOL), Run(np.array([0.0, 1.0]), H, [], dict(PHENOL, pressure=2.0))]
+    with pytest.raises(SystemExit, match="differ in pressure"):
+        Reweighter(runs)
+
+
+def test_states_are_checked(tmp_path):
+    import json
+
+    from simulate import parse_args, read_states
+
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"protocol": "default", "lambdas": [0.0, 0.5, 1.0], "system": PHENOL}))
+    protocol, lambdas = read_states(parse_args(["out", "--plan", str(plan)]))
+    assert str(protocol) == DEFAULT_PROTOCOL and lambdas.tolist() == [0.0, 0.5, 1.0]
+    with pytest.raises(SystemExit, match="drop --protocol"):  # the plan sets them
+        read_states(parse_args(["out", "--plan", str(plan), "--protocol", "paper"]))
+    assert read_states(parse_args(["out", "--smiles", "C", "--lambdas", "1,0.45"]))[1].tolist() == [0.45, 1.0]
+    for bad in ("0,0.5,1.2", "0,0.5,0.5,1"):
+        with pytest.raises(SystemExit, match="distinct and within"):
+            read_states(parse_args(["out", "--smiles", "C", "--lambdas", bad]))
+    with pytest.raises(SystemExit):
+        parse_args(["out", "--smiles", "C", "--iterations", "10", "--equilibration", "10"])
+
+
+def test_free_energy_needs_both_end_states(tmp_path):
+    from free_energy import free_energy
+
+    write_samples(tmp_path, lambdas=np.array([0.0, 0.5]), H=np.array([[0.0] * 4, [0.5] * 4]))
+    with pytest.raises(SystemExit, match="lambda = 1"):
+        free_energy(str(tmp_path))
+
+
+def test_help_formatter_shows_defaults():
+    import argparse
+
+    from lbf import HelpFormatter
+
+    parser = argparse.ArgumentParser(formatter_class=HelpFormatter)
+    parser.add_argument("--zero", type=float, default=0.0, help="a value")
+    parser.add_argument("--unset", help="a value")
+    parser.add_argument("--flag", action="store_true", help="a switch")
+    text = parser.format_help()
+    assert "a value (default: 0.0)" in text and "(default: None)" not in text and "(default: False)" not in text
 
 
 def test_default_protocol():

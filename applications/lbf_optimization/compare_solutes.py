@@ -16,7 +16,7 @@ import argparse
 
 import numpy as np
 
-from lbf import DEFAULT_PROTOCOL, Protocol
+from lbf import DEFAULT_PROTOCOL, HelpFormatter, Protocol
 
 
 def labeled_files(text):
@@ -39,11 +39,16 @@ def explored(paths, max_hazard):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("solutes", nargs="+", type=labeled_files, metavar="LABEL=RESULTS[,RESULTS...]")
-    parser.add_argument("--max_hazard", type=float, default=0.15, help="as in search.py (default: 0.15)")
-    parser.add_argument("--top", type=int, default=6, help="rows per ranking (default: 6)")
-    parser.add_argument("--show", nargs="+", default=[DEFAULT_PROTOCOL], metavar="PROTOCOL")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=HelpFormatter)
+    parser.add_argument(
+        "solutes", nargs="+", type=labeled_files, metavar="LABEL=RESULTS[,RESULTS...]",
+        help="a solute's label and the results files of its searches (search.py --out)",
+    )
+    parser.add_argument("--max_hazard", type=float, default=0.15, help="as in search.py")
+    parser.add_argument("--top", type=int, default=6, help="rows per ranking")
+    parser.add_argument(
+        "--show", nargs="+", default=[DEFAULT_PROTOCOL], metavar="PROTOCOL", help="protocols whose ratios to print"
+    )
     args = parser.parse_args()
 
     labels = [label for label, _ in args.solutes]

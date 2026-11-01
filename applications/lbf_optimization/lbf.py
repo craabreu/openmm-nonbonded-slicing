@@ -29,11 +29,13 @@ both ends. A term can have a window: it is zero for lambda <= a and switches on 
 
 The exponential is the shape the capped Lennard-Jones term wants: with it, sd(du/dlambda) is nearly flat
 along lambda, where every polynomial step leaves the cavity-growth peak (for phenol, I_var drops from 240
-to 204 kT^2 relative to S_{2,1}). The polynomial steps' zero end slopes are what excluded it.
+to 204 kT^2 relative to S_{2,1}).
 
 DEFAULT_PROTOCOL is the protocol chosen for phenol, methane, anisole and paracetamol (see RESULTS.md).
 """
 
+import argparse
+import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -49,6 +51,30 @@ EXP = -2  # m0 of the exponential (e^(bx) - 1)/(e^b - 1); the m1 slot holds the 
 DEFAULT_PROTOCOL = "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E"
 DEFAULT_FORCEFIELD = "openff-2.2.1"
 DEFAULT_WATER = "amber/tip3p_standard.xml"
+# What makes two runs samples of different systems: every run stores these, every plan carries them, and
+# search.py pools only runs that agree on all of them. The solute has no default.
+SYSTEM_DEFAULTS = {
+    "smiles": None,
+    "forcefield": DEFAULT_FORCEFIELD,
+    "water": DEFAULT_WATER,
+    "box_nm": 3.0,
+    "hydrogen_mass": 3.0,
+    "temperature": 298.15,
+    "pressure": 1.0,
+    "capping_orders": [3, 3],
+}
+
+
+class HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Keeps the module docstring as written and appends each option's default to its help, unless the help
+    already states it or there is no default."""
+
+    def _get_help_string(self, action):
+        text = action.help or ""
+        hidden = action.default is None or action.default is False or action.default == argparse.SUPPRESS
+        if action.option_strings and not hidden and "default" not in text:
+            text += " (default: %(default)s)"
+        return text
 
 
 def beta(temperature):
@@ -112,6 +138,7 @@ def smooth_step(x):
 # ----------------------------------------------------------------------------------------------------------
 
 _SPEC = re.compile(r"([CDQE])\((inf|exp[0-9.]+|\d+)(?:,(\d+))?\)(?:\[([0-9.]+)\])?")
+_EXPECTED = "expected e.g. 'C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E'"
 _TIE = re.compile(r"Q=([DE])")
 
 
@@ -145,16 +172,21 @@ class Protocol:
         compact = text.replace(" ", "")
         found = {}
         for term, m0, m1, a in _SPEC.findall(compact):
-            if m0.startswith("exp"):
+            if m0.startswith("exp") or m0 == "inf":
                 if m1:
-                    raise ValueError(f"cannot parse protocol {text!r}: the exponential takes one number, its rate")
+                    raise ValueError(f"cannot parse protocol {text!r}: {term}({m0},{m1}) takes no second number")
+                if m0 == "inf":
+                    found[term] = (SMOOTH, 0, float(a or 0.0))
+                    continue
                 found[term] = (EXP, float(m0[3:]), float(a or 0.0))
             else:
-                found[term] = (SMOOTH if m0 == "inf" else int(m0), int(m1 or 0), float(a or 0.0))
+                found[term] = (int(m0), int(m1 or 0), float(a or 0.0))
         ties = _TIE.findall(compact)
         rest = _TIE.sub("", _SPEC.sub("", compact))
         if set(found) not in ({"C", "D", "E"}, set(TERMS)) or rest or len(ties) + ("Q" in found) > 1:
-            raise ValueError(f"cannot parse protocol {text!r}; expected e.g. 'C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E'")
+            raise ValueError(f"cannot parse protocol {text!r}; {_EXPECTED}")
+        if any(a >= 1 for _, _, a in found.values()):
+            raise ValueError(f"cannot parse protocol {text!r}: a window must start below 1")
         if "Q" not in found:
             found["Q"] = found[ties[0] if ties else "D"]
         return cls(tuple(found[term] for term in TERMS))
@@ -196,6 +228,9 @@ class Protocol:
         lambda^(p0+1) and (1 - lambda)^(p1+1)."""
         at_zero = [0 if m0 == EXP else m0 for m0, m1, a in self.specs if a == 0 and m0 != SMOOTH]
         at_one = [0 if m0 == EXP else m1 for m0, m1, a in self.specs if m0 != SMOOTH]
+        if not at_zero or not at_one:
+            raise ValueError(f"{self}: no polynomial or exponential term switches on at lambda = 0 (or none at "
+                             "all), so the ends of lambda(c) have no power law")
         return min(at_zero), min(at_one)
 
 
@@ -393,15 +428,28 @@ def mix_replicas(u, state_of_replica, num_attempts, rng, accepted=None, attempte
 @dataclass
 class Run:
     """The samples of one simulation, by state: series[k] holds the slice energies (n_k, 4) sampled in state
-    k, in time order, after equilibration; H (K, 4) holds the scaling parameters of the states; system is
-    (smiles, forcefield, water)."""
+    k, in time order, after equilibration; H (K, 4) holds the scaling parameters of the states; system holds
+    the settings of SYSTEM_DEFAULTS."""
 
     lambdas: np.ndarray
     H: np.ndarray
-    temperature: float
     series: list
-    capping_orders: tuple
-    system: tuple
+    system: dict
+
+    @property
+    def temperature(self):
+        return self.system["temperature"]
+
+
+def read_system(stored, source):
+    """The system settings stored as JSON in a samples, checkpoint or plan file."""
+    try:
+        system = json.loads(str(stored))
+    except ValueError:
+        system = None
+    if not isinstance(system, dict) or set(system) != set(SYSTEM_DEFAULTS):
+        raise SystemExit(f"{source} was written by an older version of these scripts and cannot be read")
+    return system
 
 
 def load_run(path):
@@ -410,11 +458,11 @@ def load_run(path):
 
     samples = os.path.join(path, "samples.npz")
     if not os.path.exists(samples):
-        raise FileNotFoundError(f"no samples.npz in {path}")
+        raise SystemExit(f"no samples.npz in {path}: not an output directory of simulate.py")
     d = np.load(samples)
     if "system" not in d or tuple(str(t) for t in d["terms"]) != TERMS:
-        raise SystemExit(f"{samples} was written by an older simulate.py (no solute, or no separate Coulomb "
-                         "decapping energy) and cannot be read")
+        raise SystemExit(f"{samples} was written by an older version of these scripts and cannot be read")
+    system = read_system(d["system"], samples)
     history, U = d["state_of_replica_history"], d["U"]
     keep = slice(int(d["equilibration"]), None)
     history, U = history[keep], U[keep]
@@ -422,9 +470,9 @@ def load_run(path):
     rows = np.arange(len(U))[:, None]
     by_state = U[rows, replica_in_state]  # (n, K, 4)
     series = [by_state[:, k] for k in range(by_state.shape[1])]
-    orders = tuple(int(m) for m in d["capping_orders"])
-    system = tuple(str(x) for x in d["system"])
-    return Run(d["lambdas"], d["H"], float(d["temperature"]), series, orders, system)
+    if any(len(x) == 0 for x in series):
+        raise SystemExit(f"{samples} has no samples after the equilibration")
+    return Run(d["lambdas"], d["H"], series, system)
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -466,8 +514,9 @@ def build_system(
 ):
     """A solute in water with a SlicedNonbondedForce, whose subset 1 is the solute and subset 0 the solvent.
 
-    forcefield is a SMIRNOFF force field (e.g. "openff-2.2.1") or GAFF (e.g. "gaff-2.11") for the solute;
-    water is an OpenMM force field file for the solvent. The four terms of the solute-solvent slice get the
+    forcefield is a SMIRNOFF force field (e.g. "openff-2.2.1") or GAFF (e.g. "gaff-2.11") for the solute,
+    with AM1-BCC charges (which need AmberTools, OpenEye or openff-nagl); water is an OpenMM force field file
+    for a 3-site water model, since the solvent is added as 3-site water. The four terms of the solute-solvent slice get the
     global parameters of PARAMS. Particles with zero epsilon (e.g. TIP3P hydrogens) get sigma = 0, so that
     their Coulomb cap radius is half that of their partner instead of an arbitrary placeholder sigma.
     capping_orders are (m0, m1) of the capped potentials, which set the height of the cap: the default
@@ -491,14 +540,20 @@ def build_system(
     ff.registerTemplateGenerator(generator.generator)
     modeller = app.Modeller(molecule.to_topology().to_openmm(), molecule.conformers[0].to_openmm())
     modeller.addSolvent(ff, boxSize=mm.Vec3(box_nm, box_nm, box_nm) * unit.nanometers)
-    system = ff.createSystem(
-        modeller.topology,
-        nonbondedMethod=app.PME,
-        nonbondedCutoff=cutoff_nm * unit.nanometers,
-        constraints=app.HBonds,
-        rigidWater=True,
-        hydrogenMass=hydrogen_mass * unit.amu if hydrogen_mass else None,
-    )
+    try:
+        system = ff.createSystem(
+            modeller.topology,
+            nonbondedMethod=app.PME,
+            nonbondedCutoff=cutoff_nm * unit.nanometers,
+            constraints=app.HBonds,
+            rigidWater=True,
+            hydrogenMass=hydrogen_mass * unit.amu if hydrogen_mass else None,
+        )
+    except ValueError as error:
+        if "template" not in str(error):
+            raise
+        raise SystemExit(f"{water} does not match the 3-site water these scripts add: only 3-site water models "
+                         f"(TIP3P, SPC/E, ...) are supported ({error})") from None
     index, nonbonded = next((i, f) for i, f in enumerate(system.getForces()) if isinstance(f, mm.NonbondedForce))
     nonbonded.setUseSwitchingFunction(True)
     nonbonded.setSwitchingDistance(switch_nm * unit.nanometers)
@@ -515,7 +570,11 @@ def build_system(
     for term in TERMS:
         force.addGlobalParameter(PARAMS[term], 1.0)
     # (includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping)
-    force.addScalingParameter(PARAMS["C"], 0, 1, False, True, False, False)
+    try:
+        force.addScalingParameter(PARAMS["C"], 0, 1, False, True, False, False)
+    except TypeError:
+        raise SystemExit("this build of openmm-nonbonded-slicing has no Coulomb decapping: addScalingParameter "
+                         "must take seven arguments (see the README's requirements)") from None
     force.addScalingParameter(PARAMS["D"], 0, 1, False, False, False, True)
     force.addScalingParameter(PARAMS["Q"], 0, 1, False, False, True, False)
     force.addScalingParameter(PARAMS["E"], 0, 1, True, False, False, False)

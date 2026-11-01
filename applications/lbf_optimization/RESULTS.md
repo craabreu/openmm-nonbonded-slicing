@@ -1,27 +1,26 @@
 # How the default protocol was chosen
 
 The default protocol of `simulate.py`, `C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`, comes from a pilot on
-phenol (October 2026) and a search on three more solutes. This file records what the pilot settled, the
+phenol and a search on three more solutes. This file records what the pilot settled, the
 procedure, and the results, for anyone who wants to repeat it for other solutes, force fields or families.
 All runs used OpenFF Sage 2.2.1 with AM1-BCC charges, TIP3P, a 3 nm box, PME with a 1.0 nm cutoff switched
-from 0.9 nm, hydrogen mass repartitioning to 3 amu, 4 fs steps, 298.15 K and 1 bar (the `simulate.py`
-defaults), 21 states and 2 ns per state.
+from 0.9 nm, hydrogen mass repartitioning to 3 amu, 4 fs steps, 298.15 K and 1 bar, 21 states and 2 ns per state: the
+defaults of `simulate.py` (the cutoff and switching distance are fixed in `lbf.build_system`).
 
 ## Summary
 
-| solute | ΔG (kT) | I_var (kT²): paper | pilot C(2,1) | default | own best |
-|---|---|---|---|---|---|
-| phenol | −10.6 | 409 | 240 | 208 | 204 |
-| methane | +4.1 | 101 | 63 | 51 | 48 |
-| anisole | −4.3 | 409 | 241 | 196 | 193 |
-| paracetamol | −26.7 | 681 | 401 | 361 | 345 |
+| solute | ΔG (kT) | ΔG (kcal/mol) | I_var (kT²): paper | pilot C(2,1) | default | own best | default over own best |
+|---|---|---|---|---|---|---|---|
+| phenol | −10.56 | −6.26 | 408.9 | 240.1 | 208.3 | 203.7 | 2.3% |
+| methane | +4.10 | +2.43 | 101.3 | 63.4 | 51.4 | 48.1 | 6.9% |
+| anisole | −4.26 | −2.52 | 408.7 | 240.9 | 195.7 | 193.4 | 1.2% |
+| paracetamol | −26.74 | −15.84 | 680.9 | 401.0 | 361.0 | 344.5 | 4.8% |
 
-I_var is the cost of uniform sampling in λ: the simulation time needed for a given error scales with it.
-The values are from the search on each solute's reference run (results 3 and 5 below). "Own best" is the
-best protocol found for that solute alone under the same hazard limit of 0.15. The default costs about
-half as much as the protocol of Correa et al. (2022) and is within 7% of each own best: phenol 2%, methane
-7%, anisole 1% and paracetamol 5% (`compare_solutes.py`). `C(exp 2.5) D(7,1)[0.4] E(3,1)[0.4] Q=E`
-(hazard 0.15) is as close.
+ΔG is the hydration free energy. I_var is the cost of uniform sampling in λ: the simulation time needed for
+a given error scales with it. All values are from the search on each solute's reference run (results 3
+and 5 below). "Own best" is the best protocol found for that solute alone under the same hazard limit of
+0.15. The default costs about half as much as the protocol of Correa et al. (2022) and is within 7% of each
+own best (`compare_solutes.py`). `C(exp 2.5) D(7,1)[0.4] E(3,1)[0.4] Q=E` (hazard 0.15) is as close.
 
 ## What the pilot settled
 
@@ -54,9 +53,9 @@ the exponential C).
 **State placement for replica exchange.** Equal increments of thermodynamic length, with the replica flow
 (feedback method of Katzgraber, Trebst, Huse and Troyer) as the check; the two agreed for phenol.
 
-**Left out.** The λ(c) reparametrization (`reparametrize.py`), the Bernstein, tanh and Gompertz fits, the
-λ¹² forms, the search over Coulomb caps, and the feedback optimization as anything but a check. They were
-how the pilot found the family and the constraints; with those known, the procedure is a direct search in λ.
+**Tools, not steps.** The λ(c) reparametrization (`reparametrize.py`) and the feedback optimization
+(`flow.py`) helped the pilot find the family and check the placement; with those known, the procedure is a
+direct search in λ.
 
 ## The procedure
 
@@ -80,9 +79,9 @@ Steps 1 to 4 were done for phenol, then step 5 for methane, anisole and paraceta
 
 1. **System.** At full coupling the four-term system matches the plain force field to 5e-9 relative in
    energy and 2e-10 kJ/mol/nm in forces (CUDA, double precision).
-2. **Collapse diagnostic.** Its first rule (any contact below 0.24 nm) flagged single-frame overlaps
-   through the capped core, which are normal. The rule now counts the fraction of frames within 0.2 nm and
-   flags it above 5% where the charges are on and h_D < 10⁻³. Single-state runs (`--no_exchange`) of
+2. **Collapse diagnostic.** A single short contact is normal through the capped core, so the diagnostic
+   counts the fraction of frames within 0.2 nm and flags it above 5% where the charges are on and
+   h_D < 10⁻³. Single-state runs (`--no_exchange`) of
    family members at the λ where h_D reaches 10⁻⁶ and at the peak of h_E/h_C showed the mechanism. With
    bare Coulomb, h_E = 0.02 at h_D = 0 crashed phenol within 40 ps; with capped Coulomb, the same protocol
    held a water fused onto the hydroxyl. Hazards of 0.25 and 0.35 were stable for 2 ns. At 0.5 one state
@@ -90,7 +89,7 @@ Steps 1 to 4 were done for phenol, then step 5 for methane, anisole and paraceta
    fused within 100 ps and the runs crashed. These runs measure how fast a collapse happens, not whether
    the fused state is favorable.
 3. **Reference run and search for phenol.** The pilot's search predicted
-   `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E` (hazard 0.18, under the limit of 0.25 then in use). Its run
+   `C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] Q=E` (hazard 0.18; the limit was then 0.25, see 4). Its run
    ranked it first again, with I_var 202.4 against 202.2 predicted; a = 0.3 gave 200.6 and a = 0.5 gave 208.
    Its equal-length round confirmed it (pooled I_var 202.3, I_var/L² 1.08, nothing flagged). Neighbor
    acceptance was 0.62 to 0.67, against 0.49 to 0.84 for uniform states, and round trips in 2000
@@ -104,19 +103,21 @@ Steps 1 to 4 were done for phenol, then step 5 for methane, anisole and paraceta
    rules that protocol out.
 5. **Other solutes.** Reference runs of the phenol protocol for methane (nonpolar), anisole (an acceptor
    but no donor) and paracetamol (larger, with donors and acceptors), on uniform states, and a search for
-   each. No run flagged a collapse. The optima agree on b = 2.5 to 3 and differ in D and E orders that
+   each. The seed was the phenol protocol of 3, run before the limit was lowered; a search does not depend
+   on which protocol sampled, only on how well the samples overlap the protocols it scores. No run flagged
+   a collapse. The optima agree on b = 2.5 to 3 and differ in D and E orders that
    barely matter, which is why one default serves all four (summary table).
 
    The paracetamol run of the default, on equal-length states, is the direct check. Nothing was flagged,
    the weakest neighbor acceptance was 0.52 against 0.36 for the uniform run of the phenol protocol, and
-   there were 76 round trips in 2000 iterations against 60. Pooled with the uniform run, the default
-   scores I_var 362, against 345 for the phenol protocol.
+   there were 76 round trips in 2000 iterations against 60, a gain from both the placement and the
+   protocol. Pooled with the uniform run, the default scores I_var 362 and I_var/L² 1.16.
 
 ## Open questions
 
 - **ΔG of paracetamol.** The default run gives −26.99 ± 0.09 kT and the uniform run −26.72 ± 0.10, two
   standard errors apart; paracetamol may have slow degrees of freedom that 2 ns per state does not
-  average. Independent repeats (`validate.py`) would tell. Phenol's three runs agree (−10.68, −10.56,
+  average. Independent repeats (`free_energy.py`) would tell. Phenol's three runs agree (−10.68, −10.56,
   −10.65).
 - **The hazard for other solutes.** Neither paracetamol run sampled a fused configuration deep enough to
   probe the hazard as phenol's did, so for paracetamol the limit rests on the phenol evidence.
@@ -125,6 +126,3 @@ Steps 1 to 4 were done for phenol, then step 5 for methane, anisole and paraceta
   and the round trips in λ. This tests what reweighting cannot see: the correlation time along λ, whether
   the finite λ-force of the exponential at λ = 0 and 1 causes trouble, and whether the walk finds fused
   states between the hazard limit and the replica-exchange states.
-
-The runs and search tables of the pilot are in `~/github_repos/lbf_runs/` on the machine where they were
-made.

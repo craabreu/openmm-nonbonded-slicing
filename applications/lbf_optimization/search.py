@@ -37,7 +37,9 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import numpy as np
 from scipy.special import logsumexp
 
-from lbf import DEFAULT_PROTOCOL, EXP, SMOOTH, TERMS, Protocol, beta, equal_length_lambdas, load_run
+from lbf import DEFAULT_PROTOCOL, EXP, SMOOTH, HelpFormatter, Protocol, beta, equal_length_lambdas, load_run
+
+DEFAULT_CHUNK = 1500  # targets reweighted at once; bounds the memory of Reweighter.at
 
 
 def int_range(text):
@@ -47,62 +49,61 @@ def int_range(text):
     return range(lo, hi + 1)
 
 
-def min_h(text):
-    term, value = text.split("=")
-    if term not in TERMS:
-        raise argparse.ArgumentTypeError(f"term must be one of {TERMS}")
-    return term, float(value)
-
-
 def parse_args():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("runs", nargs="+")
-    parser.add_argument("--a", type=float, default=0.4, help="start of the decapping window (default: 0.4)")
-    families = parser.add_argument_group("protocol families (inclusive ranges lo:hi, or none)")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=HelpFormatter)
+    parser.add_argument("runs", nargs="+", help="output directories of simulate.py, all of one system")
+    parser.add_argument("--a", type=float, default=0.4, help="start of the decapping window of D")
+    families = parser.add_argument_group("protocol family (integer ranges lo:hi, inclusive, or none)")
     families.add_argument(
         "--bC", type=float, nargs="*", metavar="B", default=[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
-        help="rates of the exponential C (default: 1 to 4 by 0.5)",
+        help="rates b of the exponential C",
     )
-    families.add_argument("--m0C", type=int_range, default=int_range("none"), help="polynomial steps for C")
-    families.add_argument("--m1C", type=int_range, default=int_range("none"))
-    families.add_argument("--m0D", type=int_range, default=int_range("7:11"))
-    families.add_argument("--m1D", type=int_range, default=int_range("1:3"))
-    families.add_argument("--m0E", type=int_range, default=int_range("1:3"))
-    families.add_argument("--m1E", type=int_range, default=int_range("1:3"))
-    families.add_argument(
-        "--aE", type=float, nargs="+", metavar="A", help="starts of the window of E (default: a)",
-    )
+    families.add_argument("--m0C", type=int_range, default="none", help="m0 of polynomial steps for C, with --m1C")
+    families.add_argument("--m1C", type=int_range, default="none", help="m1 of polynomial steps for C")
+    families.add_argument("--m0D", type=int_range, default="7:11", help="m0 of the decapping step D; keep m0 >= 7")
+    families.add_argument("--m1D", type=int_range, default="1:3", help="m1 of the decapping step D")
+    families.add_argument("--m0E", type=int_range, default="1:3", help="m0 of the electrostatics step E")
+    families.add_argument("--m1E", type=int_range, default="1:3", help="m1 of the electrostatics step E")
+    families.add_argument("--aE", type=float, nargs="+", metavar="A", help="starts of the window of E, each >= a (default: a)")
     families.add_argument(
         "--Q", choices=("D", "E"), nargs="+", default=["E"],
-        help="which term the Coulomb decapping follows (default: E, bare Coulomb)",
+        help="which term the Coulomb decapping follows: E for bare Coulomb, D for capped Coulomb",
     )
-    families.add_argument("--smooth_d", action="store_true", help="include the C-infinity decapping step")
+    families.add_argument("--smooth_d", action="store_true", help="also score the C-infinity decapping step")
     families.add_argument(
-        "--min_h_at_a", type=min_h, action="append", default=[], metavar="TERM=VALUE",
-        help="keep protocols whose term (C or E) is at least VALUE at lambda = a; repeatable",
+        "--min_hC_at_a", type=float, default=0.0, metavar="VALUE",
+        help="keep only protocols whose capped Lennard-Jones h_C is at least VALUE where decapping starts",
     )
     scoring = parser.add_argument_group("scoring")
-    scoring.add_argument("--rank", choices=("L", "I_var"), default="I_var")
-    scoring.add_argument("--ess", type=float, default=100.0)
-    scoring.add_argument("--nodes", type=int, default=64, help="quadrature nodes of the screen")
-    scoring.add_argument("--fine_nodes", type=int, default=512, help="quadrature nodes of the rescoring")
+    scoring.add_argument("--rank", choices=("L", "I_var"), default="I_var", help="the score that ranks protocols")
+    scoring.add_argument(
+        "--ess", type=float, default=100.0,
+        help="Kish effective sample size a protocol needs at every node to count as explored",
+    )
+    scoring.add_argument("--nodes", type=int, default=64, help="Gauss-Legendre nodes of the screen")
+    scoring.add_argument("--fine_nodes", type=int, default=512, help="Gauss-Legendre nodes of the rescoring")
     scoring.add_argument("--refine", type=int, default=150, help="rescore this many best by each score")
-    scoring.add_argument("--dg_tol", type=float, default=0.05, help="kT")
-    scoring.add_argument("--chunk", type=int, default=1500, help="targets reweighted at once (memory)")
+    scoring.add_argument("--dg_tol", type=float, default=0.05, help="largest dG deviation (kT) of a rescored protocol")
+    scoring.add_argument("--chunk", type=int, default=DEFAULT_CHUNK, help="targets reweighted at once (memory)")
     scoring.add_argument(
         "--reference", action="append", default=[], help="more protocols to score besides paper and the default",
     )
     scoring.add_argument(
         "--max_hazard", type=float, default=0.15,
-        help="keep protocols whose h_E/h_C, where h_D < 0.001, stays below this (default: 0.15; inf for all)",
+        help="keep protocols whose h_E/h_C, where h_D < 0.001, is at most this (inf for all)",
     )
     output = parser.add_argument_group("output")
-    output.add_argument("--out", default="results.npz")
+    output.add_argument("--out", default="results.npz", help="scores of every protocol, for compare_solutes.py")
     output.add_argument("--top", type=int, default=20, help="rows of the ranked table")
-    output.add_argument("--next", help="write the protocol and lambdas of the next round to this JSON file")
+    output.add_argument("--next", help="write the protocol, lambdas and system of the next round to this JSON file")
     output.add_argument("--states", type=int, default=21, help="states of the next round")
-    output.add_argument("--choose", help="protocol of the next round (default: the best explored)")
-    return parser.parse_args()
+    output.add_argument("--choose", help='protocol of the next round, e.g. "default" (default: the best explored)')
+    args = parser.parse_args()
+    if not 0 < args.a < 1:
+        parser.error("--a must lie in (0, 1)")
+    if args.aE is not None and min(args.aE) < args.a:
+        parser.error("every --aE must be at least --a: the charges follow the decapping")
+    return args
 
 
 def candidates(args):
@@ -121,21 +122,16 @@ def candidates(args):
 class Reweighter:
     """MBAR estimates at arbitrary states h from the pooled samples."""
 
-    def __init__(self, runs, chunk):
+    def __init__(self, runs, chunk=DEFAULT_CHUNK):
         from pymbar import MBAR
 
-        temperatures = {run.temperature for run in runs}
-        if len(temperatures) > 1:
-            raise SystemExit(f"runs at different temperatures: {sorted(temperatures)}")
-        # the capped potentials differ between capping orders, so their samples are of different systems
-        orders = {run.capping_orders for run in runs}
-        if len(orders) > 1:
-            raise SystemExit(f"runs with different capping orders cannot be pooled: {sorted(orders)}")
-        systems = {run.system for run in runs}
-        if len(systems) > 1:
-            raise SystemExit(f"runs of different systems (solute, force field, water) cannot be pooled: {sorted(systems)}")
-        self.system = systems.pop()
-        self.beta = beta(temperatures.pop())
+        # solute, force fields, box, temperature, pressure and capping orders must agree (lbf.SYSTEM_DEFAULTS)
+        first = runs[0].system
+        differ = sorted({k for run in runs[1:] for k in first if run.system[k] != first[k]})
+        if differ:
+            raise SystemExit(f"runs of different systems cannot be pooled: they differ in {', '.join(differ)}")
+        self.system = first
+        self.beta = beta(first["temperature"])
         self.h_states = np.concatenate([run.H for run in runs])
         series = [s for run in runs for s in run.series]
         N_k = np.array([len(s) for s in series])
@@ -165,10 +161,12 @@ class Reweighter:
         shape = (len(protocols), len(lam))
         return tuple(x.reshape(shape) for x in self.at(H, dH))
 
-    def score(self, protocols, nodes, a):
-        """L, I_var, dG and minimum ESS of each protocol by Gauss-Legendre quadrature split at a."""
+    def score(self, protocols, nodes, breaks=()):
+        """L, I_var, dG and minimum ESS of each protocol by Gauss-Legendre quadrature split at the breaks (the
+        window starts, where the switching functions have kinks)."""
         lam, weights = [], []
-        for lo, hi in ((0.0, a), (a, 1.0)) if 0 < a < 1 else ((0.0, 1.0),):
+        edges = [0.0] + sorted({b for b in breaks if 0 < b < 1}) + [1.0]
+        for lo, hi in zip(edges[:-1], edges[1:]):
             x, w = np.polynomial.legendre.leggauss(max(8, int(round(nodes * (hi - lo)))))
             lam.append(lo + 0.5 * (hi - lo) * (x + 1))
             weights.append(0.5 * (hi - lo) * w)
@@ -181,20 +179,24 @@ def main():
     args = parse_args()
     runs = [load_run(path) for path in args.runs]
     reweighter = Reweighter(runs, args.chunk)
+    H = reweighter.h_states
+    if not (np.any(np.all(H == 0, axis=1)) and np.any(np.all(np.isclose(H, 1), axis=1))):
+        raise SystemExit("the runs must include a decoupled state (lambda = 0) and a coupled one (lambda = 1)")
     print(f"{len(reweighter.h_states)} states, {len(reweighter.BU)} samples from {len(runs)} runs")
 
     protocols = list(candidates(args))
-    for term, value in args.min_h_at_a:
-        index = TERMS.index(term)
-        protocols = [p for p in protocols if p.h(args.a)[0][index, 0] >= value]
+    protocols = [p for p in protocols if p.h(args.a)[0][0, 0] >= args.min_hC_at_a]
     protocols = [p for p in protocols if p.charging_hazard() <= args.max_hazard]
+    if not protocols:
+        raise SystemExit("no protocol in the family satisfies the constraints; widen the family or --max_hazard")
+    breaks = [args.a] + (args.aE or [])
     references = [Protocol.parse(text) for text in ["paper", DEFAULT_PROTOCOL] + args.reference]
     print(f"{len(protocols)} protocols with the decapping window at a = {args.a:g}")
 
     # screen everything, then rescore the best by either score with more nodes
-    scores = reweighter.score(protocols, args.nodes, args.a)
+    scores = reweighter.score(protocols, args.nodes, breaks)
     top = np.union1d(np.argsort(scores["L"])[: args.refine], np.argsort(scores["I_var"])[: args.refine])
-    fine = reweighter.score([protocols[i] for i in top] + references, args.fine_nodes, args.a)
+    fine = reweighter.score([protocols[i] for i in top] + references, args.fine_nodes, breaks)
     for key in scores:
         scores[key][top] = fine[key][: len(top)]
     reference_scores = [{key: fine[key][len(top) + j] for key in fine} for j in range(len(references))]
@@ -244,9 +246,7 @@ def main():
         _, var, ess = reweighter.profile([chosen], grid)
         lambdas = equal_length_lambdas(grid, np.sqrt(var[0]), args.states)
         with open(args.next, "w") as f:
-            smiles, forcefield, water = reweighter.system
-            plan = {"protocol": str(chosen), "lambdas": lambdas.round(6).tolist(), "smiles": smiles,
-                    "forcefield": forcefield, "water": water}
+            plan = {"protocol": str(chosen), "lambdas": lambdas.round(6).tolist(), "system": reweighter.system}
             json.dump(plan, f, indent=1)
         print(f"\n{args.next}: {chosen} at {args.states} lambdas of equal thermodynamic length "
               f"(min ESS on the grid {ess.min():.0f}):\n  {np.round(lambdas, 4).tolist()}")

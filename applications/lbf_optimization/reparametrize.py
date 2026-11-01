@@ -1,6 +1,6 @@
 """Express a protocol in the thermodynamic-length coordinate c, for lambda-dynamics with a flat target.
 
-usage: python reparametrize.py RUN [RUN ...] --protocol "C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E" [--degree 8]
+usage: python reparametrize.py RUN [RUN ...] [--protocol P] [--degree 8]
                                [--out lambda_of_c.npz] [--plot lambda_of_c.png]
 
 With c(lambda) = int_0^lambda sd(du/dlambda') dlambda' / L, the standard deviation of du/dc is L everywhere,
@@ -20,28 +20,31 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")  # keep pymbar's JAX off the GPU t
 
 import numpy as np
 
-from lbf import Protocol, fit_lambda_of_c, lambda_of_c, load_run
+from lbf import DEFAULT_PROTOCOL, HelpFormatter, Protocol, fit_lambda_of_c, lambda_of_c, load_run
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=HelpFormatter)
     parser.add_argument("runs", nargs="+", help="output directories of simulate.py to pool")
-    parser.add_argument("--protocol", required=True, help='e.g. "C(2,1) D(7,2)[0.4] E(2,1)[0.4] Q=E"')
-    parser.add_argument("--degree", type=int, default=8, help="degree of the Bernstein polynomial w (default: 8)")
-    parser.add_argument("--out", default="lambda_of_c.npz")
-    parser.add_argument("--plot")
+    parser.add_argument("--protocol", default=DEFAULT_PROTOCOL, help="the protocol to reparametrize")
+    parser.add_argument("--degree", type=int, default=8, help="degree of the Bernstein polynomial w")
+    parser.add_argument("--out", default="lambda_of_c.npz", help="the protocol, L, end orders and w")
+    parser.add_argument("--plot", help="write a figure of lambda(c), h(lambda(c)) and sd(du/dc) to this file")
     args = parser.parse_args()
 
     from search import Reweighter
 
     protocol = Protocol.parse(args.protocol)
-    reweighter = Reweighter([load_run(path) for path in args.runs], 1500)
+    reweighter = Reweighter([load_run(path) for path in args.runs])
     lam = np.linspace(0.0, 1.0, 8001)
     _, var, ess = reweighter.profile([protocol], lam)
     sd = np.sqrt(var[0])
     L = np.trapezoid(sd, lam)
     uniform = np.trapezoid(var[0], lam) / L**2
-    p0, p1 = protocol.end_orders()
+    try:
+        p0, p1 = protocol.end_orders()
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
     w, flatness = fit_lambda_of_c(lam, sd, p0, p1, args.degree)
 
     # the check: reweight at the states lambda(c) with dh/dc = dh/dlambda dlambda/dc

@@ -18,13 +18,13 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")  # keep pymbar's JAX off the GPU t
 
 import numpy as np
 
-from lbf import Protocol, equal_length_lambdas, feedback_lambdas, load_run, nonincreasing_fit, replica_flow
+from lbf import HelpFormatter, Protocol, equal_length_lambdas, feedback_lambdas, load_run, nonincreasing_fit, replica_flow
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=HelpFormatter)
     parser.add_argument("run", help="an output directory of simulate.py, with replica exchange")
-    parser.add_argument("--states", type=int, default=21, help="states to allocate (default: 21)")
+    parser.add_argument("--states", type=int, default=21, help="states to allocate")
     parser.add_argument("--plot", help="write a figure of f, the two densities and the two allocations")
     args = parser.parse_args()
 
@@ -42,10 +42,13 @@ def main():
     print("  f      " + " ".join(f"{x:5.2f}" for x in f))
     if trips < 10:
         print("  too few round trips for a reliable allocation")
-    by_flow = feedback_lambdas(lams, f, args.states, visits)
+    try:
+        by_flow = feedback_lambdas(lams, f, args.states, visits)
+    except ValueError:
+        raise SystemExit("  no replica crossed from lambda = 0 to 1: no flow to allocate states by") from None
 
     run = load_run(args.run)
-    reweighter = Reweighter([run], 1500)
+    reweighter = Reweighter([run])
     grid = np.linspace(0.0, 1.0, 401)
     _, var, _ = reweighter.profile([protocol], grid)
     sd = np.sqrt(var[0])
