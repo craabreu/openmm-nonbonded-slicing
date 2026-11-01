@@ -130,7 +130,8 @@ class Protocol:
 
     The text form is, e.g., "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E", with "C(2,1)" for a polynomial step and
     "D(inf)[0.4]" for the C-infinity step. The Coulomb decapping Q follows D unless the text ties it to E ("Q=E",
-    the bare-Coulomb scheme) or gives it its own switching function ("Q(7,2)[0.4]").
+    the bare-Coulomb scheme) or gives it its own switching function ("Q(7,2)[0.4]"). "paper" is the protocol
+    of Correa et al. (PaperProtocol) and "default" is DEFAULT_PROTOCOL.
     """
 
     specs: tuple
@@ -139,6 +140,8 @@ class Protocol:
     def parse(cls, text):
         if text.strip().lower() == "paper":
             return PaperProtocol()
+        if text.strip().lower() == "default":
+            text = DEFAULT_PROTOCOL
         compact = text.replace(" ", "")
         found = {}
         for term, m0, m1, a in _SPEC.findall(compact):

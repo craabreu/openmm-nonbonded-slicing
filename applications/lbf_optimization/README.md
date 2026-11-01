@@ -5,6 +5,33 @@ solute in water, using `SlicedNonbondedForce` with Lennard-Jones and Coulomb dec
 of states by replica exchange, score whole families of protocols by MBAR reweighting of those samples,
 and place the states of the next round. They are meant to be read and adapted, not used as a library.
 
+Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`, `openmmforcefields`,
+`pymbar` 4, `scipy`.
+
+## Quick start
+
+The default protocol, `C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E`, was chosen for phenol, methane, anisole and
+paracetamol. For each of them, its cost is within 7% of the best protocol found for that solute alone
+(`RESULTS.md`). For a solute like these, sample it and compute the free energy:
+
+```bash
+python simulate.py run1 --smiles "CC(=O)Nc1ccc(O)cc1"    # 21 states uniform in λ, 2 ns each, one GPU
+python validate.py paracetamol=run1                       # ΔG = G(coupled) − G(decoupled), in kT
+```
+
+At the end, `simulate.py` prints the collapse diagnostic (see [Charging too early](#charging-too-early)).
+No state should be flagged.
+
+States placed at equal thermodynamic length make neighbor exchanges more even and replicas travel faster:
+for paracetamol, 76 round trips in 2 ns against 60, and the weakest acceptance went from 0.36 to 0.52. To
+place them from the first run and sample again:
+
+```bash
+python search.py run1 --choose default --next plan.json   # also scores the protocol family
+python simulate.py run2 --plan plan.json                  # the plan carries the solute and protocol
+python validate.py paracetamol=run1,run2                  # ΔG of each run and the spread between them
+```
+
 ## The protocol
 
 Four solute-solvent terms of a `SlicedNonbondedForce` are scaled by functions of one coupling parameter
@@ -22,110 +49,75 @@ plugin computes the four slice energies along with the energy. So the reduced po
 known from the four slice energies of each sample. Replica exchange gets the energies of every replica in
 every state from one evaluation, and the search can reweight the samples to any protocol.
 
-The two decapping terms tell the electrostatic schemes apart. With h_Q = h_D, the Coulomb potential stays
-capped until the Lennard-Jones core is decapped, so the charges can switch on while solvent still overlaps
-the solute. With h_Q = h_E, the charges switch on the bare Coulomb potential, as in Correa et al., whose
-plugin had no Coulomb capping; this is safe only when the charges follow the decapping, since nothing but
-the decapped core keeps an attractive pair apart. Both are protocols of the same basis, so samples of either
-reweight to the other. Runs made before the split stored the two decapping terms as one energy and can
-only weight protocols with h_Q = h_D; `search.py` says so when it pools one.
+The two decapping terms tell the electrostatic schemes apart. With h_Q = h_E, the charges switch on the
+bare Coulomb potential, as in Correa et al.; this is the family searched here. With h_Q = h_D, the Coulomb
+potential stays capped until the Lennard-Jones core is decapped. Both are protocols of the same basis, so
+samples of either reweight to the other.
 
 Each term follows S_{m0,m1}(x) = x^(m0+1) P(x), the polynomial step whose first m0 derivatives vanish at
 x = 0 and first m1 derivatives at x = 1, or the exponential (e^(bx) − 1)/(e^b − 1). Written as text, a
 protocol is, e.g.,
 
-    C(exp 2.5) D(7,2)[0.4] E(2,1)[0.4] Q=E
+    C(exp 2.5) D(8,2)[0.4] E(3,1)[0.4] Q=E
 
-that is, h_C the exponential with rate 2.5, h_D zero up to a = 0.4 and S_{7,2} over [0.4, 1], h_E S_{2,1}
+that is, h_C the exponential with rate 2.5, h_D zero up to a = 0.4 and S_{8,2} over [0.4, 1], h_E S_{3,1}
 over the same window, and the Coulomb decapping tied to E. Q follows D unless the text says `Q=E` or gives
-it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.25]` is a C∞ step, and `paper` is the windowed
-S_{2,2} protocol of Correa et al., with bare Coulomb.
+it a switching function of its own, `Q(7,2)[0.4]`. `D(inf)[0.4]` is a C∞ step, `paper` is the windowed
+S_{2,2} protocol of Correa et al., with bare Coulomb, and `default` is the default protocol.
 
 The exponential is the family for C. Every polynomial step has a zero slope at one end or both, and with
 any of them sd(du/dλ) keeps a peak where the cavity grows, at small λ; the exponential, whose slope is finite
-at both ends, flattens it. For phenol, replacing S_{2,1} by the exponential with b = 2.5 takes I_var from
-240 to 204 kT², and b is set by the charging hazard, not by the score. The pilot found this the long way
-round, by mapping λ to the thermodynamic-length coordinate (`reparametrize.py`); the map only rediscovers
-the switching function, so the search now scores the family directly. The price is a finite λ-force at
-λ = 0 and 1, which is what makes the variance finite there; whether λ-dynamics minds is for the validation
-runs to show (see `PLAN.md`).
+at both ends, flattens it. The price is a finite λ-force at λ = 0 and 1, which is what makes the variance
+finite there; whether λ-dynamics minds is still to be tested.
 
-The window keeps h_D, and the λ-force of decapping, exactly zero while the capped terms are weak. It
-also keeps the hazard of a configuration where solvent overlaps the solute's capped core, weighted by a
-tiny but nonzero h_D, away from small λ. The window start is a fixed choice, not a searched variable: the
-scores measure efficiency, and overlaps are too rare for reweighted variances to see.
+The decapping window keeps h_D, and the λ-force of decapping, exactly zero while the capped terms are weak.
+Its onset power m0 + 1 ≥ 8 keeps var(du/dλ) finite where it starts. The electrostatics have a window too,
+by default the same one.
 
-The electrostatics have a window too (`--aE`, by default the start of the decapping window). Charging
-against a still-capped core is a contest between the attraction, scaled by h_E, and the capped repulsion,
-scaled by h_C. A water hydrogen has no Lennard-Jones sphere, so only the capped O–O repulsion holds it off
-a solute acceptor. With bare Coulomb (`Q=E`) the attraction is unbounded at contact: a protocol that charges
-while h_D is still essentially zero pulls the hydrogen in and the simulation crashes with NaN coordinates.
-For phenol this happened within 40 ps at h_E = 0.02 and h_D = 0. With the Coulomb capped until the core is
-restored (Q following D), the same protocol does not crash but samples a water fused onto the hydroxyl
-(O–Ow 1 Å). Windowing E with D keeps h_E small where h_D is negligible, and the search drops protocols
-whose hazard, max h_E/h_C where h_D < 10⁻³, exceeds `--max_hazard` (0.15 by default). The limit was checked
-with 2 ns single-state runs of family members, at the λ where h_D reaches 10⁻⁶ and at the peak of
-h_E/h_C. Hazards of 0.25 and 0.35 were stable. At 0.5 one state crashed after 900 ps and the other had a
-water within 0.2 nm of the hydroxyl in 7% of frames. At 0.7 and 0.9 the water fused within 100 ps, at
-h_D = 10⁻³, and the runs crashed. Those runs measure how fast a collapse happens, not whether the fused state
-is favorable. Reweighting answers the second question once the pool holds a fused configuration, which
-the uncharged, undecapped states near λ = 0.2 sample freely. Pooling three phenol runs that held one made
-the effective sample size drop to 1-3 at some λ for protocols that favor it: 50 of 51 protocols with
-hazard below 0.15 kept their ESS, against 22 of 76 above it. For the protocol then chosen,
-C(exp 2.5) D(7,3)[0.4] E(2,1)[0.4] (hazard 0.18), the fused water has a reduced energy of −3.5 kT at
-λ = 0.48 against +5.8 and +21 kT at its sampled states 0.45 and 0.5: replica exchange never sees it, but a
-continuous walk in λ can. Hence the limit of 0.15. The samples never contain a collapse,
-so no reweighted score can see it. Instead, `simulate.py` records, per frame, the closest approach of a
-solute N or O to a water oxygen. At the end it reports, per state, the fraction of frames within 0.2 nm,
-and it flags states with the charges on and h_D < 10⁻³ where that fraction exceeds 5%. Brief overlaps
-are normal wherever the core is capped, so it is their frequency that marks early charging: for phenol,
-0 to 1.5% under the searched protocols against 7 to 15% under one that charges early. A crash in such a
-state is reported with its likely cause.
+## Charging too early
+
+A water hydrogen has no Lennard-Jones sphere, so only the capped O–O repulsion holds it off a solute
+acceptor while the core is capped. With bare Coulomb the attraction is unbounded at contact: a protocol
+that charges while h_D is still essentially zero pulls a water onto the solute, and the simulation either
+crashes with NaN coordinates or holds a fused water (O–Ow ≈ 1 Å).
+
+The rule is a bound on the **charging hazard**, max h_E/h_C wherever h_D < 10⁻³. `search.py` keeps only
+protocols with a hazard of at most 0.15 (`--max_hazard`); the default has 0.13. For phenol, a hazard of 0.5
+or more collapses within nanoseconds, and above 0.15 reweighting showed the fused water favorable between
+the sampled states (`RESULTS.md`).
+
+`simulate.py` checks it on configurations. Per frame it records the closest approach of a solute N or O to
+a water oxygen. At the end it prints, per state, the fraction of frames within 0.2 nm, and it marks with
+`!` the states where that fraction exceeds 5% while the charges are on and h_D < 10⁻³. Brief overlaps are
+normal wherever the core is capped, so a few percent in the weakly coupled states means nothing; for
+phenol, protocols under the limit show 0 to 1.5% there, and one that charges early (with capped Coulomb,
+so that it does not crash) 7 to 15%. A crash in
+such a state is reported with its likely cause.
 
 ## Files
 
 | file | what it does |
 |------|--------------|
-| `lbf.py` | switching functions, `Protocol`, state placement, the replica-exchange move, the system builder, the run loader |
+| `lbf.py` | switching functions, `Protocol`, the default protocol, state placement, the replica-exchange move, the system builder, the run loader |
 | `simulate.py` | replica exchange of λ among the states of a protocol → `samples.npz` |
-| `search.py` | pools runs, solves MBAR, scores the protocol family under the hazard limit → ranked table, `results.npz` and the next round's states |
-| `PLAN.md` | the procedure to run from scratch, with what the phenol pilot fixed and what it ruled out |
 | `validate.py` | ΔG of independent runs of one or more protocols, and its spread over runs |
+| `search.py` | pools runs of one solute, solves MBAR, scores the protocol family under the hazard limit → ranked table, `results.npz` and the next round's states |
+| `compare_solutes.py` | ranks the protocols that several solutes' searches explored by how far each is from every solute's own best |
 | `flow.py` | the replica flow of a run, and the feedback-optimized states next to the equal-length ones |
 | `reparametrize.py` | λ(c) in closed form for a protocol, c the thermodynamic length, for λ-dynamics with a flat target |
 | `test_lbf.py` | unit tests (`python -m pytest test_lbf.py`) |
+| `RESULTS.md` | how the default protocol was chosen, and the procedure to repeat it |
 
-Requirements: OpenMM with this plugin (with Coulomb decapping), `openff-toolkit`, `openmmforcefields`,
-`pymbar` 4, `scipy`.
+## Options of `simulate.py`
 
-## A round
-
-```bash
-# 1. sample 21 uniformly spaced states of a seed protocol (one Context per state, on one GPU)
-python simulate.py run0 --protocol "C(exp 2) D(7,2)[0.4] E(2,1)[0.4] Q=E"
-
-# 2. score the protocol family against everything sampled so far, and place the next round's states
-python search.py run0 --a 0.4 --next next.json
-
-# 3. sample the chosen protocol at those states, and score again with both runs
-python simulate.py run1 --plan next.json
-python search.py run0 run1 --a 0.4 --next next.json
-
-# 4. compare independent replicas of the final protocol with a reference
-python simulate.py final_1 --plan next.json --seed 1   # and so on for more replicas
-python simulate.py paper_1 --protocol paper --seed 1
-python validate.py final=final_1,final_2,final_3 paper=paper_1,paper_2,paper_3
-```
-
-The solute and force fields are options of `simulate.py` (`--smiles`, `--forcefield` with a SMIRNOFF or GAFF
-name, `--water`), as are the sampling settings; `python simulate.py --help` lists them. A run stores its
-solute and force fields, the plan that `search.py --next` writes carries them, and `simulate.py --plan` uses
-them, so a later round cannot silently sample another solute. `--capping_orders M0 M1` sets the orders of the
-capped potentials, and with them the height of the cap: (3, 3), the default, caps the Lennard-Jones
-potential at 119 ε, (2, 4) at 684 ε. `search.py` does not pool runs of different solutes, force fields or
-capping orders, since they sample different systems.
-
-### Replica exchange
+The solute is required (`--smiles`, or the plan's). The force fields (`--forcefield`, a SMIRNOFF or GAFF
+name, default `openff-2.2.1` with AM1-BCC charges; `--water`, default TIP3P), the box, temperature and
+pressure, and the sampling (`--iterations`, `--iteration_ps`, `--seed`, …) are options;
+`python simulate.py --help` lists them. A run stores its solute and force fields, the plan that
+`search.py --next` writes carries them, and `simulate.py --plan` uses them, so a later round cannot
+sample another solute by accident. `--capping_orders M0 M1` sets the orders of the capped potentials, and
+with them the height of the cap: (3, 3), the default, caps the Lennard-Jones potential at 119 ε, (2, 4)
+at 684 ε. `search.py` does not pool runs of different solutes, force fields or capping orders.
 
 Each replica has its own `Context`, so an exchange only swaps the global parameters of two Contexts. After
 every iteration (1 ps by default), `--swap_attempts` random pairs of replicas, K³ by default, are swapped
@@ -133,12 +125,46 @@ with the Metropolis criterion. Each attempt leaves the distribution of state per
 enough attempts approach drawing a new permutation from it (Chodera and Shirts, *J. Chem. Phys.* 135,
 194110, 2011). With only nearby states swapping, the labels move like a shuffle by neighbor transpositions,
 which needs about K³ attempts to forget the starting order. They take about 10 ms per iteration for
-K = 21. `--no_exchange` keeps every replica in its state.
+K = 21. `--no_exchange` keeps every replica in its state, and with `--lambdas` a single state can be
+tested alone, cheaply (about 0.05 s per ps), for instance to check a protocol's weakly coupled states for
+collapse.
 
-`samples.npz` stores, per iteration, the state of each replica and its slice energies, including the
-`--equilibration` iterations, which the other scripts skip. `checkpoint.npz` is written with it every
-`--checkpoint_interval` iterations; rerunning the same command resumes from it. If a replica fails, the
-error names its state and λ.
+`samples.npz` stores, per iteration, the state of each replica, its slice energies and the closest contact,
+including the `--equilibration` iterations, which the other scripts skip. `checkpoint.npz` is written with
+it every `--checkpoint_interval` iterations; rerunning the same command resumes from it. If a replica
+fails, the error names its state and λ.
+
+## Searching for a solute's own protocol
+
+The default protocol makes the search optional. A search is worth running for a solute unlike the four
+above, a different force field, or a different family:
+
+```bash
+# 1. sample the default (or another seed that satisfies the hazard limit)
+python simulate.py run0 --smiles "c1ccc(cc1)O"
+
+# 2. score the family against everything sampled so far, and place the next round's states
+python search.py run0 --a 0.4 --next next.json
+
+# 3. sample the best protocol at those states, and score again with both runs
+python simulate.py run1 --plan next.json
+python search.py run0 run1 --a 0.4 --next next.json
+```
+
+The family is set by options of `search.py` (see `--help`): the rates of the exponential C (`--bC`), the
+orders of D and E (`--m0D`, `--m1D`, `--m0E`, `--m1E`), the window starts (`--a`, `--aE`), and the scheme
+(`--Q`). The window start is a fixed choice per search, not a searched variable; run one search per value,
+with `--out` naming its results. The paper protocol, the default and any `--reference` are scored for
+comparison.
+
+To find one protocol for several solutes, give `compare_solutes.py` each solute's results files:
+
+```bash
+python compare_solutes.py phenol=phenol_a03.npz,phenol_a04.npz methane=methane_a03.npz,methane_a04.npz
+```
+
+It ranks the protocols explored for every solute by the largest and by the mean ratio of their I_var to
+each solute's own best, and prints those ratios for the default (or `--show` other protocols).
 
 ### Scores
 
@@ -162,9 +188,8 @@ reweighted variance alone. The feedback optimization of Katzgraber, Trebst, Huse
 Mech.* P03018, 2006) places them by the dynamics instead: with each replica labeled by the end state it
 visited last, the fraction f(λ) of up-walkers falls from 1 to 0, and the rate of round trips is largest
 when the density of states is proportional to √(−df/dλ). `flow.py RUN` measures f from a run's replica
-history and prints both allocations. For phenol they agree to within the noise of f (about 100 round trips
-in 2 ns), apart from the first interior state, which the flow keeps closer to λ = 0; no state relaxes
-slowly, so the simpler equal-length placement is the one used, and the flow is the check.
+history, counts round trips, and prints both allocations. For phenol they agree to within the noise of f,
+so the simpler equal-length placement is the one used, and the flow is the check.
 
 ### The protocol in the thermodynamic-length coordinate
 
@@ -173,6 +198,6 @@ sd(du/dc) = L everywhere; the equal-length states are its uniform grid. `reparam
 gives λ(c) in closed form: the ends of the exact map are singular, λ ∝ c^(1/(p0+1)) and 1 − λ ∝ (1 − c)^(1/(p1+1))
 with (p0, p1) the end orders of the protocol, so λ(c) = (1 − (1 − w(c))^(1/(p1+1)))^(1/(p0+1)) with a
 nondecreasing Bernstein polynomial w, whose coefficients are chosen to flatten sd(du/dc). The switching
-functions in c are the exact h(λ(c)), so they keep their bounds, windows and onset powers; a degree of 8
-leaves I_var/L² within 2% of 1 for phenol. Fitting each h(c) by a polynomial instead can make it negative,
-and fitting λ(c) by a plain polynomial cannot follow the ends.
+functions in c are the exact h(λ(c)), so they keep their bounds, windows and onset powers. With the
+exponential C, I_var/L² is already near 1 in λ, so the map gains little; it was how the pilot found that
+family.

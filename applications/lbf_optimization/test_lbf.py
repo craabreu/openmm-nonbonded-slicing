@@ -311,7 +311,7 @@ def test_system_is_resolved_and_checked():
 
 def test_default_protocol():
     protocol = Protocol.parse(DEFAULT_PROTOCOL)
-    assert str(protocol) == DEFAULT_PROTOCOL
+    assert str(protocol) == DEFAULT_PROTOCOL and Protocol.parse(" Default ") == protocol
     assert protocol.charging_hazard() == pytest.approx(0.13, abs=0.01)
 
 
