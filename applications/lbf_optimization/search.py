@@ -82,8 +82,11 @@ def parse_args():
     )
     scoring.add_argument("--nodes", type=int, default=64, help="Gauss-Legendre nodes of the screen")
     scoring.add_argument("--fine_nodes", type=int, default=512, help="Gauss-Legendre nodes of the rescoring")
-    scoring.add_argument("--refine", type=int, default=150, help="rescore this many best by each score")
-    scoring.add_argument("--dg_tol", type=float, default=0.05, help="largest dG deviation (kT) of a rescored protocol")
+    scoring.add_argument(
+        "--refine", type=int, default=150,
+        help="rescore this many best by each score with --fine_nodes; the rest keep the scores of the screen",
+    )
+    scoring.add_argument("--dg_tol", type=float, default=0.05, help="largest dG deviation (kT) of a resolved protocol")
     scoring.add_argument("--chunk", type=int, default=DEFAULT_CHUNK, help="targets reweighted at once (memory)")
     scoring.add_argument(
         "--reference", action="append", default=[], help="more protocols to score besides paper and the default",
@@ -206,7 +209,7 @@ def main():
     # integrate to the same dG up to quadrature error: this checks the code and the nodes, not the sampling
     totals = reweighter.h_states.sum(axis=1)
     dG_ref = reweighter.f_k[np.argmax(totals)] - reweighter.f_k[np.argmin(totals)]
-    resolved = refined & (np.abs(scores["dG"] - dG_ref) < args.dg_tol)
+    resolved = np.abs(scores["dG"] - dG_ref) < args.dg_tol
     explored = resolved & (scores["min_ess"] >= args.ess)
     hazard = np.array([p.charging_hazard() for p in protocols])
     np.savez(

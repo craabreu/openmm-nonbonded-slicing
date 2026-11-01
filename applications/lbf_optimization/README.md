@@ -37,8 +37,8 @@ python free_energy.py paracetamol=run1                    # ΔG in kT, kJ/mol an
 At the end, `simulate.py` prints the collapse diagnostic (see [Charging too early](#charging-too-early)).
 No state should be flagged. If one is, or a replica crashes in a state where the charges are on and
 h_D < 10⁻³, the protocol charges too early for this solute: start the electrostatics later, for example
-with `--protocol "C(exp 2.5) D(8,2)[0.4] E(3,1)[0.5] Q=E"`, or search for a protocol with a lower
-`--max_hazard`.
+with `--protocol "C(exp 2.5) D(8,1)[0.3] E(2,1)[0.5] Q=E"` (hazard 0.026, at most 10% above each of the four
+solutes' own best I_var), or search for a protocol with a lower `--max_hazard`.
 
 States placed at equal thermodynamic length make neighbor exchanges even and replicas travel faster. To
 place them from the first run and sample again:
@@ -209,7 +209,8 @@ At each λ, MBAR reweighting gives the mean and variance of du/dλ, and the sear
 
 Every protocol must integrate to the same ΔG, which checks the quadrature. A protocol counts as explored
 when the Kish effective sample size is at least `--ess` at every node; protocols far from the sampled
-states are not trusted. `--min_hC_at_a 0.1` keeps only protocols whose capped Lennard-Jones is already
+states are not trusted. Every protocol is screened with `--nodes`, and the `--refine` best by each score are
+rescored with `--fine_nodes`. `--min_hC_at_a 0.1` keeps only protocols whose capped Lennard-Jones is already
 that strong where decapping starts.
 
 ### Placing the states
