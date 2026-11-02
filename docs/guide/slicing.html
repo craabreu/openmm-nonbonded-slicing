@@ -82,8 +82,8 @@ it. A scaling parameter is a global parameter, declared with <code class="docuti
 </div>
 <p>The order of the two subsets in <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> is irrelevant. The same parameter can be applied to
 any number of slices, and a slice can take one parameter for its Coulomb part and another for its
-Lennard-Jones part. A sixth argument, <code class="docutils literal notranslate"><span class="pre">includeDecapping</span></code>, makes a parameter multiply the decapping term of
-its slice; see <a class="reference internal" href="decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>.</p>
+Lennard-Jones part. Two more arguments, <code class="docutils literal notranslate"><span class="pre">includeCoulombDecapping</span></code> and <code class="docutils literal notranslate"><span class="pre">includeLJDecapping</span></code>, make a parameter
+multiply the Coulomb and Lennard-Jones decapping terms of its slice; see <a class="reference internal" href="decapping.html"><span class="doc">Capped Lennard-Jones potential</span></a>.</p>
 </section>
 <section id="restrictions">
 <h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
@@ -91,7 +91,8 @@ its slice; see <a class="reference internal" href="decapping.html"><span class="
 <li><p>A scaling parameter must have been added with <code class="docutils literal notranslate"><span class="pre">addGlobalParameter</span></code>, and it cannot double as the parameter
 of a particle or exception parameter offset.</p></li>
 <li><p>Every call to <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> must give the parameter at least one role in the slice: Coulomb
-(<code class="docutils literal notranslate"><span class="pre">includeCoulomb</span></code>), Lennard-Jones (<code class="docutils literal notranslate"><span class="pre">includeLJ</span></code>) or decapping (<code class="docutils literal notranslate"><span class="pre">includeDecapping</span></code>), and each role of a
+(<code class="docutils literal notranslate"><span class="pre">includeCoulomb</span></code>), Lennard-Jones (<code class="docutils literal notranslate"><span class="pre">includeLJ</span></code>), Coulomb decapping (<code class="docutils literal notranslate"><span class="pre">includeCoulombDecapping</span></code>) or
+Lennard-Jones decapping (<code class="docutils literal notranslate"><span class="pre">includeLJDecapping</span></code>), and each role of a
 slice belongs to at most one parameter. A second parameter for a role that is already taken is an error.</p></li>
 <li><p>The set of scaling parameters and their roles are read when a Context is created. Changes made afterwards
 with <code class="docutils literal notranslate"><span class="pre">addScalingParameter</span></code> or <code class="docutils literal notranslate"><span class="pre">setScalingParameter</span></code> take effect only after the Context’s <code class="docutils literal notranslate"><span class="pre">reinitialize()</span></code>

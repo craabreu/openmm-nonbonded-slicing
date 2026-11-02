@@ -62,7 +62,6 @@ SlicedNonbondedForce
         getReciprocalExclusions
         getReciprocalSpaceForceGroup
         getScalingParameter
-        getScalingParameterIncludeDecapping
         getSwitchingDistance
         getUseCuFFT
         getUseDispersionCorrection

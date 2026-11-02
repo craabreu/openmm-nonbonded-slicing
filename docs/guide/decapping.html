@@ -45,7 +45,7 @@
 <h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
 <p>Driving the Lennard-Jones scaling parameter of a slice to zero with the usual potential leaves a singularity
 at <span class="math notranslate nohighlight">\(r = 0\)</span> that makes free-energy calculations hard to converge. A scaling parameter added with
-<code class="docutils literal notranslate"><span class="pre">includeDecapping=True</span></code> multiplies the <em>decapping</em> term of its slice, which splits each Lennard-Jones pair
+<code class="docutils literal notranslate"><span class="pre">includeLJDecapping=True</span></code> multiplies the <em>decapping</em> term of its slice, which splits each Lennard-Jones pair
 of the slice into a capped term and a decapping term <span class="bibtex-citation" id="id1">[<a class="reference internal" href="../references.html#id7" title="Gabriela B. Correa, Jessica C. S. L. Maciel, Frederico W. Tavares, and Charlles R. A. Abreu. A new formulation for the concerted alchemical calculation of van der waals and coulomb components of solvation free energies. Journal of Chemical Theory and Computation, 18(10):5876–5889, 2022. doi:10.1021/acs.jctc.2c00563.">1</a>]</span>, in the spirit of the capping of
 <span class="bibtex-citation" id="id2">[<a class="reference internal" href="../references.html#id8" title="Floris P. Buelens and Helmut Grubmüller. Linear-scaling soft-core scheme for alchemical free energy calculations. Journal of Computational Chemistry, 33(1):25–33, 2012. doi:10.1002/jcc.21938.">2</a>]</span> and the linear basis functions of <span class="bibtex-citation" id="id3">[<a class="reference internal" href="../references.html#id9" title="Levi N. Naden, Tri T. Pham, and Michael R. Shirts. Linear basis function approach to efficient alchemical free energy calculations. 1. removal of uncoupled solvent molecules. Journal of Chemical Theory and Computation, 10(3):1128–1149, 2014. doi:10.1021/ct4009188.">3</a>]</span>:</p>
 <div class="math notranslate nohighlight">
@@ -85,7 +85,7 @@ values, which is what reweighting estimators such as MBAR need.</p>
 <span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
 <span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaQ"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 <span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaLJ"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>    <span class="c1"># includeLJDecapping</span>
 </pre></div>
 </div>
 <p>The orders are set for the whole force with <code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code>, from 1 to 6 each. Lowering <span class="math notranslate nohighlight">\(m_0\)</span> or raising
@@ -155,7 +155,53 @@ values, which is what reweighting estimators such as MBAR need.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">setCappingOrders</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>    <span class="c1"># a core of 684 epsilon</span>
 </pre></div>
 </div>
-<p>A coupling path switches on the capped term first (<span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> from 0 to 1 with <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span>), then
+</section>
+<section id="coulomb-decapping">
+<h2>Coulomb decapping<a class="headerlink" href="#coulomb-decapping" title="Link to this heading">¶</a></h2>
+<p>The capped core is finite while the Coulomb attraction of opposite charges is not, so with the decapping term off
+they can collapse onto it wherever the Coulomb term is on. One answer is to keep the Coulomb term off until the
+decapping term is on; the other is to cap the Coulomb interaction too, with a scaling parameter added with
+<code class="docutils literal notranslate"><span class="pre">includeCoulombDecapping=True</span></code>. One parameter can multiply both decapping terms:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>    <span class="c1"># both decapping terms</span>
+</pre></div>
+</div>
+<p>or each can have its own:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">force</span><span class="o">.</span><span class="n">addGlobalParameter</span><span class="p">(</span><span class="s2">"lambdaDQ"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaD"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>   <span class="c1"># Lennard-Jones decapping</span>
+<span class="n">force</span><span class="o">.</span><span class="n">addScalingParameter</span><span class="p">(</span><span class="s2">"lambdaDQ"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>         <span class="c1"># Coulomb decapping</span>
+</pre></div>
+</div>
+<p>Then the Coulomb term of every pair in the slice, whatever its <span class="math notranslate nohighlight">\(\epsilon\)</span>, is capped below
+<span class="math notranslate nohighlight">\(r = \sigma\)</span> in the same way as the Lennard-Jones one. The <span class="math notranslate nohighlight">\(1/r\)</span> part of its direct-space potential is replaced by
+<span class="math notranslate nohighlight">\(c_Q(r/\sigma)/\sigma\)</span>, where <span class="math notranslate nohighlight">\(c_Q(x)\)</span> is the polynomial of the same orders <span class="math notranslate nohighlight">\(m_0\)</span> and <span class="math notranslate nohighlight">\(m_1\)</span> whose first <span class="math notranslate nohighlight">\(m_0\)</span>
+derivatives vanish at <span class="math notranslate nohighlight">\(x = 0\)</span> and whose value and first <span class="math notranslate nohighlight">\(m_1\)</span> derivatives match those of <span class="math notranslate nohighlight">\(1/x\)</span> at <span class="math notranslate nohighlight">\(x = 1\)</span>. The
+default orders give</p>
+<div class="math notranslate nohighlight">
+\[
+c_Q(x) = 1.75 - 5.25 x^4 + 7 x^5 - 2.5 x^6,
+\]</div>
+<p>a core 1.75 times the bare potential at <span class="math notranslate nohighlight">\(r = \sigma\)</span>. The cap is a statement about <span class="math notranslate nohighlight">\(1/r\)</span> alone, as the Lennard-Jones
+one is about <span class="math notranslate nohighlight">\(x^{-12} - x^{-6}\)</span>: the rest of the direct-space potential, which is <span class="math notranslate nohighlight">\(-\mathrm{erf}(\alpha r)/r\)</span> with
+Ewald, PME and LJPME or the reaction-field terms with a cutoff, and the reciprocal space are unchanged, and the
+Coulomb decapping term of the slice is</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{q_i q_j}{4 \pi \epsilon_0} \left[ \frac{1}{r} - \frac{c_Q(r/\sigma)}{\sigma} \right]
+\]</div>
+<p>for <span class="math notranslate nohighlight">\(r &lt; \sigma\)</span>, which is the same for every nonbonded method and for exceptions. With both interactions decapped,
+the potential is bounded below everywhere in the space of the four parameters, as long as the Coulomb decapping term
+is not switched on while the Lennard-Jones core is weak, which would let opposite charges collapse. The energy stays
+linear in every parameter: the derivative with respect to <span class="math notranslate nohighlight">\(\lambda_Q\)</span> is the capped Coulomb energy of the slice (its
+capped direct-space part plus the reciprocal one), and the one with respect to the Coulomb decapping parameter is its
+Coulomb decapping energy. A slice can also have its Coulomb interaction decapped and its Lennard-Jones one left as
+it is, or the reverse.</p>
+<p>Since every pair of a Coulomb-decapped slice is capped, <span class="math notranslate nohighlight">\(\sigma\)</span> matters for particles with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span> too, and the
+sigma restriction below covers them. A TIP3P hydrogen, for instance, carries a placeholder <span class="math notranslate nohighlight">\(\sigma = 1\)</span> nm that
+makes <span class="math notranslate nohighlight">\(\sigma_{ij}\)</span> exceed a typical cutoff; set it to the Coulomb cap radius you want (its <span class="math notranslate nohighlight">\(\epsilon = 0\)</span> keeps it out of every
+Lennard-Jones term), such as zero, which makes <span class="math notranslate nohighlight">\(\sigma_{ij}\)</span> half the oxygen’s for its pairs. For opposite charges
+the capped Coulomb potential is a finite well, deepest at <span class="math notranslate nohighlight">\(r = 0\)</span>, so decapping should still not lag too far behind
+the Coulomb term; raising <span class="math notranslate nohighlight">\(m_0\)</span> lowers the core (1.33 at <span class="math notranslate nohighlight">\(m_0 = 5\)</span>, <span class="math notranslate nohighlight">\(m_1 = 2\)</span>).</p>
+<p>A coupling path for Lennard-Jones decapping alone switches on the capped term first (<span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> from 0 to 1 with <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span>), then
 the decapping term, and finally the Coulomb term. The stages can overlap: <span class="bibtex-citation" id="id4">[<a class="reference internal" href="../references.html#id7" title="Gabriela B. Correa, Jessica C. S. L. Maciel, Frederico W. Tavares, and Charlles R. A. Abreu. A new formulation for the concerted alchemical calculation of van der waals and coulomb components of solvation free energies. Journal of Chemical Theory and Computation, 18(10):5876–5889, 2022. doi:10.1021/acs.jctc.2c00563.">1</a>]</span> couples all
 three in one sweep of a master parameter <span class="math notranslate nohighlight">\(\lambda\)</span> with smoothstep functions <span class="math notranslate nohighlight">\(h_k(\lambda)\)</span> that start and
 finish at <span class="math notranslate nohighlight">\((0, 0.7)\)</span>, <span class="math notranslate nohighlight">\((0.4, 0.8)\)</span> and <span class="math notranslate nohighlight">\((0.6, 1.0)\)</span> for the capped, decapping and Coulomb terms. OpenMM
@@ -163,28 +209,32 @@ cannot make one global parameter a function of another, so set <code class="docu
 <span class="math notranslate nohighlight">\(\lambda\)</span> at each state; for <span class="math notranslate nohighlight">\(\lambda\)</span>-dynamics, apply the chain rule to the three derivatives.</p>
 <p>The capped term is the usual potential beyond <span class="math notranslate nohighlight">\(\sigma\)</span>, so the cutoff, the switching function, LJPME and the
 dispersion correction apply to it exactly and are multiplied by <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span>. The decapping term is not
-switched, so with a switching function the <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a decapped slice (pairs
-with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span> excluded) cannot exceed the switching distance; this is checked when a Context is
-created and by <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but not for parameter offsets. Decapping is available on all
+switched, so the <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a decapped slice (pairs with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span>
+excluded) cannot exceed the cutoff distance, nor the switching distance with a switching function; this is
+checked when a Context is created and by <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but not for parameter offsets. Decapping is available on all
 platforms and with every nonbonded method, for direct-space pairs and 1-4 exceptions. Like the other
-properties of a scaling parameter, the decapping role and the capping orders are fixed when a
+properties of a scaling parameter, the decapping roles and the capping orders are fixed when a
 <a class="extlink-OpenMM reference external" href="http://docs.openmm.org/latest/api-python/generated/openmm.openmm.Context.html">openmm.Context</a> is created, while <span class="math notranslate nohighlight">\(\lambda_{LJ}\)</span> and <span class="math notranslate nohighlight">\(\lambda_D\)</span> are its global parameters.</p>
 </section>
 <section id="restrictions">
 <h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Only one scaling parameter per slice can multiply its decapping term.</p></li>
+<li><p>Only one scaling parameter per slice can multiply each of its decapping terms.</p></li>
 <li><p>The capped core is finite, so charges of opposite sign can collapse onto it. Turn the Coulomb contribution
-of a slice on only while <span class="math notranslate nohighlight">\(\lambda_D &gt; 0\)</span>.</p></li>
+of a slice on only while <span class="math notranslate nohighlight">\(\lambda_D &gt; 0\)</span>, or cap the Coulomb interaction too with <code class="docutils literal notranslate"><span class="pre">includeCoulombDecapping</span></code>.</p></li>
+<li><p>With Coulomb decapping, the <span class="math notranslate nohighlight">\(\sigma\)</span> of every pair of charged particles of a decapped slice and of every
+exception with a nonzero charge product, those with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span> included, cannot exceed the cutoff
+distance. Coulomb interactions are not switched, so the switching distance does not restrict it.</p></li>
 <li><p>With the default orders, the height of the core, <span class="math notranslate nohighlight">\(119.2\,\epsilon\)</span>, is only a few <span class="math notranslate nohighlight">\(k_B T\)</span> for atoms with
 small <span class="math notranslate nohighlight">\(\epsilon\)</span>, which then overlap often at <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span>. The decapping energy of such overlaps is
 large, so raise the core with <code class="docutils literal notranslate"><span class="pre">setCappingOrders</span></code> or place enough states near <span class="math notranslate nohighlight">\(\lambda_D = 0\)</span> to keep the
 estimates converged. Higher orders give larger coefficients that partly cancel near <span class="math notranslate nohighlight">\(r = \sigma\)</span>, which
 costs some single-precision accuracy there.</p></li>
 <li><p>With an inner force group (<a class="reference internal" href="mts.html"><span class="doc">Inner force group for multiple time stepping</span></a>), the inner group takes all of the capped and decapping terms below
-<span class="math notranslate nohighlight">\(\sigma\)</span>. The <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a decapped slice (pairs with <span class="math notranslate nohighlight">\(\epsilon = 0\)</span>
-excluded) cannot exceed the inner switching distance. This is checked when a Context is created and by
-<code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but not for parameter offsets.</p></li>
+<span class="math notranslate nohighlight">\(\sigma\)</span>. The <span class="math notranslate nohighlight">\(\sigma\)</span> of every Lennard-Jones pair of a Lennard-Jones-decapped slice (pairs with
+<span class="math notranslate nohighlight">\(\epsilon = 0\)</span> excluded) and of every charged pair of a Coulomb-decapped slice cannot exceed the inner
+switching distance. This is checked when a Context is created and by <code class="docutils literal notranslate"><span class="pre">updateParametersInContext</span></code>, but
+not for parameter offsets.</p></li>
 </ul>
 </section>
 </section>
