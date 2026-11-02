@@ -78,6 +78,16 @@ public:
 
     /**---------------------------------------------------------------------------------------
 
+       Set the capped Coulomb potential of the Coulomb-decapped slices.
+
+       @param capped     the capped Coulomb potential
+
+       --------------------------------------------------------------------------------------- */
+
+    void setCappedCoulomb(const CappedCoulomb& capped);
+
+    /**---------------------------------------------------------------------------------------
+
        Calculate nonbonded 1-4 interactinos
 
        @param atomIndices      atom indices of the atoms in each pair
@@ -86,7 +96,8 @@ public:
        @param forces           force array (forces added to current values)
        @param sliceLambdas     the scaling parameters of the slice
        @param sliceEnergies    the energies of the slice
-       @param decapped         whether the slice is decapped
+       @param ljDecapped       whether the Lennard-Jones term of the slice is decapped
+       @param coulombDecapped  whether the Coulomb term of the slice is decapped
        @param mode             which part of the interactions to compute
 
        --------------------------------------------------------------------------------------- */
@@ -94,16 +105,18 @@ public:
     void calculateBondIxn(vector<int>& atomIndices, vector<OpenMM::Vec3>& atomCoordinates,
                           vector<double>& parameters, vector<OpenMM::Vec3>& forces,
                           vector<double>& sliceLambdas, vector<double>& sliceEnergies,
-                          bool decapped, Mode mode=Full);
+                          bool ljDecapped, bool coulombDecapped, Mode mode=Full);
 
 private:
    static const int   Coul = 0;
    static const int   vdW = 1;
-   static const int   decap = 2;
+   static const int   vdWDecap = 2;
+   static const int   CoulDecap = 3;
    bool periodic;
    OpenMM::Vec3 periodicBoxVectors[3];
    InnerSplit innerSplit;
    CappedLJ cappedLJ;
+   CappedCoulomb cappedCoulomb;
 };
 
 } // namespace NonbondedSlicing

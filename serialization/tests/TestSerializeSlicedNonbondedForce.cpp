@@ -62,8 +62,10 @@ void testSerialization() {
     force.addScalingParameter("lambda", 0, 1, true, true);
     force.addScalingParameter("lambda", 1, 1, false, true);
     force.addEnergyParameterDerivative("lambda");
-    force.addScalingParameter("scale1", 1, 2, false, false, true);
-    force.addScalingParameter("lambda", 0, 0, false, true, true);
+    force.addScalingParameter("scale1", 1, 2, false, false, false, true);
+    force.addScalingParameter("lambda", 0, 0, false, true, true, true);
+    force.addGlobalParameter("decapQ", 1.0);
+    force.addScalingParameter("decapQ", 2, 2, false, false, true);
 
     // Serialize and then deserialize it.
 
@@ -99,8 +101,6 @@ void testSerialization() {
     ASSERT_EQUAL(force.getReciprocalSpaceForceGroup(), force2.getReciprocalSpaceForceGroup());
     ASSERT_EQUAL(force.getUseCuFFT(), force2.getUseCuFFT());
     ASSERT_EQUAL(force.getReciprocalExclusions(), force2.getReciprocalExclusions());
-    for (int i = 0; i < force.getNumScalingParameters(); i++)
-        ASSERT_EQUAL(force.getScalingParameterIncludeDecapping(i), force2.getScalingParameterIncludeDecapping(i));
     double alpha2;
     int nx2, ny2, nz2;
     force2.getPMEParameters(alpha2, nx2, ny2, nz2);
@@ -174,14 +174,17 @@ void testSerialization() {
     for (int i = 0; i < force.getNumScalingParameters(); i++) {
         string parameter1, parameter2;
         int subset11, subset21, subset12, subset22;
-        bool includeCoulomb1, includeLJ1, includeCoulomb2, includeLJ2;
-        force.getScalingParameter(i, parameter1, subset11, subset21, includeCoulomb1, includeLJ1);
-        force2.getScalingParameter(i, parameter2, subset12, subset22, includeCoulomb2, includeLJ2);
+        bool includeCoulomb1, includeLJ1, includeCoulombDecapping1, includeLJDecapping1;
+        bool includeCoulomb2, includeLJ2, includeCoulombDecapping2, includeLJDecapping2;
+        force.getScalingParameter(i, parameter1, subset11, subset21, includeCoulomb1, includeLJ1, includeCoulombDecapping1, includeLJDecapping1);
+        force2.getScalingParameter(i, parameter2, subset12, subset22, includeCoulomb2, includeLJ2, includeCoulombDecapping2, includeLJDecapping2);
         ASSERT_EQUAL(parameter1, parameter2);
         ASSERT_EQUAL(subset11, subset12);
         ASSERT_EQUAL(subset21, subset22);
         ASSERT_EQUAL(includeLJ1, includeLJ2);
         ASSERT_EQUAL(includeCoulomb1, includeCoulomb2);
+        ASSERT_EQUAL(includeCoulombDecapping1, includeCoulombDecapping2);
+        ASSERT_EQUAL(includeLJDecapping1, includeLJDecapping2);
     }
     ASSERT_EQUAL(force.getNumEnergyParameterDerivatives(), force2.getNumEnergyParameterDerivatives());
     for (int i = 0; i < force.getNumEnergyParameterDerivatives(); i++)
@@ -259,7 +262,7 @@ void testMissingInnerForceGroup() {
 
 void testDeserializeVersion1() {
     // Files written before decapping and the inner force group have version 1, no
-    // decapping flag on scaling parameters, and no inner force group properties.
+    // decapping flags on scaling parameters, and no inner force group properties.
 
     SlicedNonbondedForce force(2);
     force.addParticle(1, 0.1, 0.01);
@@ -273,7 +276,8 @@ void testDeserializeVersion1() {
     size_t pos = xml.find("version=\"2\"");
     ASSERT(pos != string::npos);
     xml.replace(pos, 11, "version=\"1\"");
-    ASSERT_EQUAL(1, eraseAttribute(xml, "includeDecapping"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "includeCoulombDecapping"));
+    ASSERT_EQUAL(1, eraseAttribute(xml, "includeLJDecapping"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerForceGroup"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerCutoff"));
     ASSERT_EQUAL(1, eraseAttribute(xml, "innerSwitchingDistance"));
@@ -284,7 +288,11 @@ void testDeserializeVersion1() {
     ASSERT_EQUAL(force.getNumParticles(), copy->getNumParticles());
     ASSERT_EQUAL(force.getParticleSubset(1), copy->getParticleSubset(1));
     ASSERT_EQUAL(force.getNumScalingParameters(), copy->getNumScalingParameters());
-    ASSERT(!copy->getScalingParameterIncludeDecapping(0));
+    string parameter;
+    int subset1, subset2;
+    bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
+    copy->getScalingParameter(0, parameter, subset1, subset2, includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping);
+    ASSERT(!includeCoulombDecapping && !includeLJDecapping);
     ASSERT_EQUAL(-1, copy->getInnerForceGroup());
     ASSERT_EQUAL(3, copy->getCappingOrderAtZero());
     ASSERT_EQUAL(3, copy->getCappingOrderAtSigma());

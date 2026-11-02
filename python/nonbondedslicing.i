@@ -11,6 +11,16 @@
 #include "OpenMMDrude.h"
 #include "openmm/RPMDIntegrator.h"
 #include "openmm/RPMDMonteCarloBarostat.h"
+// OpenMM 8.7 adds these, and its OpenMMSwigHeaders.i refers to them
+#if __has_include("openmm/RPMDMonteCarloAnisotropicBarostat.h")
+#include "openmm/RPMDMonteCarloAnisotropicBarostat.h"
+#endif
+#if __has_include("openmm/RPMDMonteCarloFlexibleBarostat.h")
+#include "openmm/RPMDMonteCarloFlexibleBarostat.h"
+#endif
+#if __has_include("openmm/RPMDMonteCarloMembraneBarostat.h")
+#include "openmm/RPMDMonteCarloMembraneBarostat.h"
+#endif
 #include "openmm/serialization/XmlSerializer.h"
 #include <sstream>
 
@@ -85,10 +95,11 @@ namespace NonbondedSlicing {
  * select one or more slices and multiply their Coulomb and/or Lennard-Jones contributions by variables
  * referred to as *scaling parameters*.  For this, start by calling :func:`addGlobalParameter` to define
  * a new Context parameter, then pass its name to :func:`addScalingParameter`.  A scaling parameter can
- * play up to three roles in a slice: multiply its Coulomb contribution, multiply its Lennard-Jones
- * contribution, and multiply its decapping term (see ``includeDecapping`` in
- * :func:`addScalingParameter`).  The same scaling parameter can affect multiple slices, and each role of a
- * slice belongs to at most one scaling parameter, so a slice can have up to three scaling parameters.
+ * play up to four roles in a slice: multiply its Coulomb contribution, multiply its Lennard-Jones
+ * contribution, and multiply its Coulomb or Lennard-Jones decapping term (see ``includeCoulombDecapping``
+ * and ``includeLJDecapping`` in :func:`addScalingParameter`).  The same scaling parameter can affect multiple
+ * slices, and each role of a slice belongs to at most one scaling parameter, so a slice can have up to four
+ * scaling parameters.
  *
  * With :func:`addEnergyParameterDerivative`, you can request the derivative with respect to a scaling
  * parameter.  All requested derivatives can then be evaluated for a particular :OpenMM:`State` by calling
@@ -300,9 +311,10 @@ public:
     void setParticleSubset(int index, int subset);
     /**
      * Add a scaling parameter to multiply the Coulomb and/or Lennard-Jones contributions of a
-     * particular slice. A scaling parameter can also multiply the decapping term of its slice, see
-     * ``includeDecapping``. Its value will scale the interactions between particles of a subset 1
-     * with those of another (or the same) subset 2. The order of subset definition is irrelevant.
+     * particular slice. A scaling parameter can also multiply the Coulomb and/or Lennard-Jones decapping
+     * terms of its slice, see ``includeCoulombDecapping`` and ``includeLJDecapping``. Its value will scale
+     * the interactions between particles of a subset 1 with those of another (or the same) subset 2. The
+     * order of subset definition is irrelevant.
      *
      * Parameters
      * ----------
@@ -320,35 +332,53 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions.  At least one
-     *         of includeCoulomb, includeLJ and includeDecapping must hold
-     *     includeDecapping : bool, default=False
-     *         whether this scaling parameter multiplies the decapping term of the slice. In a decapped
-     *         slice, each Lennard-Jones pair interacts through
-     *         :math:`\\lambda_{LJ} u_{cap}(r) + \\lambda_D [u_{LJ}(r) - u_{cap}(r)]`, where
-     *         :math:`u_{LJ}` is the usual potential, :math:`u_{cap}` equals it for :math:`r \\ge \\sigma`
-     *         and is a polynomial in :math:`r/\\sigma` with a finite value at :math:`r = 0`
-     *         (:math:`119.2 \\epsilon` with the default orders, see :func:`setCappingOrders`)
-     *         :cite:`Correa_2022`, :math:`\\lambda_{LJ}` is the slice's Lennard-Jones scaling parameter (1
-     *         if there is none) and :math:`\\lambda_D` is this parameter. The energy is linear in both
-     *         parameters: the derivative with respect to :math:`\\lambda_{LJ}` is the capped van der Waals
-     *         energy of the slice and the one with respect to :math:`\\lambda_D` is its decapping energy,
-     *         and their sum is the usual van der Waals energy. Only one scaling parameter per slice can
-     *         multiply its decapping term. The capped core is finite, so turn the Coulomb contribution of
-     *         the slice on only while :math:`\\lambda_D > 0`. Decapping applies to direct-space pairs and
-     *         1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction apply to the
-     *         capped term, which is the usual potential beyond :math:`\\sigma`. The decapping term is not
-     *         switched, so with a switching function the sigma of every Lennard-Jones pair in a decapped
-     *         slice, excluding those with zero epsilon, cannot exceed the switching distance, and with an
-     *         inner force group it cannot exceed the inner switching distance either (see
-     *         :func:`setInnerForceGroup`). This setting is fixed at Context creation, like the other
-     *         arguments of this method.
+     *         of includeCoulomb, includeLJ, includeCoulombDecapping and includeLJDecapping must hold
+     *     includeCoulombDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the Coulomb decapping term of the slice. Its
+     *         presence decaps the Coulomb interactions of the slice: below :math:`r = \sigma`, the
+     *         :math:`1/r` part of the direct-space Coulomb potential of every pair, whatever its epsilon, is
+     *         replaced by :math:`c(r/\sigma)/\sigma`, where :math:`c(x)` is the polynomial of degree
+     *         :math:`m_0 + m_1` whose first :math:`m_0` derivatives vanish at :math:`x = 0` and whose value
+     *         and first :math:`m_1` derivatives match those of :math:`1/x` at :math:`x = 1` (see
+     *         :func:`setCappingOrders`). The rest of the direct-space potential (the
+     *         :math:`\mathrm{erf}(\alpha r)/r` part with Ewald, PME and LJPME, or the reaction-field
+     *         terms) and the reciprocal space are unchanged, and the Coulomb scaling parameter of the slice
+     *         multiplies the capped potential. This parameter, :math:`\lambda_{DQ}`, multiplies the
+     *         rest, :math:`q_i q_j (1/r - c(r/\sigma)/\sigma)/(4 \pi \epsilon_0)` below :math:`\sigma`,
+     *         which is the same for every nonbonded method and for exceptions. Switching on the Coulomb
+     *         decapping term while the Lennard-Jones core is weak can let opposite charges collapse. With a
+     *         cutoff, the sigma of every pair of charged particles of the slice and of every exception with a
+     *         nonzero charge product, including those with zero epsilon, cannot exceed the cutoff distance,
+     *         nor the inner switching distance with an inner force group (see :func:`setInnerForceGroup`);
+     *         Coulomb interactions are not switched, so the switching distance does not restrict it.
+     *     includeLJDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the Lennard-Jones decapping term of the slice. Its
+     *         presence decaps the Lennard-Jones interactions of the slice: each Lennard-Jones pair interacts
+     *         through :math:`\lambda_{LJ} u_{cap}(r) + \lambda_D [u_{LJ}(r) - u_{cap}(r)]`, where
+     *         :math:`u_{LJ}` is the usual potential, :math:`u_{cap}` equals it for :math:`r \ge \sigma`
+     *         and is a polynomial in :math:`r/\sigma` with a finite value at :math:`r = 0`
+     *         (:math:`119.2 \epsilon` with the default orders, see :func:`setCappingOrders`)
+     *         :cite:`Correa_2022`, :math:`\lambda_{LJ}` is the slice's Lennard-Jones scaling parameter (1
+     *         if there is none) and :math:`\lambda_D` is this parameter. Decapping applies to direct-space
+     *         pairs and 1-4 exceptions; the cutoff, switching function, LJPME and dispersion correction
+     *         apply to the capped term, which is the usual potential beyond :math:`\sigma`. The decapping
+     *         term is not switched, so the sigma of every Lennard-Jones pair in the slice, excluding those
+     *         with zero epsilon, cannot exceed the cutoff distance, nor the switching distance with a
+     *         switching function, nor the inner switching distance with an inner force group (see
+     *         :func:`setInnerForceGroup`).
+     *
+     * The energy is linear in every scaling parameter: the derivative with respect to a decapping parameter
+     * is the decapping energy of the slice, the one with respect to the Coulomb (Lennard-Jones) parameter
+     * is its capped Coulomb (van der Waals) energy, and their sum is the usual energy. The decapping
+     * settings are fixed at Context creation, like the other arguments of this method.
      *
      * Returns
      * -------
      *     index : int
      *         the index of scaling parameter that was added
      */
-    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
+    int addScalingParameter(const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                            bool includeCoulombDecapping = false, bool includeLJDecapping = false);
     /**
      * Get the number of scaling parameters.
      */
@@ -374,25 +404,21 @@ public:
          *         whether this scaling parameter applies to Coulomb interactions
          *     includeLJ : bool
          *         whether this scaling parameter applies to Lennard-Jones interactions
+         *     includeCoulombDecapping : bool
+         *         whether this scaling parameter multiplies the Coulomb decapping term of the slice
+         *     includeLJDecapping : bool
+         *         whether this scaling parameter multiplies the Lennard-Jones decapping term of the slice
          */
         PyObject* getScalingParameter(int index) const {
             std::string parameter;
             int subset1, subset2;
-            bool includeCoulomb, includeLJ;
-            self->getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ);
-            return Py_BuildValue("[siiOO]", parameter.c_str(), subset1, subset2,
-                                 includeCoulomb ? Py_True : Py_False, includeLJ ? Py_True : Py_False);
+            bool includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping;
+            self->getScalingParameter(index, parameter, subset1, subset2, includeCoulomb, includeLJ, includeCoulombDecapping, includeLJDecapping);
+            return Py_BuildValue("[siiOOOO]", parameter.c_str(), subset1, subset2,
+                                 includeCoulomb ? Py_True : Py_False, includeLJ ? Py_True : Py_False,
+                                 includeCoulombDecapping ? Py_True : Py_False, includeLJDecapping ? Py_True : Py_False);
         }
     }
-    /**
-     * Get whether a scaling parameter multiplies the decapping term of its slice (see :func:`addScalingParameter`).
-     *
-     * Parameters
-     * ----------
-     *     index : int
-     *         the index of the scaling parameter, as returned by :func:`addScalingParameter`
-     */
-    bool getScalingParameterIncludeDecapping(int index) const;
     /**
      * Modify an added scaling parameter.
      *
@@ -415,29 +441,34 @@ public:
      *         whether this scaling parameter applies to Coulomb interactions
      *     includeLJ : bool
      *         whether this scaling parameter applies to Lennard-Jones interactions
-     *     includeDecapping : bool, default=False
-     *         whether this scaling parameter multiplies the decapping term of the slice, see
+     *     includeCoulombDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the Coulomb decapping term of the slice, see
+     *         :func:`addScalingParameter`
+     *     includeLJDecapping : bool, default=False
+     *         whether this scaling parameter multiplies the Lennard-Jones decapping term of the slice, see
      *         :func:`addScalingParameter`
      */
-    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ, bool includeDecapping = false);
+    void setScalingParameter(int index, const std::string& parameter, int subset1, int subset2, bool includeCoulomb, bool includeLJ,
+                             bool includeCoulombDecapping = false, bool includeLJDecapping = false);
     /**
-     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that vanish at
+     * Get the number of derivatives of the capped potentials of decapped slices that vanish at
      * :math:`r = 0` (:math:`m_0` in :cite:`Correa_2022`). The default is 3.
      */
     int getCappingOrderAtZero() const;
     /**
-     * Get the number of derivatives of the capped Lennard-Jones potential of decapped slices that match those
-     * of the usual potential at :math:`r = \\sigma` (:math:`m_1` in :cite:`Correa_2022`). The default is 3.
+     * Get the number of derivatives of the capped potentials of decapped slices that match those
+     * of the usual potentials at :math:`r = \\sigma` (:math:`m_1` in :cite:`Correa_2022`). The default is 3.
      */
     int getCappingOrderAtSigma() const;
     /**
-     * Set the orders of the capped Lennard-Jones potential of decapped slices (see ``includeDecapping`` in
-     * :func:`addScalingParameter`). The capped potential is :math:`4 \\epsilon c(r/\\sigma)` for
+     * Set the orders of the capped potentials of decapped slices (see ``includeCoulombDecapping`` and
+     * ``includeLJDecapping`` in :func:`addScalingParameter`). The capped Lennard-Jones potential is :math:`4 \\epsilon c(r/\\sigma)` for
      * :math:`r < \\sigma`, where :math:`c(x)` is the polynomial of degree :math:`m_0 + m_1` whose first
      * :math:`m_0` derivatives vanish at :math:`x = 0` and whose value and first :math:`m_1` derivatives match
      * those of :math:`x^{-12} - x^{-6}` at :math:`x = 1` :cite:`Correa_2022`. Lowering :math:`m_0` or raising
      * :math:`m_1` raises the core, :math:`4 \\epsilon c(0)`, which is :math:`119.2 \\epsilon` with the
-     * default orders :math:`m_0 = m_1 = 3`. The orders are fixed when a Context is created.
+     * default orders :math:`m_0 = m_1 = 3`. The capped Coulomb potential uses the polynomial with the same
+     * conditions relative to :math:`1/x`. The orders are fixed when a Context is created.
      *
      * Parameters
      * ----------
@@ -450,12 +481,14 @@ public:
     /**
      * Request the derivative of this Force's energy with respect to a scaling parameter. This
      * can be used to obtain the value of an energy slice or a sum thereof. For a decapped
-     * slice (see the ``includeDecapping`` argument of :func:`addScalingParameter`), the derivative with
-     * respect to its Lennard-Jones scaling parameter is the slice's capped van der Waals energy, and the
-     * one with respect to its decapping parameter is its decapping energy. The parameter must have already been added with
+     * slice (see the ``includeCoulombDecapping`` and ``includeLJDecapping`` arguments of
+     * :func:`addScalingParameter`), the derivative with respect to its Coulomb (Lennard-Jones) scaling
+     * parameter is the slice's capped Coulomb (van der Waals) energy, and the one with respect to its
+     * Coulomb (Lennard-Jones) decapping parameter is its Coulomb (Lennard-Jones) decapping energy. The
+     * parameter must have already been added with
      * :func:`addGlobalParameter` and :func:`addScalingParameter`.
      * Derivatives are only calculated for scaling parameters (those that multiply the Coulomb or
-     * Lennard-Jones contributions or the decapping term of a slice). Requesting the derivative with
+     * Lennard-Jones contributions or the decapping terms of a slice). Requesting the derivative with
      * respect to non-scaling global parameters will raise an exception.
      *
      * Derivatives are only computed along with the energy: pass both ``getEnergy=True`` and
@@ -507,10 +540,11 @@ public:
      * and LJPME methods, from the reciprocal space force group.  It requires 0 < inner switching
      * distance < inner cutoff distance <= cutoff distance and, if a switching function is used
      * (see :func:`setUseSwitchingFunction`), inner cutoff distance <= switching distance, so that
-     * the inner force never exceeds the switched Lennard-Jones force.  With decapping scaling parameters
-     * (see ``includeDecapping`` in :func:`addScalingParameter`), the inner force group takes all of the
-     * capped and decapping terms below :math:`\\sigma`, so the sigma of every Lennard-Jones pair in a
-     * decapped slice, excluding those with zero epsilon, cannot exceed the inner switching distance.
+     * the inner force never exceeds the switched Lennard-Jones force.  With Lennard-Jones decapping scaling
+     * parameters (see ``includeLJDecapping`` in :func:`addScalingParameter`), the inner force group takes all
+     * of the capped and decapping terms below :math:`\\sigma`, so the sigma of every Lennard-Jones pair in a
+     * decapped slice, excluding those with zero epsilon, cannot exceed the inner switching distance. Coulomb
+     * decapping scaling parameters cannot be combined with an inner force group.
      * This is checked at Context creation and by :func:`updateParametersInContext`, but not for
      * parameter offsets.  On the CUDA and OpenCL
      * platforms, all nonbonded interactions in one force group must use the same cutoff, so the

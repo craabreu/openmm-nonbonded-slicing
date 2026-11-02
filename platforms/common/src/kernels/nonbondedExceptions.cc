@@ -5,8 +5,9 @@ int slice = u.i;
 real clLambda = LAMBDAS[slice].x;
 real ljLambda = LAMBDAS[slice].y;
 #if HAS_DECAPPING
-const real decapLambda = DECAP_LAMBDAS[slice];
-real decapEnergy = 0.0f, decapForce = 0.0f;
+// The Lennard-Jones (x) and Coulomb (y) decapping scaling parameters of the slice
+const real2 decapLambda = DECAP_LAMBDAS[slice];
+real decapEnergy = 0.0f, decapForce = 0.0f, decapQEnergy = 0.0f, decapQForce = 0.0f;
 #endif
 real3 delta = make_real3(pos2.x-pos1.x, pos2.y-pos1.y, pos2.z-pos1.z);
 #if APPLY_PERIODIC
@@ -81,21 +82,17 @@ if (r2 < INNER_CUTOFF_SQUARED) {
     innerEnergyLJ = exceptionParams.z*(sigma6*sigma6*e12 - sigma6*e6);
     innerEnergyCl = exceptionParams.x*e1;
 #if SUBTRACT_INNER
-    // For r <= r_s the inner force is the whole bare force, so the remainder's share of the bare potential
-    // is the constant sum_n c_n K_n. It replaces the bare energies rather than being computed as the
-    // difference of two large, nearly equal terms (the inner energies are zero above).
+    // For r <= r_s the inner force is the whole bare force, so the remainder has no force and its share of the bare
+    // potential is the constant sum_n c_n K_n. They are set directly rather than computed as differences of large,
+    // nearly equal terms (the inner energies are zero above), which also keeps the forces from becoming inf-inf in
+    // single precision as r -> 0.
     if (r <= INNER_SWITCH) {
+        ljForce = clForce = innerForceLJ = innerForceCl = 0.0f;
         ljEnergy = exceptionParams.z*sigma6*(sigma6*INNER_K12 - INNER_K6);
         clEnergy = exceptionParams.x*INNER_K1;
     }
 #endif
 }
-#endif
-#if SUBTRACT_INNER && HAS_DECAPPING
-// Below sigma, the remainder of a decapped slice has no Lennard-Jones force; dropping the bare force from both sides of
-// the difference keeps it from becoming inf-inf in single precision as r -> 0
-if (IS_DECAPPED && sig6 > 1.0f)
-    ljForce = innerForceLJ = 0.0f;
 #endif
 #if INNER_GROUP
 ljForce = innerForceLJ;
@@ -108,11 +105,11 @@ clForce -= innerForceCl;
 ljEnergy -= innerEnergyLJ;
 clEnergy -= innerEnergyCl;
 #endif
-#if HAS_DECAPPING && !SUBTRACT_INNER
+#if LJ_DECAPPING && !SUBTRACT_INNER
 // Below sigma, a decapped slice takes the capped potential and the decapping term (see CappedLJ.h). Here ljForce and
 // ljEnergy are bare, and with an inner group sigma cannot exceed INNER_SWITCH, where the inner part is the whole force
 // and its energy is the bare one minus the constant subtracted below.
-if (IS_DECAPPED && sig6 > 1.0f) {
+if (IS_LJ_DECAPPED && sig6 > 1.0f) {
     const real x = RECIP(invR*exceptionParams.y);
     const real xp = CAP_XPOW;
     const real capEnergy = exceptionParams.z*(CAP_C0 + xp*(CAP_POLY));
@@ -129,9 +126,27 @@ if (IS_DECAPPED && sig6 > 1.0f) {
 #endif
 }
 #endif
+#if COULOMB_DECAPPING && !SUBTRACT_INNER
+// Likewise, a Coulomb-decapped slice caps the 1/r term below sigma
+if (IS_COULOMB_DECAPPED && sig6 > 1.0f) {
+    const real x = RECIP(invR*exceptionParams.y);
+    const real xp = CAP_XPOW;
+    const real qqOverSig = exceptionParams.x*RECIP(exceptionParams.y);
+    const real capEnergy = qqOverSig*(CAPQ_C0 + xp*(CAPQ_POLY));
+    const real capForce = -qqOverSig*xp*(CAPQ_RPOLY);
+    const real bare = exceptionParams.x*min(invR, (real) CAP_MAX_INVX*RECIP(exceptionParams.y));   // bounded to stay finite
+    decapQForce = bare - capForce;
+    decapQEnergy = bare - capEnergy;
+    clForce = capForce;
+    clEnergy = capEnergy;
+#if INNER_GROUP
+    clEnergy -= exceptionParams.x*INNER_K1;
+#endif
+}
+#endif
 #if HAS_DECAPPING
-real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda*decapForce)*invR*invR;
-energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda*decapEnergy;
+real dEdR = (ljLambda*ljForce + clLambda*clForce + decapLambda.x*decapForce + decapLambda.y*decapQForce)*invR*invR;
+energy += clLambda*clEnergy + ljLambda*ljEnergy + decapLambda.x*decapEnergy + decapLambda.y*decapQEnergy;
 #else
 real dEdR = (ljLambda*ljForce + clLambda*clForce)*invR*invR;
 energy += clLambda*clEnergy + ljLambda*ljEnergy;
