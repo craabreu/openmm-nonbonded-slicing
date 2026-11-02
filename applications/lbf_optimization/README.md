@@ -6,12 +6,28 @@ Lennard-Jones and Coulomb decapping. They sample a set of states by replica exch
 of protocols by MBAR reweighting of those samples, and place the states of the next round. They are meant
 to be read and adapted, not used as a library.
 
+The solute is a small, neutral organic molecule in water. Charged solutes are not supported: decoupling a
+net charge under PME needs finite-size corrections that the scripts do not apply.
+
+To compute a hydration free energy with the default protocol, read [Requirements](#requirements),
+[Quick start](#quick-start), [Accuracy](#accuracy) and [Running `simulate.py`](#running-simulatepy). The
+other sections explain the protocol and how the default was chosen, and are needed only to search for a
+protocol of your own.
+
 ## Requirements
 
 - OpenMM and this plugin built with Coulomb decapping, that is, with `addScalingParameter` taking seven
-  arguments (currently the `coulomb-decapping` branch; see the plugin's README to build it). An older build
-  is refused with a message saying so. The capped potentials and decapping are described in
-  [the plugin's guide](../../docs/guide/decapping.md).
+  arguments. No release has it yet: build the `coulomb-decapping` branch from source,
+
+  ```bash
+  git clone https://github.com/craabreu/openmm-nonbonded-slicing.git
+  cd openmm-nonbonded-slicing
+  git checkout coulomb-decapping
+  ```
+
+  and follow [Building from source](../../docs/install.md#building-from-source) in an environment with
+  OpenMM 8.4 or later. An older build is refused with a message saying so. The capped potentials and
+  decapping are described in [the plugin's guide](../../docs/guide/decapping.md).
 - `openff-toolkit` and `openmmforcefields`, with a backend for AM1-BCC charges (AmberTools, OpenEye or
   `openff-nagl`).
 - `pymbar` 4 and `scipy`. pymbar runs on JAX, which the scripts keep on the CPU.
@@ -21,24 +37,42 @@ to be read and adapted, not used as a library.
 
 ## Quick start
 
-The default protocol, `C(exp 2.5) D(8,2)[0.4] E(2,1)[0.5] Q=E`, was chosen for phenol, methane, anisole and
-paracetamol. It needs about half the simulation time of the protocol of Correa et al. for the same error,
-and for each solute it is within 8% of the best protocol found for that solute alone (`RESULTS.md`):
+The scripts come with a default protocol, chosen for phenol, methane, anisole and paracetamol. It needs
+about half the simulation time of the protocol of Correa et al. (2022) for the same error, and for each of
+these solutes it is within 8% of the best protocol found for that solute alone (`RESULTS.md`):
 
 ![Cost of the default protocol relative to the paper protocol, for four solutes](figures/cost_by_solute.png)
 
-For a solute like these, sample it and compute its hydration free energy:
+Run the scripts from this directory. To compute the hydration free energy of paracetamol, for example:
 
 ```bash
-python simulate.py run1 --smiles "CC(=O)Nc1ccc(O)cc1"    # 21 states uniform in λ, 2 ns each, one GPU
-python free_energy.py paracetamol=run1                    # ΔG in kT, kJ/mol and kcal/mol
+cd applications/lbf_optimization
+python simulate.py run1 --smiles "CC(=O)Nc1ccc(O)cc1"    # 21 states, 2 ns each
+python free_energy.py paracetamol=run1
 ```
 
-At the end, `simulate.py` prints the collapse diagnostic (see [Charging too early](#charging-too-early)).
-No state should be flagged. If one is, or a replica crashes in a state where the charges are on and
-h_D < 10⁻³, the protocol charges too early for this solute: start the electrostatics later, for example
-with `--protocol "C(exp 2.5) D(8,1)[0.3] E(2,1)[0.5] Q=E"` (hazard 0.026, at most 10% above each of the four
-solutes' own best I_var), or search for a protocol with a lower `--max_hazard`.
+`simulate.py` writes its samples to the directory `run1`, about 40 MB, and takes about 40 minutes on an
+RTX 2080 SUPER. If it stops, the same command resumes it. `free_energy.py` then prints, for example,
+
+```
+paracetamol
+  run1: dG =  -26.810 kT =  -66.460 kJ/mol = -15.884 kcal/mol  (MBAR stderr 0.092 kT, 37000 uncorrelated samples)
+```
+
+dG is the hydration free energy, the free energy of moving the solute from the gas phase into water at
+the same concentration: negative when the water attracts it, as here. No gas-phase simulation is needed,
+because only the solute-water interactions are switched off and the solute's internal ones stay on
+throughout.
+
+Before trusting the result, look at the last lines of `simulate.py`'s output: one fraction per state, with
+`!` next to any state where a water may have collapsed onto the solute (see
+[Charging too early](#charging-too-early)). If no state is marked, the run is fine. If one is, or the run
+stops with an error saying that the protocol charges too early, start the electrostatics later for this
+solute, at a cost of at most 10% more simulation time:
+
+```bash
+python simulate.py run1_late --smiles "CC(=O)Nc1ccc(O)cc1" --protocol "C(exp 2.5) D(8,1)[0.3] E(2,1)[0.5] Q=E"
+```
 
 States placed at equal thermodynamic length make neighbor exchanges even and replicas travel faster. To
 place them from the first run and sample again:
@@ -50,6 +84,25 @@ python free_energy.py paracetamol=run1,run2               # ΔG of each run and 
 ```
 
 ![Neighbor swap acceptance for uniform and equal-length states](figures/state_placement.png)
+
+## Accuracy
+
+With the defaults (OpenFF Sage 2.2.1 with AM1-BCC charges, TIP3P water, 298.15 K), the four solutes give
+
+| solute | ΔG here (kcal/mol) | experiment (kcal/mol, [FreeSolv](https://github.com/MobleyLab/FreeSolv)) |
+|---|---|---|
+| phenol | −6.30 | −6.60 ± 0.20 |
+| methane | +2.43 | +2.00 ± 0.20 |
+| anisole | −2.52 | −2.45 ± 0.60 |
+| paracetamol | −15.84 | not in FreeSolv |
+
+These differ from experiment by at most 0.43 kcal/mol, which is typical of fixed-charge force fields; for
+methane, FreeSolv's own GAFF calculation gives +2.45. The scripts have not been compared with another
+free-energy method for the same force field. They have been checked for internal consistency: at full
+coupling the system reproduces the plain force field to 5 × 10⁻⁹ in relative energy, and phenol's three
+runs, with two different protocols, agree to within 0.12 kT. Paracetamol's three runs spread by 0.27 kT,
+more than their standard errors of about 0.1 kT suggest. For a solute with slow conformational changes,
+compare independent runs (different `--seed`) before trusting the standard error (`RESULTS.md`).
 
 ## The protocol
 
@@ -88,8 +141,8 @@ the windowed S_{2,2} protocol of Correa et al., with bare Coulomb, and `default`
 
 The exponential is the family for C. Every polynomial step has a zero slope at one end or both, and with
 any of them sd(du/dλ) keeps a peak where the cavity grows, at small λ; the exponential, whose slope is finite
-at both ends, flattens it. The price is a finite λ-force at λ = 0 and 1, which is what makes the variance
-finite there; whether λ-dynamics minds is still to be tested.
+at both ends, flattens it. The price is a finite λ-force at λ = 0 and 1, which is also what keeps the
+variance finite there. Replica exchange does not see it; its effect on λ-dynamics has not been tested yet.
 
 ![The default protocol's switching functions, and its fluctuation profile against the paper protocol](figures/default_protocol.png)
 
@@ -151,12 +204,10 @@ that `search.py --next` writes carries them, and `simulate.py --plan` uses them;
 `search.py` pools only runs that agree on all of them.
 
 Each replica has its own `Context`, so an exchange only swaps the global parameters of two Contexts. After
-every iteration (1 ps by default), `--swap_attempts` random pairs of replicas, K³ by default, are swapped
-with the Metropolis criterion. Each attempt leaves the distribution of state permutations invariant, and
-enough attempts approach drawing a new permutation from it (Chodera and Shirts, *J. Chem. Phys.* 135,
-194110, 2011). With only nearby states swapping, the labels move like a shuffle by neighbor transpositions,
-which needs about K³ attempts to forget the starting order. They take about 10 ms per iteration for
-K = 21. `--no_exchange` keeps every replica in its state, and with `--lambdas` a single state can be
+every iteration (1 ps by default), `--swap_attempts` random pairs of replicas are swapped with the
+Metropolis criterion. The default, K³ attempts for K states, is about what it takes to draw a nearly
+independent permutation of the states (Chodera and Shirts, *J. Chem. Phys.* 135, 194110, 2011), and costs
+about 10 ms per iteration for K = 21. `--no_exchange` keeps every replica in its state, and with `--lambdas` a single state can be
 tested alone, cheaply (about 0.05 s per ps), for instance to check a protocol's weakly coupled states for
 collapse. `free_energy.py` and `search.py` need states at λ = 0 and 1 among the runs they read.
 
@@ -187,8 +238,9 @@ python search.py run0 run1 --a 0.4 --out phenol_a04.npz
 The family is set by options of `search.py`: the rates of the exponential C (`--bC`), the orders of D and
 E (`--m0D`, `--m1D`, `--m0E`, `--m1E`), the window starts (`--a`, and `--aE` ≥ a for E, by default a,
 a + 0.05 and a + 0.1), and the scheme (`--Q`). The decapping start a is a fixed choice per search, not a
-searched variable. The paper protocol, the
-default and any `--reference` are scored for comparison, and `--next` writes the plan for the best
+searched variable, hence one search per a. The best protocol of each of the four solutes above starts
+decapping at a = 0.3 or 0.4, so those two are the ones to try first; add `--a 0.5` for a solute very
+unlike them. The paper protocol, the default and any `--reference` are scored for comparison, and `--next` writes the plan for the best
 explored protocol, or for `--choose`.
 
 To find one protocol for several solutes, give `compare_solutes.py` each solute's results files:
